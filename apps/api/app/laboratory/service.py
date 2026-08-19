@@ -1,0 +1,123 @@
+import re
+from math import ceil
+
+from sqlalchemy import func, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.laboratory.models import LaboratoryEquipment, LaboratoryWorkOrder
+from app.laboratory.status_flow import WORK_ORDER_STATUSES, can_transition  # noqa: F401
+
+TERMINAL_STATUSES = {"delivered", "invoiced", "cancelled", "no_repair"}
+
+
+def can_transition_status(current: str, target: str) -> bool:
+    return can_transition(current, target)
+
+
+def normalize_serial(serial: str | None) -> str | None:
+    if not serial:
+        return None
+    return re.sub(r"[^A-Z0-9]", "", serial.upper())
+
+
+async def next_work_order_number(db: AsyncSession) -> str:
+    number = await db.scalar(text("SELECT nextval('laboratory_work_order_number_seq')"))
+    if number is None:
+        raise RuntimeError("Não foi possível gerar o número da OS.")
+    return f"OS-{int(number):04d}"
+
+
+async def find_or_create_equipment(
+    db: AsyncSession,
+    *,
+    company_code: str,
+    customer_id: int | None,
+    customer_name: str,
+    serial_number: str | None,
+    manufacturer: str | None,
+    model: str | None,
+    equipment_type: str | None,
+    power: str | None,
+    voltage: str | None,
+    user_id: int,
+) -> LaboratoryEquipment:
+    """Reaproveita o cadastro de equipamento existente pelo serial (por empresa);
+    se não houver serial ou não encontrar, cria um novo registro."""
+    serial_normalized = normalize_serial(serial_number)
+    equipment = None
+    if serial_normalized:
+        equipment = await db.scalar(
+            select(LaboratoryEquipment).where(
+                LaboratoryEquipment.company_code == company_code,
+                LaboratoryEquipment.serial_normalized == serial_normalized,
+            )
+        )
+    if equipment:
+        equipment.customer_id = customer_id
+        equipment.customer_name = customer_name
+        equipment.manufacturer = manufacturer or equipment.manufacturer
+        equipment.model = model or equipment.model
+        equipment.equipment_type = equipment_type or equipment.equipment_type
+        equipment.power = power or equipment.power
+        equipment.voltage = voltage or equipment.voltage
+        return equipment
+
+    equipment = LaboratoryEquipment(
+        company_code=company_code,
+        customer_id=customer_id,
+        customer_name=customer_name,
+        serial_number=serial_number,
+        serial_normalized=serial_normalized,
+        manufacturer=manufacturer,
+        model=model,
+        equipment_type=equipment_type,
+        power=power,
+        voltage=voltage,
+        created_by=user_id,
+    )
+    db.add(equipment)
+    await db.flush()
+    return equipment
+
+
+async def list_work_orders_page(
+    db: AsyncSession,
+    *,
+    page: int,
+    page_size: int,
+    company_code: str | None = None,
+    status: str | None = None,
+    search: str | None = None,
+) -> tuple[list[LaboratoryWorkOrder], int]:
+    filters = []
+    if status:
+        filters.append(LaboratoryWorkOrder.status == status)
+    if company_code:
+        filters.append(LaboratoryWorkOrder.company_code == company_code)
+    if search:
+        term = f"%{search.strip()}%"
+        filters.append(
+            or_(
+                LaboratoryWorkOrder.number.ilike(term),
+                LaboratoryWorkOrder.customer_name.ilike(term),
+                LaboratoryWorkOrder.equipment_serial.ilike(term),
+                LaboratoryWorkOrder.entry_invoice.ilike(term),
+                LaboratoryWorkOrder.exit_invoice.ilike(term),
+            )
+        )
+
+    total = int(await db.scalar(select(func.count(LaboratoryWorkOrder.id)).where(*filters)) or 0)
+    offset = (page - 1) * page_size
+    query = (
+        select(LaboratoryWorkOrder)
+        .where(*filters)
+        .order_by(LaboratoryWorkOrder.opened_at.desc(), LaboratoryWorkOrder.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    work_orders = list((await db.scalars(query)).all())
+    return work_orders, total
+
+
+def total_pages(total: int, page_size: int) -> int:
+    return ceil(total / page_size) if total else 0

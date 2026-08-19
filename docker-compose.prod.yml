@@ -1,0 +1,126 @@
+name: nexus-prod
+
+services:
+  db:
+    image: postgres:17-alpine
+    env_file: .env.production
+    environment:
+      TRACKING_BASE_URL: https://nexus.universoeletronica.com.br/e
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./apps/api
+    env_file: .env.production
+    expose:
+      - "8000"
+    networks:
+      - private
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    volumes:
+      - uploads_data:/app/storage
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 1.0
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    expose:
+      - "8080"
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /config
+      - /data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+  site:
+    build: ./apps/site
+    expose:
+      - "8080"
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /config
+      - /data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    env_file: .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - private
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+      site:
+        condition: service_started
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+
+networks:
+  private:
+    internal: false
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+  uploads_data:

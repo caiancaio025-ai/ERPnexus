@@ -1,0 +1,49 @@
+{
+  email {$ACME_EMAIL}
+}
+
+(common_headers) {
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  }
+}
+
+{$SITE_DOMAIN} {
+  import common_headers
+  encode zstd gzip
+  reverse_proxy site:8080
+  log {
+    output stdout
+    format json
+  }
+}
+
+{$APP_DOMAIN} {
+  import common_headers
+  encode zstd gzip
+
+  handle_path /api/* {
+    request_body {
+      max_size 25MB
+    }
+    reverse_proxy api:8000
+  }
+
+  handle /e/* {
+    reverse_proxy api:8000
+  }
+
+  handle {
+    reverse_proxy web:8080
+  }
+
+  log {
+    output stdout
+    format json
+  }
+}

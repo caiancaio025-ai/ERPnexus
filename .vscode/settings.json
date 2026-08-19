@@ -1,0 +1,25 @@
+{
+  "cSpell.language": "en,pt_BR",
+  "editor.formatOnSave": true,
+  "files.eol": "\n",
+  "python.analysis.typeCheckingMode": "strict",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "ruff.nativeServer": "on",
+  "cSpell.words": [
+    "aiofiles",
+    "ESOCIAL",
+    "hashlib",
+    "indexname",
+    "INTEGRACAO",
+    "laboratorio",
+    "nfse",
+    "pathlib",
+    "psql",
+    "Pydantic",
+    "pytest",
+    "tablename",
+    "uvicorn",
+    "whatsapp",
+    "workorders"
+  ]
+}

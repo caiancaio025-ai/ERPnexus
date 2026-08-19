@@ -1,0 +1,72 @@
+"""
+⭐ ARQUIVO DE REFERÊNCIA - main.py FINAL
+Este é um exemplo do que seu main.py DEVE ficar após adicionar os novos routers
+
+Arquivo original está em: apps/api/app/main.py
+
+COPIE apenas as linhas que faltam no seu projeto!
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+# ============================================================================
+# IMPORTAR ROUTERS EXISTENTES (sua estrutura atual)
+# ============================================================================
+
+# Exemplos de imports que você já deve ter:
+# from app.auth.router import router as auth_router
+# from app.dashboard.router import router as dashboard_router
+# from app.finance.router import router as finance_router
+# from app.laboratory.router import router as laboratory_router
+# ... outros routers que você já tem
+
+# ============================================================================
+# ✨ NOVOS IMPORTS - ADICIONAR ESTAS LINHAS ✨
+# ============================================================================
+
+from app.employees.router import router as employees_router  # ← ADICIONE ISTO
+
+# ============================================================================
+# CONFIGURAR APP
+# ============================================================================
+
+app = FastAPI(title="NEXUS API", version="1.0.0")
+
+# CORS config
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================================
+# REGISTRAR ROUTERS EXISTENTES
+# ============================================================================
+
+# Exemplos de routers que você já tem:
+# app.include_router(auth_router)
+# app.include_router(dashboard_router)
+# app.include_router(finance_router)
+# app.include_router(laboratory_router)
+# ... outros routers que você já tem
+
+# ============================================================================
+# ✨ REGISTRAR NOVO ROUTER - ADICIONAR ESTA LINHA ✨
+# ============================================================================
+
+app.include_router(employees_router)  # ← ADICIONE ISTO
+
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+# ============================================================================
+# FIM DO ARQUIVO
+# ============================================================================
