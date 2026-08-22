@@ -39,8 +39,9 @@ export type StatusHistory = {
 
 export type WorkOrderPage = { items: WorkOrder[]; page: number; page_size: number; total: number; pages: number };
 export type WorkOrderSummary = {
-  total_open: number; awaiting_analysis: number; in_repair: number;
-  in_testing: number; high_priority: number; completed_month: number;
+  total_open: number; analyzed: number; awaiting_approval: number; approved: number;
+  awaiting_analysis: number; in_repair: number; in_testing: number;
+  high_priority: number; completed_month: number;
 };
 
 export type QuoteItem = { id?: number; position?: number; description: string; quantity: string; unit_value: string };

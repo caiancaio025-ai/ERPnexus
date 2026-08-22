@@ -21,6 +21,7 @@ async def list_notifications(
     user: CurrentUser,
     db: DbSession,
     limit: int = Query(default=12, ge=1, le=50),
+    unread_only: bool = Query(default=False),
 ):
     unread_count = int(
         await db.scalar(
@@ -31,11 +32,13 @@ async def list_notifications(
         )
         or 0
     )
+    item_query = select(Notification).where(Notification.user_id == user.id)
+    if unread_only:
+        item_query = item_query.where(Notification.is_read.is_(False))
     items = list(
         (
             await db.scalars(
-                select(Notification)
-                .where(Notification.user_id == user.id)
+                item_query
                 .order_by(Notification.created_at.desc(), Notification.id.desc())
                 .limit(limit)
             )

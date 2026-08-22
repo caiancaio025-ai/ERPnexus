@@ -17,22 +17,13 @@ type AuthCardProps = {
 };
 
 export function AuthCard({ onLogin }: AuthCardProps) {
-  const [register, setRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const firstLoginField = useRef<HTMLInputElement>(null);
-  const firstRegisterField = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    setError("");
-
-    if (register) {
-      firstRegisterField.current?.focus();
-      return;
-    }
-
     firstLoginField.current?.focus();
-  }, [register]);
+  }, []);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,22 +37,12 @@ export function AuthCard({ onLogin }: AuthCardProps) {
     try {
       const user = await apiClient.post<AuthUser>(
         "/auth/login",
-        {
-          identifier,
-          password,
-        },
-        {
-          redirectOnUnauthorized: false,
-        },
+        { identifier, password },
+        { redirectOnUnauthorized: false },
       );
-
       onLogin(user);
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Não foi possível entrar no sistema.",
-      );
+      setError(reason instanceof Error ? reason.message : "Não foi possível entrar no sistema.");
     } finally {
       setLoading(false);
     }
@@ -69,25 +50,15 @@ export function AuthCard({ onLogin }: AuthCardProps) {
 
   return (
     <section className="auth-area" aria-label="Acesso ao NEXUS">
-      <p className="sr-only" aria-live="polite">
-        {register
-          ? "Formulário de cadastro controlado"
-          : "Formulário de login"}
-      </p>
-
-      <div className={`auth-card ${register ? "is-flipped" : ""}`}>
-        <form
-          className="auth-face auth-front"
-          onSubmit={submitLogin}
-          aria-hidden={register}
-        >
+      <div className="auth-card">
+        <form className="auth-face auth-front" onSubmit={submitLogin}>
           <header>
             <span>ACESSO CORPORATIVO</span>
             <h2>INICIAR SESSÃO</h2>
           </header>
 
           <label>
-            ID ou e-mail
+            ID de acesso
             <input
               ref={firstLoginField}
               name="identifier"
@@ -108,49 +79,13 @@ export function AuthCard({ onLogin }: AuthCardProps) {
             />
           </label>
 
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
+          {error && <p className="form-error" role="alert">{error}</p>}
 
           <button className="primary" type="submit" disabled={loading}>
             {loading ? "Entrando..." : "Acessar sistema"}
           </button>
 
-          <button
-            className="link-button"
-            type="button"
-            onClick={() => setRegister(true)}
-            disabled={loading}
-          >
-            Cadastrar usuário
-          </button>
-        </form>
-
-        <form
-          className="auth-face auth-back"
-          onSubmit={(event) => event.preventDefault()}
-          aria-hidden={!register}
-        >
-          <header>
-            <span>CADASTRO CONTROLADO</span>
-            <h2>Solicitar acesso</h2>
-          </header>
-
-          <p className="register-note">
-            O cadastro será disponibilizado em Configurações, com definição
-            de perfil e módulos pelo administrador.
-          </p>
-
-          <button
-            ref={firstRegisterField}
-            className="link-button"
-            type="button"
-            onClick={() => setRegister(false)}
-          >
-            Voltar ao login
-          </button>
+          <p className="register-note">Acessos são criados e controlados pelo perfil Gestão.</p>
         </form>
       </div>
     </section>

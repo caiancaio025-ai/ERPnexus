@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 
-from app.auth.access import ADMIN_ROLES, user_has_module
+from app.auth.access import ADMIN_ROLES, user_can_manage_collaborators, user_has_module
 from app.auth.models import User
 from app.auth.router import current_user
 
@@ -23,10 +23,24 @@ def require_module(module: str) -> Callable[..., Awaitable[User]]:
 
 
 async def require_admin(user: CurrentUser) -> User:
+    """Compatibilidade: administração de usuários é exclusiva da Gestão.
+
+    super_admin é o usuário bootstrap legado e é tratado como Gestão para não
+    bloquear o ambiente existente. O perfil ADM não gerencia colaboradores.
+    """
+    if not user_can_manage_collaborators(user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Somente o perfil Gestão pode gerenciar colaboradores.",
+        )
+    return user
+
+
+async def require_general_admin(user: CurrentUser) -> User:
     if user.role not in ADMIN_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas administradores podem gerenciar usuários.",
+            detail="Acesso administrativo necessário.",
         )
     return user
 

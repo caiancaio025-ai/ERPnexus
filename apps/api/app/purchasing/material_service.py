@@ -70,12 +70,12 @@ def event(request: MaterialRequest, *, user_id: int, event_type: str, previous: 
 async def output_rows(db: AsyncSession, requests: list[MaterialRequest]) -> list[MaterialRequestOutput]:
     if not requests:
         return []
-    work_order_ids = {item.work_order_id for item in requests}
+    work_order_ids = {item.work_order_id for item in requests if item.work_order_id is not None}
     user_ids = {item.requester_user_id for item in requests}
     orders = {
         item.id: item
         for item in (await db.scalars(select(LaboratoryWorkOrder).where(LaboratoryWorkOrder.id.in_(work_order_ids)))).all()
-    }
+    } if work_order_ids else {}
     users = {
         item.id: item.name
         for item in (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
@@ -88,10 +88,11 @@ async def output_rows(db: AsyncSession, requests: list[MaterialRequest]) -> list
             code=item.code,
             company_code=item.company_code,
             work_order_id=item.work_order_id,
-            work_order_number=order.number if order else f"OS #{item.work_order_id}",
+            work_order_number=order.number if order else None,
             equipment_id=item.equipment_id,
             equipment_serial=order.equipment_serial if order else None,
-            customer_name=order.customer_name if order else "Cliente não encontrado",
+            customer_name=order.customer_name if order else None,
+            source_type=item.source_type,
             requester_user_id=item.requester_user_id,
             requester_name=users.get(item.requester_user_id, "Usuário"),
             item_name=item.item_name,

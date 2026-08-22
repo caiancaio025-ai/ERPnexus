@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, Eye, FileDown, FilePlus2, Printer, Plus, Save, Trash2 } from "lucide-react";
+import { Calculator, Eye, FileDown, FilePlus2, Plus, Save, Trash2 } from "lucide-react";
 import { apiClient } from "../../../shared/api/apiClient";
 import type { Quote, QuoteItem } from "../types";
 import { ActionButton } from "./ActionButton";
@@ -16,29 +16,40 @@ type Form = {
   items: QuoteItem[];
 };
 
+type Props = {
+  workOrderId: number; workOrderNumber: string; customerName: string; defect: string; quotedValue: string;
+  equipmentType: string; manufacturer: string; model: string; serialNumber: string; power: string; voltage: string;
+  readOnly?: boolean;
+};
+
 const empty = (defect: string, value: string): Form => ({
   service_code: "3312102 / 14.01", technical_report: defect, services_description: "",
   delivery_days: 20, billing_days: 21, warranty_months: 3,
-  payment_terms: "TRANSFERÊNCIA, BOLETO E PIX.", validity_days: 30,
+  payment_terms: "TRANSFERÊNCIA, BOLETO E PIX.", validity_days: 0,
   return_condition: "ORÇAMENTO NÃO APROVADO EM 30 DIAS: O EQUIPAMENTO SERÁ DEVOLVIDO.",
   consumer_clause: CONSUMER, supply_clause: SUPPLY, estimate_clause: ESTIMATE,
   discount_type: "none", discount_value: "0",
   items: [{ description: "SERVIÇO DE MANUTENÇÃO E REPARO", quantity: "1", unit_value: value || "0" }],
 });
 
-export function QuoteEditor({ workOrderId, workOrderNumber, defect, quotedValue }: { workOrderId: number; workOrderNumber: string; defect: string; quotedValue: string }) {
+export function QuoteEditor(props: Props) {
+  const { workOrderId, workOrderNumber, customerName, defect, quotedValue, equipmentType, manufacturer, model, serialNumber, power, voltage, readOnly = false } = props;
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [form, setForm] = useState<Form>(() => empty(defect, quotedValue));
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [saved, setSaved] = useState(false);
+  const selectedQuote = quotes.find((quote) => quote.id === selected) ?? null;
+  const locked = readOnly || selectedQuote?.status === "emitted" || Boolean(selectedQuote?.emitted_at);
 
-  async function load() {
+  async function load(selectId?: number) {
     const data = await apiClient.get<Quote[]>(`/laboratory/work-orders/${workOrderId}/quotes`);
     setQuotes(data);
-    if (data.length && selected === null) selectQuote(data[0]);
+    if (selectId) {
+      const target = data.find((quote) => quote.id === selectId); if (target) selectQuote(target);
+    } else if (data.length && selected === null) selectQuote(data[0]);
   }
-  useEffect(() => { void load(); }, [workOrderId]);
+  useEffect(() => { setSelected(null); setForm(empty(defect, quotedValue)); void load(); }, [workOrderId]);
 
   function selectQuote(quote: Quote) {
     setSelected(quote.id);
@@ -59,16 +70,17 @@ export function QuoteEditor({ workOrderId, workOrderNumber, defect, quotedValue 
   const payload = () => ({ ...form, items: form.items.map((item) => ({ description: item.description, quantity: Number(item.quantity), unit_value: Number(String(item.unit_value).replace(",", ".")) })) });
 
   async function save() {
+    if (locked) return;
     setBusy("save"); setSaved(false);
     try {
       const quote = selected
         ? await apiClient.put<Quote>(`/laboratory/quotes/${selected}`, payload())
         : await apiClient.post<Quote>(`/laboratory/work-orders/${workOrderId}/quotes`, payload());
-      setSelected(quote.id); setSaved(true); await load(); setTimeout(() => setSaved(false), 1800);
+      setSelected(quote.id); setSaved(true); await load(quote.id); setTimeout(() => setSaved(false), 1800);
     } finally { setBusy(null); }
   }
   async function remove() {
-    if (!selected || !confirm("Excluir este rascunho de orçamento?")) return;
+    if (!selected || locked || !confirm("Excluir este rascunho de orçamento?")) return;
     setBusy("delete");
     try { await apiClient.delete(`/laboratory/quotes/${selected}`); setSelected(null); setForm(empty(defect, quotedValue)); await load(); }
     finally { setBusy(null); }
@@ -76,28 +88,52 @@ export function QuoteEditor({ workOrderId, workOrderNumber, defect, quotedValue 
   function openPdf(preview: boolean) {
     if (!selected) return;
     window.open(`/api/laboratory/quotes/${selected}/pdf?preview=${preview}`, "_blank", "noopener,noreferrer");
+    if (!preview) window.setTimeout(() => void load(selected), 900);
   }
-  function label() { window.open(`/api/laboratory/work-orders/${workOrderId}/label.pdf`, "_blank", "noopener,noreferrer"); }
-  function updateItem(index: number, patch: Partial<QuoteItem>) { setForm({ ...form, items: form.items.map((item, i) => i === index ? { ...item, ...patch } : item) }); }
+  function newRevision() { setSelected(null); setForm(selectedQuote ? { ...form, items: form.items.map((item) => ({ ...item })) } : empty(defect, quotedValue)); }
+  function updateItem(index: number, patch: Partial<QuoteItem>) { if (!locked) setForm({ ...form, items: form.items.map((item, i) => i === index ? { ...item, ...patch } : item) }); }
+  const equipmentLabel = [equipmentType, manufacturer, model].filter(Boolean).join(" · ") || "Equipamento não identificado";
 
-  return <div className="lab-quote-editor">
-    <div className="lab-quote-topbar">
-      <div><strong>Orçamentos da {workOrderNumber}</strong><span>Rascunho, pré-visualização, PDF e revisões preservadas.</span></div>
-      <div className="lab-quote-actions">
-        <ActionButton variant="secondary" icon={<Printer size={17}/>} intent="print" onClick={label}>Etiqueta 40 × 40 mm</ActionButton>
-        <ActionButton variant="secondary" icon={<FilePlus2 size={17}/>} intent="launch" onClick={() => { setSelected(null); setForm(empty(defect, quotedValue)); }}>Nova revisão</ActionButton>
-      </div>
-    </div>
+  return <div className={`lab-quote-editor lab-quote-workspace ${locked ? "is-locked" : ""}`}>
+    <header className="lab-quote-hero">
+      <div><span>ORÇAMENTO TÉCNICO</span><h3>{workOrderNumber}</h3><p>{customerName} · {equipmentLabel}</p></div>
+      <div className="lab-quote-hero-meta"><span>{locked ? "EMITIDO" : "RASCUNHO"}</span><strong>{selectedQuote ? `Rev. ${String(selectedQuote.revision).padStart(2,"0")}` : "Nova revisão"}</strong></div>
+    </header>
+
     {!!quotes.length && <div className="lab-quote-revisions">{quotes.map((quote) => <button key={quote.id} className={selected === quote.id ? "active" : ""} onClick={() => selectQuote(quote)}>R{String(quote.revision).padStart(2,"0")} · {quote.status === "emitted" ? "Emitido" : "Rascunho"} · {money(Number(quote.total))}</button>)}</div>}
-    <div className="lab-grid three"><Field label="Código de serviço" value={form.service_code} onChange={(v) => setForm({...form, service_code:v})}/><NumberField label="Prazo de entrega (dias)" value={form.delivery_days} onChange={(v)=>setForm({...form,delivery_days:v})}/><NumberField label="Prazo para faturamento (dias)" value={form.billing_days} onChange={(v)=>setForm({...form,billing_days:v})}/><NumberField label="Garantia (meses)" value={form.warranty_months} onChange={(v)=>setForm({...form,warranty_months:v})}/><NumberField label="Validade (dias)" value={form.validity_days} onChange={(v)=>setForm({...form,validity_days:v})}/><Field label="Pagamento" value={form.payment_terms} onChange={(v)=>setForm({...form,payment_terms:v})}/></div>
-    <label>Laudo técnico detalhado<textarea rows={8} value={form.technical_report} onChange={(e)=>setForm({...form,technical_report:e.target.value})}/></label>
-    <label>Serviços a serem realizados<textarea rows={6} value={form.services_description} onChange={(e)=>setForm({...form,services_description:e.target.value})}/></label>
-    <div className="lab-quote-items"><header><strong>Serviços e componentes</strong><ActionButton variant="secondary" icon={<Plus size={16}/>} intent="launch" onClick={()=>setForm({...form,items:[...form.items,{description:"",quantity:"1",unit_value:"0"}]})}>Adicionar item</ActionButton></header>{form.items.map((item,index)=><div className="lab-quote-item" key={index}><input placeholder="Descrição" value={item.description} onChange={(e)=>updateItem(index,{description:e.target.value})}/><input type="number" min="0.001" step="0.001" value={item.quantity} onChange={(e)=>updateItem(index,{quantity:e.target.value})}/><input type="number" min="0" step="0.01" value={item.unit_value} onChange={(e)=>updateItem(index,{unit_value:e.target.value})}/><button className="lab-icon-danger" onClick={()=>setForm({...form,items:form.items.filter((_,i)=>i!==index)})}><Trash2 size={16}/></button></div>)}</div>
-    <div className="lab-grid three"><label>Tipo de desconto<select value={form.discount_type} onChange={(e)=>setForm({...form,discount_type:e.target.value as Form["discount_type"]})}><option value="none">Sem desconto</option><option value="amount">Em reais (R$)</option><option value="percent">Em porcentagem (%)</option></select></label><Field label="Valor do desconto" value={form.discount_value} onChange={(v)=>setForm({...form,discount_value:v})}/><div className="lab-quote-total"><Calculator size={18}/><span>Subtotal {money(subtotal)}<strong>Total {money(total)}</strong></span></div></div>
-    <details open className="lab-commercial-conditions"><summary>Condições comerciais e cláusulas editáveis</summary><label>Condição de devolução<textarea rows={2} value={form.return_condition} onChange={(e)=>setForm({...form,return_condition:e.target.value})}/></label><label>Artigo / garantia legal<textarea rows={3} value={form.consumer_clause} onChange={(e)=>setForm({...form,consumer_clause:e.target.value})}/></label><label>Cláusula de prazo, insumos e fornecedores<textarea rows={5} value={form.supply_clause} onChange={(e)=>setForm({...form,supply_clause:e.target.value})}/></label><label>Cláusula de orçamento prévio e estimativo<textarea rows={7} value={form.estimate_clause} onChange={(e)=>setForm({...form,estimate_clause:e.target.value})}/></label></details>
-    <footer className="lab-quote-footer"><ActionButton variant="danger" loading={busy==="delete"} icon={<Trash2 size={17}/>} intent="delete" disabled={!selected} onClick={()=>void remove()}>{busy==="delete"?"Excluindo...":"Excluir rascunho"}</ActionButton><span/><ActionButton variant="secondary" icon={<Eye size={17}/>} intent="preview" disabled={!selected} onClick={()=>openPdf(true)}>Pré-visualizar PDF</ActionButton><ActionButton loading={busy==="save"} success={saved} icon={<Save size={17}/>} intent="save" onClick={()=>void save()}>{saved?"Orçamento salvo":"Salvar orçamento"}</ActionButton><ActionButton icon={<FileDown size={17}/>} intent="launch" disabled={!selected} onClick={()=>openPdf(false)}>Emitir PDF</ActionButton></footer>
+
+    <section className="lab-quote-context-grid">
+      <article><small>CLIENTE</small><strong>{customerName}</strong><span>Dados vinculados automaticamente à O.S.</span></article>
+      <article><small>EQUIPAMENTO</small><strong>{equipmentLabel}</strong><span>{[serialNumber && `Série ${serialNumber}`, power && `Potência ${power}`, voltage && `Tensão ${voltage}`].filter(Boolean).join(" · ") || "Sem especificações adicionais"}</span></article>
+    </section>
+
+    {readOnly && <div className="lab-quote-lock">Perfil LAB: orçamento disponível somente para consulta. Criação, alteração e emissão são bloqueadas.</div>}
+    {!readOnly && locked && <div className="lab-quote-lock">Esta revisão já foi emitida e está protegida contra edição ou exclusão. Use <b>Nova revisão</b> para alterar a proposta.</div>}
+
+    <section className="lab-quote-section">
+      <div className="lab-quote-section-title"><span>01</span><div><strong>Diagnóstico e escopo técnico</strong><small>Informações que serão apresentadas ao cliente.</small></div></div>
+      <div className="lab-quote-defect"><small>DEFEITO INFORMADO</small><p>{defect || "Não informado."}</p></div>
+      <label>Diagnóstico técnico / laudo<textarea disabled={locked} rows={7} value={form.technical_report} onChange={(e)=>setForm({...form,technical_report:e.target.value})}/></label>
+      <label>Serviço a realizar<textarea disabled={locked} rows={6} value={form.services_description} onChange={(e)=>setForm({...form,services_description:e.target.value})}/></label>
+    </section>
+
+    <section className="lab-quote-section">
+      <div className="lab-quote-section-title"><span>02</span><div><strong>Serviços e componentes</strong><small>Composição comercial do orçamento.</small></div><ActionButton variant="secondary" disabled={locked} icon={<Plus size={16}/>} onClick={()=>setForm({...form,items:[...form.items,{description:"",quantity:"1",unit_value:"0"}]})}>Adicionar item</ActionButton></div>
+      <div className="lab-quote-items"><div className="lab-quote-item lab-quote-item-head"><span>Descrição</span><span>Qtd.</span><span>Valor unitário</span><span/></div>{form.items.map((item,index)=><div className="lab-quote-item" key={index}><input disabled={locked} placeholder="Descrição" value={item.description} onChange={(e)=>updateItem(index,{description:e.target.value})}/><input disabled={locked} type="number" min="0.001" step="0.001" value={item.quantity} onChange={(e)=>updateItem(index,{quantity:e.target.value})}/><input disabled={locked} type="number" min="0" step="0.01" value={item.unit_value} onChange={(e)=>updateItem(index,{unit_value:e.target.value})}/><button disabled={locked} className="lab-icon-danger" onClick={()=>setForm({...form,items:form.items.filter((_,i)=>i!==index)})}><Trash2 size={16}/></button></div>)}</div>
+      <div className="lab-quote-money-row"><label>Desconto<select disabled={locked} value={form.discount_type} onChange={(e)=>setForm({...form,discount_type:e.target.value as Form["discount_type"]})}><option value="none">Sem desconto</option><option value="amount">Valor em R$</option><option value="percent">Percentual %</option></select></label><Field disabled={locked || form.discount_type === "none"} label="Valor do desconto" value={form.discount_value} onChange={(v)=>setForm({...form,discount_value:v})}/><div className="lab-quote-total"><Calculator size={19}/><span>Subtotal <b>{money(subtotal)}</b><strong>{money(total)}</strong><small>TOTAL DO ORÇAMENTO</small></span></div></div>
+    </section>
+
+    <section className="lab-quote-section">
+      <div className="lab-quote-section-title"><span>03</span><div><strong>Condições comerciais</strong><small>Parâmetros resumidos na primeira página do PDF.</small></div></div>
+      <div className="lab-grid three"><Field disabled={locked} label="Código de serviço" value={form.service_code} onChange={(v) => setForm({...form, service_code:v})}/><NumberField disabled={locked} label="Prazo de execução (dias)" value={form.delivery_days} onChange={(v)=>setForm({...form,delivery_days:v})}/><NumberField disabled={locked} label="Prazo para faturamento (dias)" value={form.billing_days} onChange={(v)=>setForm({...form,billing_days:v})}/><NumberField disabled={locked} label="Garantia (meses)" value={form.warranty_months} onChange={(v)=>setForm({...form,warranty_months:v})}/><NumberField disabled={locked} label="Validade (dias)" value={form.validity_days} onChange={(v)=>setForm({...form,validity_days:v})}/><Field disabled={locked} label="Pagamento" value={form.payment_terms} onChange={(v)=>setForm({...form,payment_terms:v})}/></div>
+      <label>Condição de devolução<textarea disabled={locked} rows={2} value={form.return_condition} onChange={(e)=>setForm({...form,return_condition:e.target.value})}/></label>
+    </section>
+
+    <details className="lab-commercial-conditions"><summary>Cláusulas legais da proposta — mantidas no PDF</summary><label>Artigo / garantia legal<textarea disabled={locked} rows={3} value={form.consumer_clause} onChange={(e)=>setForm({...form,consumer_clause:e.target.value})}/></label><label>Cláusula de prazo, insumos e fornecedores<textarea disabled={locked} rows={5} value={form.supply_clause} onChange={(e)=>setForm({...form,supply_clause:e.target.value})}/></label><label>Cláusula de orçamento prévio e estimativo<textarea disabled={locked} rows={7} value={form.estimate_clause} onChange={(e)=>setForm({...form,estimate_clause:e.target.value})}/></label></details>
+
+    <footer className="lab-quote-footer">{!readOnly && <><ActionButton variant="danger" loading={busy==="delete"} icon={<Trash2 size={17}/>} disabled={!selected || locked} onClick={()=>void remove()}>{busy==="delete"?"Excluindo...":"Excluir rascunho"}</ActionButton><ActionButton variant="secondary" icon={<FilePlus2 size={17}/>} onClick={newRevision}>Nova revisão</ActionButton></>}<span/><ActionButton variant="secondary" icon={<Eye size={17}/>} disabled={!selected} onClick={()=>openPdf(true)}>Visualizar PDF</ActionButton>{!readOnly && <><ActionButton loading={busy==="save"} success={saved} icon={<Save size={17}/>} disabled={locked} onClick={()=>void save()}>{saved?"Orçamento salvo":"Salvar rascunho"}</ActionButton><ActionButton icon={<FileDown size={17}/>} disabled={!selected} onClick={()=>openPdf(false)}>Emitir PDF</ActionButton></>}</footer>
   </div>;
 }
-function Field({label,value,onChange}:{label:string;value:string;onChange:(v:string)=>void}){return <label>{label}<input value={value} onChange={(e)=>onChange(e.target.value)}/></label>}
-function NumberField({label,value,onChange}:{label:string;value:number;onChange:(v:number)=>void}){return <label>{label}<input type="number" min="0" value={value} onChange={(e)=>onChange(Number(e.target.value))}/></label>}
+function Field({label,value,onChange,disabled=false}:{label:string;value:string;onChange:(v:string)=>void;disabled?:boolean}){return <label>{label}<input disabled={disabled} value={value} onChange={(e)=>onChange(e.target.value)}/></label>}
+function NumberField({label,value,onChange,disabled=false}:{label:string;value:number;onChange:(v:number)=>void;disabled?:boolean}){return <label>{label}<input disabled={disabled} type="number" min="0" value={value} onChange={(e)=>onChange(Number(e.target.value))}/></label>}
 function money(value:number){return value.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}

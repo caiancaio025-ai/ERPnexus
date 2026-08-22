@@ -330,6 +330,7 @@ from app.purchasing.material_schemas import (
     MaterialRequestEventOutput,
     MaterialRequestOutput,
     MaterialRequestStatus,
+    StandaloneMaterialRequestCreate,
     MaterialRequestUpdate,
 )
 from app.purchasing.material_service import (
@@ -337,6 +338,7 @@ from app.purchasing.material_service import (
     event as material_event,
     output_rows,
     validate_transition,
+    next_material_request_code,
 )
 
 
@@ -366,6 +368,54 @@ async def list_material_requests(
         )
     rows = list((await db.scalars(query.order_by(MaterialRequest.created_at.desc()).limit(500))).all())
     return await output_rows(db, rows)
+
+
+@router.post("/material-requests", response_model=MaterialRequestOutput, status_code=status.HTTP_201_CREATED)
+async def create_standalone_material_request(
+    payload: StandaloneMaterialRequestCreate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    request = MaterialRequest(
+        code=await next_material_request_code(db),
+        company_code=payload.company_code,
+        work_order_id=None,
+        equipment_id=None,
+        requester_user_id=user.id,
+        source_type="standalone",
+        item_name=payload.item_name.strip(),
+        quantity=payload.quantity,
+        priority=payload.priority,
+        technical_note=payload.technical_note,
+        suggested_link=payload.suggested_link,
+        status="awaiting_approval",
+        updated_by=user.id,
+    )
+    db.add(request)
+    await db.flush()
+    db.add(material_event(
+        request,
+        user_id=user.id,
+        event_type="created",
+        previous=None,
+        target="awaiting_approval",
+        note="Solicitação avulsa criada no módulo de Compras.",
+    ))
+    await notify_modules(
+        db,
+        modules={"compras"},
+        category="purchase_request",
+        severity="info",
+        title=f"Nova solicitação avulsa · {request.code}",
+        message=f"{user.name} solicitou {request.quantity}x {request.item_name}.",
+        target="/compras?view=requests",
+        entity_type="material_request",
+        entity_id=request.id,
+        exclude_user_id=user.id,
+    )
+    await db.commit()
+    await db.refresh(request)
+    return (await output_rows(db, [request]))[0]
 
 
 @router.patch("/material-requests/{request_id}", response_model=MaterialRequestOutput)
@@ -412,7 +462,7 @@ async def update_material_request(
             severity="success",
             title=f"Compra realizada · {request.code}",
             message=f"{request.quantity}x {request.item_name} comprado(s) por {value}. OS vinculada pronta para acompanhamento.",
-            target=f"/laboratorio?os={request.work_order_id}&aba=materials",
+            target=(f"/laboratorio?os={request.work_order_id}&aba=materials" if request.work_order_id else "/compras?view=requests"),
             entity_type="material_request",
             entity_id=request.id,
             work_order_id=request.work_order_id,

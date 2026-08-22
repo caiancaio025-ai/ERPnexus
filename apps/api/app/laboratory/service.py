@@ -1,3 +1,4 @@
+from datetime import date
 import re
 from math import ceil
 
@@ -88,12 +89,18 @@ async def list_work_orders_page(
     company_code: str | None = None,
     status: str | None = None,
     search: str | None = None,
+    opened_from: date | None = None,
+    opened_before: date | None = None,
 ) -> tuple[list[LaboratoryWorkOrder], int]:
     filters = []
     if status:
         filters.append(LaboratoryWorkOrder.status == status)
     if company_code:
         filters.append(LaboratoryWorkOrder.company_code == company_code)
+    if opened_from is not None:
+        filters.append(LaboratoryWorkOrder.opened_at >= opened_from)
+    if opened_before is not None:
+        filters.append(LaboratoryWorkOrder.opened_at < opened_before)
     if search:
         term = f"%{search.strip()}%"
         filters.append(

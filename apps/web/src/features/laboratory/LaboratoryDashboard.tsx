@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BadgeDollarSign, CheckCircle2, ClipboardList, FileText, FlaskConical,
-  History, LogOut, Pencil, Plus, RefreshCw, Save, Search, Settings, ShieldCheck,
+  History, LogOut, Pencil, Plus, Printer, RefreshCw, Save, Search, Settings, ShieldCheck,
   Trash2, UserRoundCog, Users, Wrench, X,
 } from "lucide-react";
 
@@ -31,6 +31,7 @@ type FormState = {
 };
 
 type DetailState = FormState & { id: number; number: string; status: WorkOrderStatus; version: number };
+type LaboratoryPeriods = { latest_month: number; latest_year: number; years: number[] };
 
 const companyLabels: Record<CompanyCode, string> = {
   universo_eletronica: "Universo Eletrônica",
@@ -38,6 +39,10 @@ const companyLabels: Record<CompanyCode, string> = {
   solucoes_eletronica: "Soluções Eletrônica",
 };
 const priorityLabels: Record<Priority, string> = { low: "Baixa", normal: "Normal", high: "Alta", urgent: "Urgente" };
+const monthLabels = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
 const statusLabels: Record<WorkOrderStatus, string> = {
   received: "Entrada",
   awaiting_analysis: "Aguardando análise",
@@ -139,6 +144,11 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [company, setCompany] = useState<CompanyCode | "all">("all");
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "all">("all");
+  const now = new Date();
+  const [monthFilter, setMonthFilter] = useState(now.getMonth() + 1);
+  const [yearFilter, setYearFilter] = useState(now.getFullYear());
+  const [availableYears, setAvailableYears] = useState<number[]>([now.getFullYear()]);
+  const [periodReady, setPeriodReady] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("orders");
@@ -155,7 +165,9 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [saved, setSaved] = useState(false);
 
   const query = useMemo(() => {
-    const params = new URLSearchParams({ page: String(page), page_size: "25" });
+    const params = new URLSearchParams({
+      page: String(page), page_size: "25", month: String(monthFilter), year: String(yearFilter),
+    });
     if (company !== "all") params.set("company_code", company);
     const effectiveStatus =
       view === "no_repair" ? "no_repair" :
@@ -165,14 +177,33 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     if (effectiveStatus !== "all") params.set("status", effectiveStatus);
     if (search.trim()) params.set("search", search.trim());
     return params.toString();
-  }, [company, page, search, statusFilter, view]);
+  }, [company, monthFilter, page, search, statusFilter, view, yearFilter]);
+
+  async function loadPeriods() {
+    setError("");
+    try {
+      const companyQuery = company === "all" ? "" : `?company_code=${company}`;
+      const periods = await apiClient.get<LaboratoryPeriods>(`/laboratory/periods${companyQuery}`);
+      setMonthFilter(periods.latest_month);
+      setYearFilter(periods.latest_year);
+      setAvailableYears(periods.years.length ? periods.years : [periods.latest_year]);
+      setPage(1);
+      setPeriodReady(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Falha ao carregar períodos do Laboratório.");
+      setPeriodReady(true);
+    }
+  }
 
   async function load() {
+    if (!periodReady) return;
     setLoading(true); setError("");
     try {
       const companyQuery = company === "all" ? "" : `?company_code=${company}`;
+      const summaryParams = new URLSearchParams({ month: String(monthFilter), year: String(yearFilter) });
+      if (company !== "all") summaryParams.set("company_code", company);
       const [summaryData, orders, customerData, technicianData] = await Promise.all([
-        apiClient.get<WorkOrderSummary>(`/laboratory/summary${companyQuery}`),
+        apiClient.get<WorkOrderSummary>(`/laboratory/summary?${summaryParams.toString()}`),
         apiClient.get<WorkOrderPage>(`/laboratory/work-orders?${query}`),
         apiClient.get<Customer[]>(`/laboratory/customers${companyQuery}`),
         apiClient.get<Technician[]>(`/laboratory/technicians${companyQuery}`),
@@ -182,8 +213,21 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, [query, company]);
-  useEffect(() => { if (new URLSearchParams(window.location.search).get("acao") === "nova-os") setShowForm(true); }, []);
+  useEffect(() => {
+    setPeriodReady(false);
+    void loadPeriods();
+  }, [company]);
+  useEffect(() => { if (periodReady) void load(); }, [query, periodReady]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("acao") === "nova-os") setShowForm(true);
+    const workOrderId = Number(params.get("os"));
+    if (Number.isInteger(workOrderId) && workOrderId > 0) void openOrder(workOrderId);
+  }, []);
+
+  function filterByPriorityStatus(status: WorkOrderStatus) {
+    setView("orders"); setStatusFilter(status); setPage(1);
+  }
 
   async function openOrder(orderId: number) {
     setLoading(true); setError("");
@@ -256,17 +300,33 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         </header>
         {error && <div className="lab-alert error">{error}</div>}{message && <div className="lab-alert success">{message}</div>}
 
-        <section className="lab-kpis">
+        <section className="lab-priority-kpis" aria-label="Prioridades comerciais do laboratório">
+          <button className={statusFilter === "in_analysis" ? "active" : ""} onClick={() => filterByPriorityStatus("in_analysis")}>
+            <span>ANALISADOS</span><strong>{summary?.analyzed ?? 0}</strong><small>Falta orçamento</small>
+          </button>
+          <button className={statusFilter === "awaiting_approval" ? "active" : ""} onClick={() => filterByPriorityStatus("awaiting_approval")}>
+            <span>AG. APROVAÇÃO</span><strong>{summary?.awaiting_approval ?? 0}</strong><small>Orçamento enviado</small>
+          </button>
+          <button className={statusFilter === "approved" ? "active" : ""} onClick={() => filterByPriorityStatus("approved")}>
+            <span>APROVADOS</span><strong>{summary?.approved ?? 0}</strong><small>Liberados p/ reparo</small>
+          </button>
+        </section>
+        <section className="lab-secondary-kpis">
           <article><span>O.S. abertas</span><strong>{summary?.total_open ?? 0}</strong></article>
           <article><span>Aguardando análise</span><strong>{summary?.awaiting_analysis ?? 0}</strong></article>
           <article><span>Em reparo</span><strong>{summary?.in_repair ?? 0}</strong></article>
           <article><span>Em testes</span><strong>{summary?.in_testing ?? 0}</strong></article>
           <article className="danger"><span>Alta/Urgente</span><strong>{summary?.high_priority ?? 0}</strong></article>
-          <article><span>Concluídas no mês</span><strong>{summary?.completed_month ?? 0}</strong></article>
         </section>
 
         <section className="lab-toolbar">
           <div className="lab-search"><Search size={18} /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar O.S., cliente, equipamento, NF entrada ou saída" /></div>
+          <select aria-label="Mês de entrada" value={monthFilter} onChange={(e) => { setMonthFilter(Number(e.target.value)); setPage(1); }}>
+            {monthLabels.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+          </select>
+          <select aria-label="Ano de entrada" value={yearFilter} onChange={(e) => { setYearFilter(Number(e.target.value)); setPage(1); }}>
+            {availableYears.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
           <select value={company} onChange={(e) => { setCompany(e.target.value as CompanyCode | "all"); setPage(1); }}><option value="all">Todas as empresas</option>{Object.entries(companyLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as WorkOrderStatus | "all"); setPage(1); }}>
             <option value="all">Todos os status</option>
@@ -288,7 +348,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       </section>
 
       {showForm && <OrderForm form={form} setForm={setForm} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={!(["lab", "tecnico"].includes(user.role))} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
       {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} />}
     </main>
   );
@@ -328,7 +388,7 @@ function OrderForm({ form, setForm, customers, technicians, loading, onSubmit, o
   </form></div>;
 }
 
-function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
+function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const validOperationalStatuses = new Set(operationalTransitions[detail.status] ?? []);
   const visibleOperationalStatuses = operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
@@ -338,7 +398,7 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
   }, [detail.id, detail.status]);
 
   return <div className="lab-modal lab-modal-top"><section className="lab-detail">
-    <header className="lab-detail-header"><div><p className="lab-eyebrow">DETALHE DA O.S.</p><h2>{detail.number}</h2><span>{detail.customer_name} · {detail.equipment_type || detail.model || "Equipamento"}</span><div className="lab-detail-badges"><span className={`lab-status ${detail.status}`}>{statusLabels[detail.status]}</span><span className={`lab-priority ${detail.priority}`}>{priorityLabels[detail.priority]}</span></div></div><button onClick={onClose}><X /></button></header>
+    <header className="lab-detail-header"><div><p className="lab-eyebrow">DETALHE DA O.S.</p><h2>{detail.number}</h2><span>{detail.customer_name} · {detail.equipment_type || detail.model || "Equipamento"}</span><div className="lab-detail-badges"><span className={`lab-status ${detail.status}`}>{statusLabels[detail.status]}</span><span className={`lab-priority ${detail.priority}`}>{priorityLabels[detail.priority]}</span></div></div><div className="lab-detail-header-actions"><ActionButton variant="secondary" icon={<Printer size={17}/>} onClick={() => window.open(`/api/laboratory/work-orders/${detail.id}/label.pdf`, "_blank", "noopener,noreferrer")}>Emitir etiqueta</ActionButton><button className="lab-close-button" onClick={onClose}><X /></button></div></header>
     <nav className="lab-detail-tabs">
       <TabButton active={tab === "general"} icon={<Pencil size={16} />} onClick={() => setTab("general")}>Edição completa</TabButton>
       <TabButton active={tab === "technical"} icon={<Wrench size={16} />} onClick={() => setTab("technical")}>Dados técnicos</TabButton>
@@ -354,7 +414,12 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
       {tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} />}
       {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabels[detail.status]}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option><optgroup label="Status principais">{businessStatusOptions.filter((item) => item.value !== detail.status).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>{visibleOperationalStatuses.length > 0 && <optgroup label="Próximas etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status principais restaurados conforme o fluxo histórico. Compras e materiais continuam sincronizados pelas etapas operacionais.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus); }}>Aplicar status</ActionButton></div></>}
-      {tab === "quote" && <QuoteEditor workOrderId={detail.id} workOrderNumber={detail.number} defect={detail.reported_defect} quotedValue={detail.quoted_value} />}
+      {tab === "quote" && <QuoteEditor
+        workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
+        equipmentType={detail.equipment_type} manufacturer={detail.manufacturer} model={detail.model}
+        serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
+        defect={detail.reported_defect} quotedValue={detail.quoted_value} readOnly={!canManageQuote}
+      />}
       {tab === "history" && <div className="lab-timeline">{history.map((item) => <article key={item.id}><span className="lab-timeline-dot" /><div><strong>{statusLabels[item.new_status as WorkOrderStatus] ?? item.new_status}</strong><p>{item.note || "Alteração de status."}</p><small>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div></article>)}{!history.length && <div className="lab-empty">Nenhum evento registrado.</div>}</div>}
     </div>
     <footer className="lab-detail-footer"><ActionButton variant="secondary" icon={<X size={17} />} onClick={onClose}>Fechar</ActionButton><ActionButton loading={loading} success={saved} icon={<Save size={17} />} onClick={onSave}>{saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>

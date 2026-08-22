@@ -13,13 +13,14 @@ class MaterialRequest(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     company_code: Mapped[str] = mapped_column(String(40), index=True)
-    work_order_id: Mapped[int] = mapped_column(
-        ForeignKey("laboratory_work_orders.id", ondelete="CASCADE"), index=True
+    work_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("laboratory_work_orders.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    equipment_id: Mapped[int] = mapped_column(
-        ForeignKey("laboratory_equipment.id", ondelete="CASCADE"), index=True
+    equipment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("laboratory_equipment.id", ondelete="SET NULL"), nullable=True, index=True
     )
     requester_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    source_type: Mapped[str] = mapped_column(String(30), default="work_order", server_default="work_order", index=True)
     item_name: Mapped[str] = mapped_column(String(250), index=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     priority: Mapped[str] = mapped_column(String(20), default="normal", index=True)

@@ -139,6 +139,11 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   const [saving, setSaving] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
 
+  useEffect(() => {
+    const requestedView = new URLSearchParams(window.location.search).get("view");
+    if (requestedView === "requests") setView("requests");
+  }, []);
+
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (company !== "all") params.set("company_code", company);
@@ -312,6 +317,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             const Icon = item.icon;
             return <motion.button key={item.id} className={view === item.id ? "active" : ""} onClick={() => item.id === "new" ? openNew() : setView(item.id)} whileTap={{ scale: 0.97 }}><Icon size={18} />{item.label}</motion.button>;
           })}
+          <button onClick={() => navigate("/laboratorio")}><ArrowLeft size={18} />Ir para Laboratório</button>
           <button onClick={() => navigate("/painel")}><ArrowLeft size={18} />Voltar ao painel geral</button>
         </nav>
         <div className="purchasing-user"><span>{user.name.slice(0, 2).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout} aria-label="Sair"><LogOut size={18} /></button></div>

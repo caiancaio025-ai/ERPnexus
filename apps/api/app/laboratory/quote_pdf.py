@@ -1,12 +1,10 @@
 # pyright: basic
-# O ReportLab não publica type stubs; em modo "strict" (ver .vscode/settings.json)
-# qualquer objeto dele (Canvas, ParagraphStyle, Table...) aparece como "Unknown"
-# em cascata. "basic" mantém as checagens úteis (nomes errados, tipos do NEXUS)
-# só relaxando o que é impossível resolver sem stubs de terceiros.
 from __future__ import annotations
 
 from decimal import Decimal
+from html import escape
 from io import BytesIO
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from reportlab.graphics.barcode import qr
@@ -18,12 +16,18 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image as PlatypusImage
+from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import settings
 
 if TYPE_CHECKING:
-    from app.laboratory.models import LaboratoryEquipment, LaboratoryQuote, LaboratoryWorkOrder
+    from app.laboratory.models import (
+        LaboratoryCustomer,
+        LaboratoryEquipment,
+        LaboratoryQuote,
+        LaboratoryWorkOrder,
+    )
 
 COMPANIES = {
     "universo_eletronica": (
@@ -36,27 +40,81 @@ COMPANIES = {
         "51.196.568/0001-60",
         "universoautomacaoindustrial@gmail.com",
     ),
-    "solucoes_eletronica": ("Soluções Eletrônica Industrial", "", ""),
+    "solucoes_eletronica": ("Soluções Eletrônicas Industriais", "51.196.568/0001-60", "comercial@sei.com.br"),
 }
 ADDRESS = "Av. Mascarenhas de Morais - Imbiribeira - Recife - PE"
 PHONE = "81 98870-0589"
+BLUE = colors.HexColor("#245681")
+DARK = colors.HexColor("#344454")
+MUTED = colors.HexColor("#5f8199")
+CYAN = colors.HexColor("#10acd2")
+LIGHT = colors.HexColor("#f6f8fa")
+GRID = colors.HexColor("#d9e0e6")
+SOFT_BLUE = colors.HexColor("#eef5fa")
+ASSET_DIR = Path(__file__).with_name("assets")
+GEAR_LOGO = ASSET_DIR / "gear_logo.png"
+GEAR_WATERMARK = ASSET_DIR / "gear_watermark.png"
 
 
 def money(value: Decimal) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _boxed_paragraph(text: str, style: ParagraphStyle) -> Table:
+def _safe(value: object | None, fallback: str = "Não informado") -> str:
+    raw = str(value).strip() if value not in (None, "") else fallback
+    return escape(raw)
+
+
+def _section_title(text: str, style: ParagraphStyle) -> Table:
     return Table(
-        [[Paragraph((text or "—").replace("\n", "<br/>"), style)]],
-        colWidths=[170 * mm],
-        style=TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f5f7fa")),
-                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#d7dee7")),
-                ("PADDING", (0, 0), (-1, -1), 8),
-            ]
-        ),
+        [[Paragraph(_safe(text), style)]],
+        colWidths=[174 * mm],
+        style=TableStyle([
+            ("LINEBELOW", (0, 0), (-1, -1), 0.45, GRID),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]),
+    )
+
+
+def _text_panel(text: object | None, style: ParagraphStyle, min_height: float = 13 * mm) -> Table:
+    content = Paragraph(_safe(text).replace("\n", "<br/>"), style)
+    return Table(
+        [[content]],
+        colWidths=[174 * mm],
+        rowHeights=[min_height],
+        style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.45, GRID),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]),
+    )
+
+
+def _info_card(title: str, rows: list[tuple[str, object | None]], body: ParagraphStyle, title_style: ParagraphStyle) -> Table:
+    flowables: list[object] = [Paragraph(_safe(title), title_style), Spacer(1, 2)]
+    for label, value in rows:
+        flowables.append(Paragraph(f"<b>{_safe(label, '')}:</b> {_safe(value)}", body))
+        flowables.append(Spacer(1, 2.2))
+    return Table(
+        [[flowables]],
+        colWidths=[82.5 * mm],
+        rowHeights=[35 * mm],
+        style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.45, GRID),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 9),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]),
     )
 
 
@@ -64,226 +122,265 @@ def quote_pdf(
     work_order: LaboratoryWorkOrder,
     equipment: LaboratoryEquipment,
     quote: LaboratoryQuote,
+    customer: LaboratoryCustomer | None = None,
 ) -> bytes:
-    """Orçamento completo em A4. work_order: LaboratoryWorkOrder;
-    equipment: LaboratoryEquipment (work_order.equipment); quote: LaboratoryQuote
-    (com .items carregado)."""
+    """Gera orçamento no padrão corporativo aprovado: 1ª página comercial/técnica e 2ª página de condições."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=16 * mm,
-        leftMargin=16 * mm,
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
         topMargin=14 * mm,
-        bottomMargin=14 * mm,
+        bottomMargin=13 * mm,
+        title=f"Orçamento {work_order.number} R{quote.revision:02d}",
     )
     styles = getSampleStyleSheet()
     body = ParagraphStyle(
-        "body",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=8.7,
-        leading=12,
-        textColor=colors.HexColor("#1f2937"),
+        "quote-body", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.7,
+        leading=11.8, textColor=DARK,
     )
-    small = ParagraphStyle("small", parent=body, fontSize=7.3, leading=9)
-    title = ParagraphStyle(
-        "title",
-        parent=styles["Heading1"],
-        fontName="Helvetica-Bold",
-        fontSize=18,
+    info_body = ParagraphStyle(
+        "quote-info", parent=body, fontSize=8.3, leading=11.2,
+    )
+    company_style = ParagraphStyle(
+        "company", parent=body, fontName="Helvetica-Bold", fontSize=17.5, leading=20,
         textColor=colors.white,
     )
+    header_right = ParagraphStyle(
+        "header-right", parent=body, fontName="Helvetica-Bold", fontSize=13.3, leading=16,
+        textColor=colors.white, alignment=TA_RIGHT,
+    )
     section = ParagraphStyle(
-        "section",
-        parent=styles["Heading2"],
-        fontName="Helvetica-Bold",
-        fontSize=11,
-        textColor=colors.HexColor("#7092aa"),
-        spaceBefore=8,
-        spaceAfter=6,
+        "section", parent=body, fontName="Helvetica-Bold", fontSize=10.2, leading=12,
+        textColor=MUTED,
     )
-    company_name, cnpj, email = COMPANIES.get(
-        work_order.company_code,
-        COMPANIES["universo_eletronica"],
+    card_title = ParagraphStyle(
+        "card-title", parent=section, fontSize=9.4, leading=11,
     )
-    story = []
-
-    header = Table(
-        [
-            [
-                Paragraph(
-                    (
-                        f"<b>{company_name}</b><br/>"
-                        f"<font size=8>CNPJ: {cnpj}<br/>{ADDRESS}<br/>"
-                        f"Tel.: {PHONE} | {email}</font>"
-                    ),
-                    title,
-                ),
-                Paragraph(
-                    (
-                        f"<b>ORÇAMENTO PRÉVIO E<br/>ESTIMATIVO</b><br/>"
-                        f"<font size=10>Nº {work_order.number}"
-                        f" · Rev. {quote.revision:02d}<br/>"
-                        "Emissão: "
-                        f"{(quote.emitted_at or quote.updated_at).strftime('%d/%m/%Y')}"
-                        "</font>"
-                    ),
-                    ParagraphStyle(
-                        "hr",
-                        parent=body,
-                        textColor=colors.white,
-                        alignment=TA_RIGHT,
-                        fontSize=14,
-                        leading=16,
-                    ),
-                ),
-            ]
-        ],
-        colWidths=[115 * mm, 55 * mm],
-        rowHeights=[34 * mm],
+    clause = ParagraphStyle(
+        "clause", parent=body, fontSize=8.2, leading=10.7, textColor=colors.HexColor("#5c6d7d"),
     )
-    header.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#204f7b")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ]
-        )
+    clause_heading = ParagraphStyle(
+        "clause-heading", parent=section, fontSize=10.8, leading=13, textColor=BLUE,
     )
-    story.append(header)
-    story.append(Spacer(1, 8))
 
-    story.append(Paragraph("CLIENTE", section))
-    story.append(
-        Paragraph(
-            f"<b>{work_order.customer_name}</b>",
-            body,
-        )
+    company_name, cnpj, email = COMPANIES.get(work_order.company_code, COMPANIES["universo_eletronica"])
+    emitted = quote.emitted_at or quote.updated_at
+    service_code = _safe(getattr(quote, "service_code", None), "3312102 / 14.01")
+    story: list[object] = []
+
+    # Cabeçalho corporativo com símbolo da engrenagem isolado.
+    company_text = Paragraph(
+        f"{_safe(company_name)}<br/>"
+        f"<font name='Helvetica' size='8.2'>CNPJ: {_safe(cnpj)}<br/>"
+        f"{_safe(ADDRESS)}<br/>Tel.: {_safe(PHONE)} | {_safe(email)}</font>",
+        company_style,
     )
-    story.append(Spacer(1, 6))
+    if GEAR_LOGO.exists():
+        logo = PlatypusImage(str(GEAR_LOGO), width=27 * mm, height=27 * mm)
+        left_header = Table([[logo, company_text]], colWidths=[31 * mm, 76 * mm])
+        left_header.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (0, 0), 4),
+            ("RIGHTPADDING", (1, 0), (1, 0), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        left_header = company_text
 
-    story.append(Paragraph("EQUIPAMENTO", section))
-    equip_line = " · ".join(
-        filter(None, [equipment.equipment_type, equipment.manufacturer, equipment.model])
+    # Revisão não é exibida no cabeçalho. Validade 0 continua visível.
+    right_header = Paragraph(
+        f"ORÇAMENTO PRÉVIO E<br/>ESTIMATIVO<br/>"
+        f"<font name='Helvetica-Bold' size='8.8'>Nº {_safe(work_order.number)}</font><br/>"
+        f"<font name='Helvetica' size='8.2'>Emissão: {emitted.strftime('%d/%m/%Y')}<br/>"
+        f"Validade: {int(quote.validity_days)} dias</font>",
+        header_right,
     )
-    story.append(Paragraph(equip_line or "—", body))
-    if equipment.serial_number:
-        story.append(Paragraph(f"Série: {equipment.serial_number}", small))
-    story.append(Spacer(1, 6))
+    header = Table([[left_header, right_header]], colWidths=[111 * mm, 63 * mm], rowHeights=[48 * mm])
+    header.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), BLUE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (0, 0), 8),
+        ("RIGHTPADDING", (0, 0), (0, 0), 5),
+        ("LEFTPADDING", (1, 0), (1, 0), 5),
+        ("RIGHTPADDING", (1, 0), (1, 0), 8),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.6, CYAN),
+    ]))
+    story += [header, Spacer(1, 5)]
 
-    story.append(Paragraph("DEFEITO INFORMADO PELO CLIENTE", section))
-    story.append(_boxed_paragraph(work_order.reported_defect, body))
-    story.append(Spacer(1, 6))
+    # Destaque solicitado para o código de prestação de serviço.
+    service_banner = Table(
+        [[Paragraph("CÓDIGO DE PRESTAÇÃO DE SERVIÇO", ParagraphStyle(
+            "svc-label", parent=body, fontName="Helvetica-Bold", fontSize=8.3, textColor=BLUE,
+        )), Paragraph(service_code, ParagraphStyle(
+            "svc-code", parent=body, fontName="Helvetica-Bold", fontSize=11, textColor=colors.white,
+            alignment=TA_RIGHT,
+        ))]],
+        colWidths=[111 * mm, 63 * mm],
+        rowHeights=[9 * mm],
+    )
+    service_banner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), SOFT_BLUE),
+        ("BACKGROUND", (1, 0), (1, 0), CYAN),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#b8d7e5")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story += [service_banner, Spacer(1, 7)]
 
-    story.append(Paragraph("DIAGNÓSTICO TÉCNICO / LAUDO", section))
-    story.append(_boxed_paragraph(quote.technical_report, body))
-    story.append(Spacer(1, 6))
+    customer_rows = [
+        ("Cliente", customer.legal_name if customer and customer.legal_name else work_order.customer_name),
+        ("CNPJ/CPF", customer.document if customer else None),
+        ("Contato", (customer.phone or customer.email) if customer else None),
+    ]
+    equip_power = equipment.power or getattr(equipment, "current", None)
+    equipment_rows = [
+        ("Equipamento", " ".join(str(v) for v in [equipment.equipment_type, equipment.manufacturer, equipment.model] if v)),
+        ("Potência/Corrente", equip_power),
+        ("Tensão", equipment.voltage),
+        ("Data de Entrada", work_order.opened_at.strftime("%d/%m/%Y") if getattr(work_order, "opened_at", None) else None),
+    ]
+    cards = Table(
+        [[_info_card("DADOS DO CLIENTE", customer_rows, info_body, card_title),
+          _info_card("DADOS DO EQUIPAMENTO", equipment_rows, info_body, card_title)]],
+        colWidths=[85 * mm, 85 * mm],
+    )
+    cards.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ("RIGHTPADDING", (0, 0), (0, 0), 3.5),
+        ("LEFTPADDING", (1, 0), (1, 0), 3.5),
+        ("RIGHTPADDING", (1, 0), (1, 0), 0),
+    ]))
+    story += [cards, Spacer(1, 8)]
 
-    if quote.services_description:
-        story.append(Paragraph("ESCOPO TÉCNICO", section))
-        story.append(Paragraph(quote.services_description.replace("\n", "<br/>"), body))
-        story.append(Spacer(1, 6))
+    story += [_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body), Spacer(1, 7)]
+    story += [_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body, 21 * mm), Spacer(1, 7)]
+    story += [_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body, 21 * mm), Spacer(1, 7)]
 
-    story.append(Paragraph("SERVIÇOS E COMPONENTES", section))
-    rows = [["Descrição", "Qtd.", "Unitário", "Total"]]
+    story += [_section_title("SERVIÇOS E COMPONENTES", section), Spacer(1, 3)]
+    rows: list[list[object]] = [["Descrição", "Qtd.", "Unitário", "Total"]]
     for item in quote.items:
         item_total = Decimal(item.quantity) * Decimal(item.unit_value)
-        rows.append(
-            [
-                item.description,
-                str(item.quantity),
-                money(Decimal(item.unit_value)),
-                money(item_total),
-            ]
-        )
-    items_table = Table(rows, colWidths=[95 * mm, 20 * mm, 27 * mm, 28 * mm])
-    items_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#204f7b")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.4),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d7dee7")),
-                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(items_table)
-    story.append(Spacer(1, 6))
+        rows.append([
+            Paragraph(_safe(item.description), body),
+            f"{Decimal(item.quantity):.3f}",
+            money(Decimal(item.unit_value)),
+            money(item_total),
+        ])
+    items_table = Table(rows, colWidths=[99 * mm, 18 * mm, 27 * mm, 30 * mm], repeatRows=1)
+    items_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.3),
+        ("BACKGROUND", (0, 1), (-1, -1), LIGHT),
+        ("TEXTCOLOR", (0, 1), (-1, -1), DARK),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.35, GRID),
+    ]))
+    story += [items_table, Spacer(1, 6)]
 
     discount = (
-        quote.subtotal * (quote.discount_value / 100)
+        Decimal(quote.subtotal) * (Decimal(quote.discount_value) / 100)
         if quote.discount_type == "percent"
-        else quote.discount_value if quote.discount_type == "amount" else Decimal(0)
+        else Decimal(quote.discount_value)
+        if quote.discount_type == "amount"
+        else Decimal("0")
     )
-    summary = Table(
-        [
-            ["Subtotal", money(Decimal(quote.subtotal))],
-            ["Desconto", money(Decimal(discount))],
-            ["TOTAL", money(Decimal(quote.total))],
-        ],
-        colWidths=[140 * mm, 30 * mm],
-    )
-    summary.setStyle(
-        TableStyle(
-            [
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 2), (-1, 2), 11),
-                ("LINEABOVE", (0, 2), (-1, 2), 0.6, colors.HexColor("#204f7b")),
-            ]
+    discount_label = f"Desconto ({Decimal(quote.discount_value):g}%)" if quote.discount_type == "percent" else "Desconto"
+    summary = Table([
+        ["Subtotal", money(Decimal(quote.subtotal))],
+        [discount_label, f"- {money(discount)}" if discount > 0 else money(discount)],
+        ["TOTAL DO ORÇAMENTO", money(Decimal(quote.total))],
+    ], colWidths=[48 * mm, 35 * mm], hAlign="RIGHT")
+    summary.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 1), 8.8),
+        ("TEXTCOLOR", (0, 0), (-1, 0), DARK),
+        ("TEXTCOLOR", (0, 1), (-1, 1), colors.HexColor("#c92f35") if discount > 0 else DARK),
+        ("BACKGROUND", (0, 2), (-1, 2), SOFT_BLUE),
+        ("TEXTCOLOR", (0, 2), (-1, 2), BLUE),
+        ("FONTSIZE", (0, 2), (-1, 2), 10.5),
+        ("LINEABOVE", (0, 2), (-1, 2), 1.2, BLUE),
+        ("LINEBELOW", (0, 2), (-1, 2), 1.2, BLUE),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story += [summary]
+
+    # Página 2 - condições e cláusulas preservadas integralmente.
+    story += [PageBreak(), _section_title("CONDIÇÕES COMERCIAIS", section), Spacer(1, 4)]
+    conditions = Table([
+        ["Prazo de execução", "Prazo de faturamento", "Garantia", "Validade"],
+        [f"{quote.delivery_days} dias", f"{quote.billing_days} dias", f"{quote.warranty_months} meses", f"{quote.validity_days} dias"],
+    ], colWidths=[57 * mm, 60 * mm, 32 * mm, 25 * mm])
+    conditions.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f3f6")),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.white),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#506275")),
+        ("TEXTCOLOR", (0, 1), (-1, 1), BLUE),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.3),
+        ("GRID", (0, 0), (-1, -1), 0.45, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    story += [conditions, Spacer(1, 7)]
+    story += [
+        Paragraph(f"<b>Formas de Pagamento:</b> {_safe(quote.payment_terms)}", body),
+        Paragraph(f"<font color='#667788'>({_safe(quote.return_condition)})</font>", body),
+        Spacer(1, 11),
+        _section_title("TERMOS E CONDIÇÕES DA PROPOSTA", clause_heading),
+        Spacer(1, 7),
+    ]
+
+    clauses = [
+        ("Garantia legal / Código de Defesa do Consumidor", quote.consumer_clause),
+        ("Prazo, insumos e fornecedores", quote.supply_clause),
+        ("Natureza prévia e estimativa do orçamento", quote.estimate_clause),
+    ]
+    for heading, text in clauses:
+        story += [
+            Paragraph(f"<b>{_safe(heading)}:</b> {_safe(text).replace(chr(10), '<br/>')}", clause),
+            Spacer(1, 8),
+        ]
+
+    def draw_watermark(canvas: Canvas, _doc: SimpleDocTemplate) -> None:
+        if not GEAR_WATERMARK.exists():
+            return
+        width = 112 * mm
+        height = 112 * mm
+        page_width, page_height = A4
+        canvas.saveState()
+        canvas.drawImage(
+            str(GEAR_WATERMARK),
+            (page_width - width) / 2,
+            (page_height - height) / 2 - 6 * mm,
+            width=width,
+            height=height,
+            preserveAspectRatio=True,
+            mask="auto",
         )
-    )
-    story.append(summary)
-    story.append(Spacer(1, 8))
+        canvas.restoreState()
 
-    story.append(Paragraph("CONDIÇÕES COMERCIAIS", section))
-    conditions = (
-        f"Prazo de execução: {quote.delivery_days} dias · "
-        f"Prazo de faturamento: {quote.billing_days} dias · "
-        f"Garantia: {quote.warranty_months} meses · "
-        f"Validade da proposta: {quote.validity_days} dias<br/>"
-        f"Pagamento: {quote.payment_terms}<br/>{quote.return_condition}"
-    )
-    story.append(Paragraph(conditions, body))
-    story.append(Spacer(1, 8))
-
-    story.append(Paragraph(quote.consumer_clause, small))
-    story.append(Spacer(1, 4))
-    story.append(Paragraph(quote.supply_clause, small))
-    story.append(Spacer(1, 4))
-    story.append(Paragraph(quote.estimate_clause, small))
-    story.append(Spacer(1, 14))
-
-    approval = Table(
-        [
-            ["APROVAÇÃO DO CLIENTE"],
-            ["Nome: _______________________________  Cargo: _____________________"],
-            ["Data: ____/____/______  Assinatura: _______________________________"],
-        ],
-        colWidths=[170 * mm],
-    )
-    approval.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (0, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#204f7b")),
-                ("PADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
-    )
-    story.append(approval)
-
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
     return buffer.getvalue()
-
 
 def _wrap_text(
     c: Canvas,
@@ -372,11 +469,11 @@ def label_pdf(
         c,
         defect,
         2.2 * mm,
-        height - 19.3 * mm,
-        max_width=25.5 * mm,
+        height - 20.3 * mm,
+        max_width=36 * mm,
         font="Helvetica",
         size=5.4,
-        max_lines=3,
+        max_lines=1,
     )
 
     status_label = STATUS_LABELS_PT.get(work_order.status, work_order.status)
@@ -390,8 +487,9 @@ def label_pdf(
 
     tracking_url = f"{settings.tracking_base_url.rstrip('/')}/{tracking_token}"
     widget = qr.QrCodeWidget(tracking_url)
+    widget.barLevel = "M"
     bounds = widget.getBounds()
-    size = 11.5 * mm
+    size = 17 * mm
     drawing = Drawing(
         size,
         size,

@@ -24,7 +24,7 @@ class AdminUserCreate(BaseModel):
     name: str = Field(min_length=3, max_length=120)
     email: str = Field(min_length=5, max_length=254)
     username: str = Field(min_length=3, max_length=60, pattern=r"^[a-zA-Z0-9._-]+$")
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     role: str
     modules: list[str] = Field(default_factory=list)
     is_active: bool = True
@@ -52,7 +52,7 @@ class AdminUserUpdate(BaseModel):
     username: str | None = Field(
         default=None, min_length=3, max_length=60, pattern=r"^[a-zA-Z0-9._-]+$"
     )
-    password: str | None = Field(default=None, min_length=12, max_length=128)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     role: str | None = None
     modules: list[str] | None = None
     is_active: bool | None = None

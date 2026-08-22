@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.access import user_can_create_quote
 from app.auth.dependencies import require_module
 from app.auth.models import User
 from app.auth.router import current_user
@@ -47,6 +48,7 @@ from app.laboratory.schemas import (
     WorkOrderSummary,
     WorkOrderUpdate,
 )
+from app.notifications.service import notify_quote_users
 from app.laboratory.service import (
     TERMINAL_STATUSES,
     can_transition_status,
@@ -68,6 +70,8 @@ QUERY_PAGE = Query(default=1, ge=1)
 QUERY_PAGE_SIZE = Query(default=25, ge=1, le=100)
 QUERY_STATUS = Query(default=None, alias="status")
 QUERY_SEARCH = Query(default=None, max_length=120)
+QUERY_MONTH = Query(default=None, ge=1, le=12)
+QUERY_YEAR = Query(default=None, ge=2000, le=2100)
 QUERY_PREVIEW = Query(default=True)
 QUERY_DOCUMENT_CATEGORY = Query(default="general")
 REQUIRED_FILE = File(...)
@@ -187,15 +191,52 @@ def _quote_totals(payload: QuoteInput) -> tuple:
 # --------------------------------------------------------------- summary ---
 
 
+def _period_bounds(year: int | None, month: int | None) -> tuple[date | None, date | None]:
+    if year is None and month is None:
+        return None, None
+    if year is None or month is None:
+        raise HTTPException(status_code=422, detail="Mês e ano devem ser informados juntos.")
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    return start, end
+
+
+@router.get("/periods")
+async def laboratory_periods(
+    company_code: CompanyCode | None = QUERY_COMPANY_CODE,
+    _: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    filters = [LaboratoryWorkOrder.company_code == company_code] if company_code else []
+    latest = await db.scalar(select(func.max(LaboratoryWorkOrder.opened_at)).where(*filters))
+    earliest = await db.scalar(select(func.min(LaboratoryWorkOrder.opened_at)).where(*filters))
+    reference = latest or date.today()
+    first_year = earliest.year if earliest else reference.year
+    years = list(range(reference.year, first_year - 1, -1))
+    return {
+        "latest_month": reference.month,
+        "latest_year": reference.year,
+        "years": years,
+    }
+
+
 @router.get("/summary", response_model=WorkOrderSummary)
 async def summary(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE,
+    month: int | None = QUERY_MONTH,
+    year: int | None = QUERY_YEAR,
     _: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     today = date.today()
     month_start = today.replace(day=1)
     base = [LaboratoryWorkOrder.company_code == company_code] if company_code else []
+    period_start, period_end = _period_bounds(year, month)
+    if period_start is not None and period_end is not None:
+        base.extend((
+            LaboratoryWorkOrder.opened_at >= period_start,
+            LaboratoryWorkOrder.opened_at < period_end,
+        ))
 
     async def count_for(*extra) -> int:
         count = await db.scalar(
@@ -205,8 +246,11 @@ async def summary(
 
     return WorkOrderSummary(
         total_open=await count_for(LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES)),
+        analyzed=await count_for(LaboratoryWorkOrder.status == "in_analysis"),
+        awaiting_approval=await count_for(LaboratoryWorkOrder.status == "awaiting_approval"),
+        approved=await count_for(LaboratoryWorkOrder.status == "approved"),
         awaiting_analysis=await count_for(
-            LaboratoryWorkOrder.status.in_(("received", "awaiting_analysis", "in_analysis"))
+            LaboratoryWorkOrder.status.in_(("received", "awaiting_analysis"))
         ),
         in_repair=await count_for(LaboratoryWorkOrder.status == "in_repair"),
         in_testing=await count_for(LaboratoryWorkOrder.status == "in_testing"),
@@ -338,9 +382,12 @@ async def list_work_orders(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE,
     work_order_status: LaboratoryStatus | None = QUERY_STATUS,
     search: str | None = QUERY_SEARCH,
+    month: int | None = QUERY_MONTH,
+    year: int | None = QUERY_YEAR,
     _: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    period_start, period_end = _period_bounds(year, month)
     work_orders, total = await list_work_orders_page(
         db,
         page=page,
@@ -348,6 +395,8 @@ async def list_work_orders(
         company_code=company_code,
         status=work_order_status,
         search=search,
+        opened_from=period_start,
+        opened_before=period_end,
     )
     return WorkOrderPage(
         items=[_to_work_order_output(wo) for wo in work_orders],
@@ -512,6 +561,19 @@ async def change_status(
             )
         )
         await _sync_finance_on_status_change(db, work_order, previous, payload.status, user.id)
+        if payload.status == "in_analysis" and previous != "in_analysis":
+            await notify_quote_users(
+                db,
+                category="quote",
+                severity="warning",
+                title=f"OS {work_order.number} analisada · orçamento pendente",
+                message=f"{work_order.customer_name} · {work_order.equipment_name}. O diagnóstico foi concluído e a OS aguarda orçamento.",
+                target=f"/laboratorio?os={work_order.id}&aba=quote",
+                entity_type="laboratory_work_order",
+                entity_id=work_order.id,
+                work_order_id=work_order.id,
+                exclude_user_id=user.id,
+            )
         await db.commit()
     return _to_work_order_output(await _work_order_or_404(db, work_order.id))
 
@@ -563,6 +625,14 @@ async def work_order_label_pdf(
     )
 
 
+
+def _require_quote_permission(user: User) -> None:
+    if not user_can_create_quote(user.role, user.modules):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seu perfil não possui permissão para criar, alterar ou emitir orçamentos.",
+        )
+
 # ---------------------------------------------------------------- quotes ---
 
 
@@ -592,6 +662,7 @@ async def create_quote(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_quote_permission(user)
     await _work_order_or_404(db, work_order_id)
     last_revision = await db.scalar(
         select(func.max(LaboratoryQuote.revision)).where(
@@ -634,12 +705,18 @@ async def create_quote(
 async def update_quote(
     quote_id: int,
     payload: QuoteInput,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_quote_permission(user)
     quote = await db.get(LaboratoryQuote, quote_id)
     if not quote:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    if quote.status == "emitted" or quote.emitted_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Orçamento emitido não pode ser alterado. Crie uma nova revisão.",
+        )
     subtotal, total = _quote_totals(payload)
     for field in (
         "service_code", "technical_report", "services_description", "delivery_days", "billing_days",
@@ -661,12 +738,18 @@ async def update_quote(
 @router.delete("/quotes/{quote_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_quote(
     quote_id: int,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_quote_permission(user)
     quote = await db.get(LaboratoryQuote, quote_id)
     if not quote:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    if quote.status == "emitted" or quote.emitted_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Orçamento emitido não pode ser excluído. O histórico de revisões deve ser preservado.",
+        )
     await db.delete(quote)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -676,7 +759,7 @@ async def delete_quote(
 async def quote_pdf_endpoint(
     quote_id: int,
     preview: bool = QUERY_PREVIEW,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     quote = await db.get(LaboratoryQuote, quote_id)
@@ -684,13 +767,17 @@ async def quote_pdf_endpoint(
         raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
     work_order = await _work_order_or_404(db, quote.work_order_id)
 
+    if not preview:
+        _require_quote_permission(user)
+
     if not preview and quote.emitted_at is None:
         quote.emitted_at = datetime.now(UTC)
         quote.status = "emitted"
         await db.commit()
         await db.refresh(quote)
 
-    pdf_bytes = quote_pdf(work_order, work_order.equipment, quote)
+    customer = await db.get(LaboratoryCustomer, work_order.customer_id) if work_order.customer_id else None
+    pdf_bytes = quote_pdf(work_order, work_order.equipment, quote, customer)
     disposition = "inline" if preview else "attachment"
     return Response(
         content=pdf_bytes,
@@ -827,6 +914,7 @@ async def create_material_request_for_work_order(
         work_order_id=work_order.id,
         equipment_id=work_order.equipment_id,
         requester_user_id=user.id,
+        source_type="work_order",
         item_name=payload.item_name.strip(),
         quantity=payload.quantity,
         priority=payload.priority,

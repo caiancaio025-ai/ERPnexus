@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.access import MODULE_FINANCE, MODULE_LABORATORY, MODULE_PURCHASING, user_has_module
+from app.auth.access import MODULE_FINANCE, MODULE_LABORATORY, MODULE_PURCHASING, user_can_create_quote, user_has_module
 from app.auth.models import User
 from app.dashboard.schemas import (
     Alert,
@@ -174,6 +174,9 @@ async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
         ),
     ]
 
+    if not user_has_module(user.role, user.modules, MODULE_FINANCE):
+        alerts = [alert for alert in alerts if alert.key != "pending_finance"]
+
     events = [
         PurchaseEvent(
             id=purchase.id,
@@ -197,12 +200,12 @@ async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
                 description="Entrada de equipamento no laboratório",
                 target="/laboratorio/os/nova",
             ),
-            QuickAction(
+            *([QuickAction(
                 key="new_budget",
                 label="Fazer orçamento",
                 description="Abrir a área de orçamentos das OS",
                 target="/laboratorio/os?aba=orcamentos",
-            ),
+            )] if user_can_create_quote(user.role, user.modules) else []),
             QuickAction(
                 key="unnoted_movement",
                 label="Documento sem nota",

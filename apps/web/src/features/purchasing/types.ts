@@ -68,8 +68,8 @@ export type MaterialRequestStatus =
   | "in_transit" | "received" | "delivered_to_lab" | "cancelled";
 
 export type MaterialRequest = {
-  id: number; code: string; company_code: CompanyCode; work_order_id: number; work_order_number: string;
-  equipment_id: number; equipment_serial: string | null; customer_name: string;
+  id: number; code: string; company_code: CompanyCode; work_order_id: number | null; work_order_number: string | null;
+  equipment_id: number | null; equipment_serial: string | null; customer_name: string | null; source_type: "work_order" | "standalone";
   requester_user_id: number; requester_name: string; item_name: string; quantity: number;
   priority: "low" | "normal" | "high" | "urgent"; technical_note: string | null; suggested_link: string | null;
   status: MaterialRequestStatus; supplier_name: string | null; purchase_reference: string | null;

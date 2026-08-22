@@ -4,9 +4,11 @@ import type { AuthUser } from "../../features/auth/AuthCard";
 import { AuthCard } from "../../features/auth/AuthCard";
 import { Dashboard } from "../../features/dashboard/Dashboard";
 import { CustomerMaster } from "../../features/customers/CustomerMaster";
+import { CommercialDashboard } from "../../features/commercial/CommercialDashboard";
 import { FinanceDashboard } from "../../features/finance/FinanceDashboard";
 import { PurchasingDashboard } from "../../features/purchasing/PurchasingDashboard";
 import { LaboratoryDashboard } from "../../features/laboratory/LaboratoryDashboard";
+import { EmployeeDashboard } from "../../features/employees/EmployeeDashboard";
 import { ModulePlaceholder } from "../ModulePlaceholder";
 import { NotFound } from "../NotFound";
 import { ProtectedRoute } from "./ProtectedRoute";
@@ -46,8 +48,9 @@ export function AppRouter({ user, onLogin, onLogout }: AppRouterProps) {
         <Route path="/financeiro/*" element={<FinanceDashboard user={user!} onLogout={onLogout} />} />
         <Route path="/compras/*" element={<PurchasingDashboard user={user!} onLogout={onLogout} />} />
         <Route path="/laboratorio/*" element={<LaboratoryDashboard user={user!} onLogout={onLogout} />} />
+        <Route path="/colaboradores/*" element={<EmployeeDashboard user={user!} onLogout={onLogout} />} />
         <Route path="/estoque/*" element={<ModulePlaceholder />} />
-        <Route path="/comercial/*" element={<ModulePlaceholder />} />
+        <Route path="/comercial/*" element={<CommercialDashboard user={user!} onLogout={onLogout} />} />
         <Route path="*" element={<NotFound />} />
       </Route>
 

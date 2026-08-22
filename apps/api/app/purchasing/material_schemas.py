@@ -26,6 +26,10 @@ class MaterialRequestCreate(BaseModel):
     suggested_link: str | None = Field(default=None, max_length=1000)
 
 
+class StandaloneMaterialRequestCreate(MaterialRequestCreate):
+    company_code: str = Field(min_length=2, max_length=40)
+
+
 class MaterialRequestUpdate(BaseModel):
     status: MaterialRequestStatus
     supplier_name: str | None = Field(default=None, max_length=180)
@@ -43,11 +47,12 @@ class MaterialRequestOutput(BaseModel):
     id: int
     code: str
     company_code: str
-    work_order_id: int
-    work_order_number: str
-    equipment_id: int
+    work_order_id: int | None
+    work_order_number: str | None
+    equipment_id: int | None
     equipment_serial: str | None
-    customer_name: str
+    customer_name: str | None
+    source_type: str
     requester_user_id: int
     requester_name: str
     item_name: str

@@ -177,6 +177,9 @@ class WorkOrderPage(BaseModel):
 
 class WorkOrderSummary(BaseModel):
     total_open: int
+    analyzed: int
+    awaiting_approval: int
+    approved: int
     awaiting_analysis: int
     in_repair: int
     in_testing: int
@@ -230,7 +233,7 @@ class QuoteInput(BaseModel):
     billing_days: int = 21
     warranty_months: int = 3
     payment_terms: str
-    validity_days: int = 30
+    validity_days: int = 0
     return_condition: str
     consumer_clause: str
     supply_clause: str

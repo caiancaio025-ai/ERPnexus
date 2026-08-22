@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, PackagePlus, RefreshCw, ShoppingCart, Truck } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../../shared/api/apiClient";
 import type { MaterialRequest, MaterialRequestStatus, Priority } from "../types";
@@ -27,6 +28,7 @@ function blocker(items: MaterialRequest[]) {
 }
 
 export function MaterialsPanel({ workOrderId }: { workOrderId: number }) {
+  const navigate = useNavigate();
   const [items, setItems] = useState<MaterialRequest[]>([]);
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -66,7 +68,7 @@ export function MaterialsPanel({ workOrderId }: { workOrderId: number }) {
   return <div className="lab-materials">
     <div className={`lab-material-blocker ${currentBlocker.tone}`}>
       <div><strong>{currentBlocker.title}</strong><span>{currentBlocker.detail}</span></div>
-      <button onClick={() => void load()} title="Atualizar"><RefreshCw size={16} /></button>
+      <div className="lab-material-nav-actions"><button onClick={() => navigate("/compras?view=requests")}><ShoppingCart size={15}/>Abrir em Compras</button><button onClick={() => void load()} title="Atualizar"><RefreshCw size={16} /></button></div>
     </div>
 
     <form className="lab-material-form" onSubmit={submit}>

@@ -86,6 +86,7 @@ class EmployeeCreate(BaseModel):
 
 
 class EmployeeUpdate(BaseModel):
+    user_id: int | None = None
     full_name: str | None = Field(default=None, min_length=3, max_length=180)
     date_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^[MFO]$")
@@ -124,6 +125,7 @@ class EmployeeUpdate(BaseModel):
 class EmployeeListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    user_id: int | None
     full_name: str
     document: str
     email: str | None
@@ -188,3 +190,56 @@ class PaginatedEmployeeResponse(BaseModel):
     limit: int
     offset: int
     data: list[EmployeeListResponse]
+
+
+class CollaboratorAccessCreate(BaseModel):
+    first_name: str = Field(min_length=2, max_length=60)
+    last_name: str = Field(min_length=2, max_length=100)
+    phone: str = Field(min_length=8, max_length=20)
+    role: str = Field(pattern="^(lab|gestao|admin)$")
+    username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9._-]+$")
+    password: str = Field(min_length=8, max_length=64)
+
+    @field_validator("role")
+    @classmethod
+    def normalize_access_role(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class CollaboratorAccessUpdate(BaseModel):
+    first_name: str | None = Field(default=None, min_length=2, max_length=60)
+    last_name: str | None = Field(default=None, min_length=2, max_length=100)
+    phone: str | None = Field(default=None, min_length=8, max_length=20)
+    role: str | None = Field(default=None, pattern="^(lab|gestao|admin)$")
+    username: str | None = Field(
+        default=None, min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9._-]+$"
+    )
+    password: str | None = Field(default=None, min_length=8, max_length=64)
+    is_active: bool | None = None
+
+    @field_validator("role")
+    @classmethod
+    def normalize_optional_access_role(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
+
+    @field_validator("username")
+    @classmethod
+    def normalize_optional_username(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
+
+
+class CollaboratorAccessResponse(BaseModel):
+    employee_id: int | None
+    user_id: int
+    first_name: str
+    last_name: str
+    full_name: str
+    phone: str | None
+    role: str
+    username: str
+    is_active: bool

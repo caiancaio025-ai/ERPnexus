@@ -24,7 +24,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../auth/AuthCard";
 import type { Alert, DashboardSummary, NotificationItem, NotificationSummary, PurchaseEvent, QuickAction } from "./types";
@@ -230,6 +230,12 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [error, setError] = useState("");
   const [notifications, setNotifications] = useState<NotificationSummary>({ unread_count: 0, items: [] });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("notificacoes") === "1") setNotificationsOpen(true);
+  }, [location.search]);
   const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
 
@@ -238,7 +244,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
     Promise.all([
       apiClient.get<DashboardSummary>("/api/dashboard/summary", { signal: controller.signal }),
-      apiClient.get<NotificationSummary>("/api/notifications?limit=10", { signal: controller.signal }),
+      apiClient.get<NotificationSummary>("/api/notifications?limit=10&unread_only=true", { signal: controller.signal }),
     ])
       .then(([response, notificationResponse]) => {
         setSummary(normalizeSummary(response));
@@ -263,7 +269,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       await apiClient.post(`/api/notifications/${item.id}/read`, {});
       setNotifications((current) => ({
         unread_count: Math.max(0, current.unread_count - 1),
-        items: current.items.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry),
+        items: current.items.filter((entry) => entry.id !== item.id),
       }));
     }
     setNotificationsOpen(false);
@@ -274,7 +280,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     await apiClient.post("/api/notifications/read-all", {});
     setNotifications((current) => ({
       unread_count: 0,
-      items: current.items.map((item) => ({ ...item, is_read: true })),
+      items: [],
     }));
   }
 
@@ -287,7 +293,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           </button>
           <p className="sidebar__section">Geral</p>
           <nav aria-label="Módulos">
-            {modules.map(({ label, icon: Icon, target, active }) => (
+            {modules.filter((item) => item.target !== "/financeiro" || !(["tecnico", "lab"].includes(user.role))).map(({ label, icon: Icon, target, active }) => (
               <button className={active ? "active" : ""} key={label} onClick={() => navigate(target)}>
                 <Icon size={19} /><span>{label}</span>
               </button>
