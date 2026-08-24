@@ -1,0 +1,31 @@
+db,company,rowid,legacy_id,client,nfs,nfd,orcamento,data_fat_raw,data_venc_raw,amount,status,issue_original,due_original,issue_corrected,due_corrected,valid_original,expense_copy,total_summary,intercompany,recoverable,repair_rule,action
+banco_empresa.db,universo_eletronica,19,19,AZIMULT,541,607,2125,18/01/2024,---,1187.5,PAGO,2024-01-18,,2024-01-18,2024-01-18,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,39,39,FIABESA,564,665,2023,16/02/2024,---,900.0,PAGO,2024-02-16,,2024-02-16,2024-02-16,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,81,81,TIGRE,599,SNF,3125,26/04/2024,22/05/0204,4500.0,PAGO,2024-04-26,,2024-04-26,2024-05-22,False,False,False,False,True,year_typo_204->2024,recover_date
+banco_empresa.db,universo_eletronica,82,82,ALUMASA,600,SNF,4141,26/04/2024,---,1000.0,PAGO,2024-04-26,,2024-04-26,2024-04-26,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,106,106,POBRENE,624,806,4207,29/05/2024,---,700.0,PAGO,2024-05-29,,2024-05-29,2024-05-29,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,132,132,jamesson soft danfos,SEM NOTA,SNF,6342,25/06/2024,02/08/0202,3000.0,PAGO,2024-06-25,,2024-06-25,2024-06-25,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,137,137,NOTARO,649,809,5315,02/07/2024,---,1500.0,PAGO,2024-07-02,,2024-07-02,2024-07-02,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,282,282,FIABESA,774,1009,14770,02/01/2025,22/01/0205,2110.0,PAGO,2025-01-02,,2025-01-02,2025-01-22,False,False,False,False,True,year_typo_205->2025,recover_date
+banco_empresa.db,universo_eletronica,326,326,ISOESTE,816,SNF,14882,11/02/2025,17/03/0202,3344.0,PAGO,2025-02-11,,2025-02-11,2025-02-11,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,369,369,ASA,863,1084,15091,16/04/2025,23/01/0001,2850.0,PAGO,2025-04-16,,2025-04-16,2025-04-16,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,370,370,ASA,864,SNF,15086,16/04/2025,23/01/0001,3800.0,PAGO,2025-04-16,,2025-04-16,2025-04-16,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,405,405,DEXCO SUAPE,932,1210,19337,01/08/2025,---,35000.0,PAGO,2025-08-01,,2025-08-01,2025-08-01,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,439,439,FIABESA,1003,1275,19552,03/11/0205,24/11/2025,1850.0,PAGO,,2025-11-24,2025-11-03,2025-11-24,False,False,False,False,True,year_typo_205->2025,recover_date
+banco_empresa.db,universo_eletronica,452,452,CONPEL,842,SNF,15011,20/03/2025,14/04/0205,1500.0,PAGO,2025-03-20,,2025-03-20,2025-04-14,False,False,False,False,True,year_typo_205->2025,recover_date
+banco_empresa.db,universo_eletronica,533,533,USINA SÃO JOSE S/A,958,1259,19505,04/09/2025,---,30000.14,PAGO,2025-09-04,,2025-09-04,2025-09-04,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,543,543,CONPEL,977,SNF,24633,03/10/2025,---,4000.0,PAGO,2025-10-03,,2025-10-03,2025-10-03,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_empresa.db,universo_eletronica,568,568,ASA,1011,1324,19488,13/11/0205,23/12/2025,4230.0,PAGO,,2025-12-23,2025-11-13,2025-12-23,False,False,False,False,True,year_typo_205->2025,recover_date
+banco_automacao.db,universo_automacao,4,4,DENSO,9,-,-,20/09/2023,---,2456.83,PAGO,2023-09-20,,2023-09-20,2023-09-20,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,110,110,USINA CORURIPE,102,147,-,16/08/2024,30/09/3024,37000.0,EM ABERTO,2024-08-16,,2024-08-16,2024-09-30,False,False,False,False,True,year_typo_3024->2024,recover_date
+banco_automacao.db,universo_automacao,115,115,USINA SÃO JOAO,127,SNF,8490 / 8488,25/08/2024,---,6000.0,PAGO,2024-08-25,,2024-08-25,2024-08-25,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,158,158,USINA CUCAU,141,-,10559 / 12643 / 12644,28/11/2024,---,1500.0,PAGO,2024-11-28,,2024-11-28,2024-11-28,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,159,159,USINA CUCAU,141,-,10559 / 12643 / 12644,28/11/2024,---,9500.0,PAGO,2024-11-28,,2024-11-28,2024-11-28,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,189,189,BIO IMPACTO,169,215,14843 / 14842,03/02/2025,---,26362.5,PAGO,2025-02-03,,2025-02-03,2025-02-03,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,230,230,USINA JAPUNGU,241,282,17155,09/07/2025,---,20000.0,PAGO,2025-07-09,,2025-07-09,2025-07-09,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,233,233,USINA JAPUNGU,244,286,17154,11/07/2025,---,16872.0,PAGO,2025-07-11,,2025-07-11,2025-07-11,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,239,239,ANDERSON,SNF,SNF,19452,28/07/2025,---,700.0,PAGO,2025-07-28,,2025-07-28,2025-07-28,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,244,244,USINA SUMAUMA,261,SNF,19432,26/08/2025,---,800.0,PAGO,2025-08-26,,2025-08-26,2025-08-26,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,291,291,LOURO,196,SNF,OÇ 151,28/04/2025,---,4500.0,PAGO,2025-04-28,,2025-04-28,2025-04-28,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,361,361,CENTRAL AÇUCAREIRA,288,339,20565,22/10/2025,---,6027.5,PAGO,2025-10-22,,2025-10-22,2025-10-22,False,False,False,False,True,paid_missing_due=>issue,recover_date
+banco_automacao.db,universo_automacao,364,364,COMPANHIA ALIMENTICIA,297,AG NF,25747,21/11/2025,---,18500.0,PAGO,2025-11-21,,2025-11-21,2025-11-21,False,False,False,False,True,paid_missing_due=>issue,recover_date

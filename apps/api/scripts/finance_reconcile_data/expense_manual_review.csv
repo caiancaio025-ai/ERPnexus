@@ -1,0 +1,8 @@
+db,company,rowid,legacy_id,supplier,service,data_saida_raw,data_emissao_raw,amount,status,posting_original,issue_original,posting_corrected,issue_corrected,valid_original,recoverable,repair_rule,action,recovered_from_copy,duplicate_flag
+banco_automacao.db,universo_automacao,5,5,FORNEDOR SP DRIVE,Importado,---,,6083.0,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,6,6,JEFESON,Importado,---,,3000.0,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,7,7,FORNEDOR SP DRIVE,Importado,---,,4167.5,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,8,8,RESIÇÃO THIAGO,Importado,---,,550.0,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,9,9,WAGNER,Importado,---,,500.0,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,11,11,CARTAO,Importado,---,,12664.06,PAGO,,,,,False,False,,manual_review,False,False
+banco_automacao.db,universo_automacao,582,582,COMISSÃO JOSENILDO,Importado,---,,1000.0,PAGO,,,,,False,False,,manual_review,False,False

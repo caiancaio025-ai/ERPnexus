@@ -1,0 +1,23 @@
+{
+  "rules": {
+    "same_invoice_different_due": "keep",
+    "internal_transfers": "keep",
+    "exact_duplicate_key": [
+      "company",
+      "client",
+      "invoice",
+      "amount",
+      "issue_date",
+      "due_date"
+    ],
+    "safe_source_sync": "create only when audited legitimate legacy marker is absent; never overwrite existing rows"
+  },
+  "counts": {
+    "recover_income": 30,
+    "recover_expense": 27,
+    "duplicate_remove": 10,
+    "lab_mark_invoiced": 354,
+    "income_safe_all": 1218,
+    "expense_safe_all": 2985
+  }
+}

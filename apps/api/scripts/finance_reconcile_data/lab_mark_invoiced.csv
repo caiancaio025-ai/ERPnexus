@@ -1,0 +1,355 @@
+os,finance_db,finance_rowid,finance_client,lab_client,score,status,issue,entry,amount,nfs,classification,current_status,decision,link_count
+18319,banco_empresa.db,749,VITARELLA M DIAS BRANCO,VITARELLA,0.848,Liberado,2026-05-18,2026-01-06,3000.0,162,safe,Liberado,mark_invoiced,1
+19387,banco_empresa.db,727,MEXICHEM,MEXICHEM,1.0,Aprovado,2026-05-04,2025-07-07,13300.0,143,safe,Aprovado,mark_invoiced,1
+19388,banco_empresa.db,727,MEXICHEM,MEXICHEM,1.0,Aprovado,2026-05-04,2025-07-07,13300.0,143,safe,Aprovado,mark_invoiced,1
+19389,banco_empresa.db,716,MEXICHEM,MEXICHEM,1.0,Liberado,2026-04-13,2025-07-07,5000.0,134,safe,Liberado,mark_invoiced,1
+19446,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19447,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19448,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19449,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19450,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19451,banco_empresa.db,589,ELEVTRONICA,ELEVTRÔNICA,1.0,Liberado,2025-12-03,2025-07-21,15000.0,14,safe,Liberado,mark_invoiced,1
+19484,banco_empresa.db,578,MONDELEZ,MONDELEZ,1.0,Liberado,2025-12-01,2025-08-04,3890.0,3,safe,Liberado,mark_invoiced,1
+19520,banco_automacao.db,261,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-10-14,2025-08-14,45000.0,282,safe,Liberado,mark_invoiced,1
+19547,banco_empresa.db,572,ALPARGATAS CARPINA,ALPARGATAS,0.889,Liberado,2025-11-18,2025-08-21,4750.0,1015,safe,Liberado,mark_invoiced,1
+19549,banco_empresa.db,584,VITRIUM,VITRIUM,1.0,Liberado,2025-12-01,2025-10-02,11000.0,10,safe,Liberado,mark_invoiced,1
+19550,banco_empresa.db,606,VITRIUM,VITRIUM,1.0,Liberado,2026-01-05,2025-10-02,7000.0,36,safe,Liberado,mark_invoiced,1
+19551,banco_empresa.db,606,VITRIUM,VITRIUM,1.0,Liberado,2026-01-05,2025-10-02,7000.0,36,safe,Liberado,mark_invoiced,1
+19552,banco_empresa.db,439,FIABESA,Fiabesa Guararapes,0.847,Liberado,2025-11-03,,1850.0,1003,safe,Liberado,mark_invoiced,1
+19554,banco_empresa.db,603,MONDELEZ,MONDELEZ,1.0,Liberado,2025-12-23,2025-08-22,1000.0,32,safe,Liberado,mark_invoiced,1
+21569,banco_empresa.db,608,FIABESA,FIABESA,1.0,Liberado,2026-01-07,2025-09-01,1850.0,38,safe,Liberado,mark_invoiced,1
+21571,banco_automacao.db,268,KLABIN,KLABIN,1.0,Liberado,2025-12-18,2025-09-03,14670.0,8,safe,Liberado,mark_invoiced,1
+22590,banco_automacao.db,267,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-12-18,2025-08-14,75595.5,7,safe,Liberado,mark_invoiced,1
+22614,banco_empresa.db,734,ALPARGATAS,ALPARGATAS CAMPINA GRANDE,0.85,Liberado,2026-05-06,2025-08-18,5100.0,148,safe,Liberado,mark_invoiced,1
+22616,banco_automacao.db,267,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-12-18,2025-08-14,75595.5,7,safe,Liberado,mark_invoiced,1
+22617,banco_automacao.db,267,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-12-18,2025-09-18,75595.5,7,safe,Liberado,mark_invoiced,1
+22618,banco_automacao.db,267,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-12-18,2025-08-14,75595.5,7,safe,Liberado,mark_invoiced,1
+24622,banco_automacao.db,983,USINA CORURIPE,USINA CORURIPE,1.0,Liberado,2026-04-08,2025-09-24,100000.0,18,safe,Liberado,mark_invoiced,1
+24623,banco_automacao.db,983,USINA CORURIPE,USINA CORURIPE,1.0,Liberado,2026-04-08,2025-09-24,100000.0,18,safe,Liberado,mark_invoiced,1
+24624,banco_automacao.db,983,USINA CORURIPE,USINA CORURIPE,1.0,Liberado,2026-04-08,2025-09-24,100000.0,18,safe,Liberado,mark_invoiced,1
+24625,banco_automacao.db,983,USINA CORURIPE,USINA CORURIPE,1.0,Liberado,2026-04-08,2025-09-24,100000.0,18,safe,Liberado,mark_invoiced,1
+24626,banco_automacao.db,983,USINA CORURIPE,CORURIPE,0.893,Liberado,2026-04-08,2025-12-10,100000.0,18,safe,Liberado,mark_invoiced,1
+24634,banco_automacao.db,1030,USINA TRAPICHE,USINA TRAPICHE,1.0,Aprovado,2026-08-20,2025-10-01,20900.0,57,safe,Aprovado,mark_invoiced,2
+24635,banco_empresa.db,601,FIABESA,Fiabesa Guararapes,0.847,Liberado,2025-12-19,2025-10-01,1100.0,29,safe,Liberado,mark_invoiced,1
+24636,banco_empresa.db,580,INGREDION,INGREDION,1.0,Liberado,2025-12-01,2025-10-01,2600.0,5,safe,Liberado,mark_invoiced,1
+24643,banco_empresa.db,639,AMBEV,AMBEV,1.0,Liberado,2026-02-12,2025-10-02,9000.0,70,safe,Liberado,mark_invoiced,1
+24648,banco_automacao.db,386,USINA CAETE,USINA CAETE,1.0,Liberado,2026-03-11,2025-10-10,6211.0,11,safe,Liberado,mark_invoiced,1
+24649,banco_automacao.db,387,USINA CAETE,USINA CAETE MARITUBA,0.887,Liberado,2026-03-11,2025-10-10,3235.0,12,safe,Liberado,mark_invoiced,1
+24665,banco_automacao.db,275,KLABIN,KLABIN,1.0,Liberado,2026-02-06,2025-10-23,2500.0,21,safe,Liberado,mark_invoiced,1
+24666,banco_automacao.db,271,USINA SUMAUMA,Sumaúma,0.885,Liberado,2026-01-22,2025-10-23,3000.0,12,safe,Liberado,mark_invoiced,1
+24667,banco_automacao.db,266,CORURIPE,USINA CORURIPE,0.893,Liberado,2025-12-15,2025-08-14,2115.0,6,safe,Liberado,mark_invoiced,1
+24673,banco_automacao.db,356,CORURIPE,CORURIPE,1.0,Liberado,2025-11-13,2025-10-28,8000.0,294,safe,Liberado,mark_invoiced,1
+24691,banco_empresa.db,777,ASA,Asa,1.0,Liberado,2026-06-12,2025-11-04,2850.0,190,safe,Liberado,mark_invoiced,1
+24706,banco_empresa.db,627,VITRIUM,VITRIUM,1.0,Liberado,2026-02-02,2025-10-31,14000.0,57,safe,Liberado,mark_invoiced,1
+24708,banco_empresa.db,627,VITRIUM,VITRIUM,1.0,Liberado,2026-02-02,2025-10-30,14000.0,57,safe,Liberado,mark_invoiced,1
+24712,banco_empresa.db,734,ALPARGATAS,ALPARGATAS CAMPINA,0.889,Liberado,2026-05-06,2025-11-04,5100.0,148,safe,Liberado,mark_invoiced,1
+24717,banco_empresa.db,574,EDK,EDK,1.0,Liberado,2025-11-19,2025-11-06,14954.9,1017,safe,Liberado,mark_invoiced,1
+24718,banco_empresa.db,570,CAMPARI,CAMPARI,1.0,Liberado,2025-11-17,2025-11-06,8000.0,1013,safe,Liberado,mark_invoiced,1
+24719,banco_empresa.db,726,CAMPARI,CAMPARI,1.0,Entrada,2026-05-04,2025-11-06,8000.0,142,safe,Entrada,mark_invoiced,1
+24720,banco_empresa.db,587,CAMPARI,CAMPARI,1.0,Liberado,2025-12-02,2025-11-06,12000.0,12,safe,Liberado,mark_invoiced,2
+24723,banco_empresa.db,588,COAF CRUANGI,COAF CRUANGI,1.0,Liberado,2025-12-03,2025-11-10,13000.0,13,safe,Liberado,mark_invoiced,1
+24725,banco_empresa.db,592,FIABESA,Fiabesa Guararapes,0.847,Liberado,2025-12-11,2025-11-11,3300.0,19,safe,Liberado,mark_invoiced,1
+25724,banco_empresa.db,622,ASA,Asa,1.0,Liberado,2026-01-20,2025-11-13,10850.0,49,safe,Liberado,mark_invoiced,1
+25725,banco_empresa.db,574,EDK,EDK,1.0,Liberado,2025-11-19,2025-11-13,14954.9,1017,safe,Liberado,mark_invoiced,1
+25727,banco_empresa.db,574,EDK,EDK,1.0,Liberado,2025-11-19,2025-11-13,14954.9,1017,safe,Liberado,mark_invoiced,1
+25729,banco_empresa.db,574,EDK,EDK,1.0,Liberado,2025-11-19,2025-11-13,14954.9,1017,safe,Liberado,mark_invoiced,1
+25731,banco_empresa.db,754,CAMPARI,CAMPARI,1.0,Aprovado,2026-06-01,2025-11-14,12000.0,167,safe,Aprovado,mark_invoiced,1
+25732,banco_empresa.db,662,CAMPARI,CAMPARI,1.0,Liberado,2026-03-03,2025-11-14,8000.0,86,safe,Liberado,mark_invoiced,1
+25733,banco_empresa.db,577,USINA LARANJEIRAS,LARANJEIRAS,0.912,Liberado,2025-12-01,2025-11-17,3500.0,2,safe,Liberado,mark_invoiced,1
+25735,banco_empresa.db,590,ALPHA PLAST,ALPHA PLAST,1.0,Liberado,2025-12-10,2025-11-17,3000.0,16,safe,Liberado,mark_invoiced,1
+25736,banco_empresa.db,590,ALPHA PLAST,ALPHA PLAST,1.0,Liberado,2025-12-10,2025-11-17,3000.0,16,safe,Liberado,mark_invoiced,1
+25737,banco_empresa.db,665,VITRIUM,VITRIUM,1.0,Liberado,2026-03-03,2025-11-18,12000.0,89,safe,Liberado,mark_invoiced,1
+25738,banco_empresa.db,665,VITRIUM,VITRIUM,1.0,Liberado,2026-03-03,2025-11-18,12000.0,89,safe,Liberado,mark_invoiced,1
+25740,banco_empresa.db,653,ARCONTEC,ARCONTEC,1.0,Liberado,2026-02-25,2025-11-18,3000.0,30,safe,Liberado,mark_invoiced,2
+25741,banco_empresa.db,582,NHL,NHL,1.0,Liberado,2025-12-01,2025-11-18,5000.0,7,safe,Liberado,mark_invoiced,1
+25743,banco_empresa.db,622,ASA,Asa,1.0,Liberado,2026-01-20,2025-11-18,10850.0,49,safe,Liberado,mark_invoiced,1
+25744,banco_empresa.db,581,EDK,EDK,1.0,Liberado,2025-12-01,2025-11-19,22442.5,6,safe,Liberado,mark_invoiced,1
+25745,banco_empresa.db,581,EDK,EDK,1.0,Liberado,2025-12-01,2025-11-19,22442.5,6,safe,Liberado,mark_invoiced,1
+25752,banco_empresa.db,581,EDK,EDK,1.0,Liberado,2025-12-01,2025-11-21,22442.5,6,safe,Liberado,mark_invoiced,1
+25753,banco_empresa.db,581,EDK,EDK,1.0,Liberado,2025-12-01,2025-11-21,22442.5,6,safe,Liberado,mark_invoiced,1
+25755,banco_empresa.db,609,FIABESA,Fiabesa Guararapes,0.847,Liberado,2026-01-07,2025-11-24,2500.0,39,safe,Liberado,mark_invoiced,1
+25761,banco_empresa.db,607,ASA,Asa,1.0,Liberado,2026-03-06,2025-11-24,16000.0,SNF,safe,Liberado,mark_invoiced,1
+26760,banco_empresa.db,605,EDK,EDK,1.0,Liberado,2025-12-29,2025-11-25,6536.0,34,safe,Liberado,mark_invoiced,1
+26761,banco_empresa.db,605,EDK,EDK,1.0,Liberado,2025-12-29,2025-11-25,6536.0,34,safe,Liberado,mark_invoiced,1
+26762,banco_empresa.db,605,EDK,EDK,1.0,Liberado,2025-12-29,2025-11-25,6536.0,34,safe,Liberado,mark_invoiced,1
+26763,banco_empresa.db,585,LÁ CARNE,LACARNE,0.933,Liberado,2025-12-02,2025-11-26,800.0,11,safe,Liberado,mark_invoiced,2
+26765,banco_automacao.db,265,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2025-12-15,2025-11-26,11495.0,5,safe,Liberado,mark_invoiced,1
+26767,banco_automacao.db,269,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-01-15,2025-11-27,31321.5,10,safe,Liberado,mark_invoiced,1
+26768,banco_automacao.db,977,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-04-01,2025-11-27,18000.0,15,safe,Liberado,mark_invoiced,1
+26769,banco_automacao.db,265,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2025-12-15,2025-11-27,11495.0,5,safe,Liberado,mark_invoiced,1
+26770,banco_automacao.db,269,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-01-15,2025-11-27,31321.5,10,safe,Liberado,mark_invoiced,1
+26771,banco_automacao.db,269,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-01-15,2025-11-27,31321.5,10,safe,Liberado,mark_invoiced,1
+26772,banco_automacao.db,269,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-01-15,2025-11-27,31321.5,10,safe,Liberado,mark_invoiced,1
+26776,banco_empresa.db,593,IF DOS SANTOS,IF DOS SANTOS,1.0,Liberado,2025-12-11,2025-12-02,2000.0,20,safe,Liberado,mark_invoiced,1
+26777,banco_empresa.db,593,IF DOS SANTOS,IF DOS SANTOS,1.0,Liberado,2025-12-11,2025-12-02,2000.0,20,safe,Liberado,mark_invoiced,1
+26778,banco_empresa.db,630,MONDELEZ,MONDELEZ,1.0,Liberado,2026-02-09,2025-12-02,3332.32,60,safe,Liberado,mark_invoiced,1
+26779,banco_automacao.db,273,CORURIPE,CORURIPE,1.0,Liberado,2026-02-02,2025-12-04,75807.0,15,safe,Liberado,mark_invoiced,1
+26780,banco_automacao.db,273,CORURIPE,CORURIPE,1.0,Liberado,2026-02-02,2025-12-03,75807.0,15,safe,Liberado,mark_invoiced,1
+26782,banco_automacao.db,368,CEARA MIRIM,CEARA MIRIM,1.0,Liberado,2025-12-05,2025-12-03,14560.0,3,safe,Liberado,mark_invoiced,1
+26783,banco_empresa.db,696,VITRIUM,VITRIUM,1.0,Liberado,2026-04-01,2025-12-03,6000.0,118,safe,Liberado,mark_invoiced,1
+26784,banco_empresa.db,696,VITRIUM,VITRIUM,1.0,Liberado,2026-04-01,2025-12-03,6000.0,118,safe,Liberado,mark_invoiced,1
+26785,banco_empresa.db,696,VITRIUM,VITRIUM,1.0,Liberado,2026-04-01,2025-12-03,6000.0,118,safe,Liberado,mark_invoiced,1
+26786,banco_empresa.db,696,VITRIUM,VITRIUM,1.0,Liberado,2026-04-01,2025-12-03,6000.0,118,safe,Liberado,mark_invoiced,1
+26787,banco_empresa.db,703,VITRIUM,VITRIUM,1.0,Liberado,2026-04-01,2025-12-03,7000.0,124,safe,Liberado,mark_invoiced,1
+26788,banco_empresa.db,724,VITRIUM,VITRIUM,1.0,Liberado,2026-05-04,2025-12-03,14000.0,140,safe,Liberado,mark_invoiced,1
+26789,banco_empresa.db,724,VITRIUM,VITRIUM,1.0,Liberado,2026-05-04,2025-12-03,14000.0,140,safe,Liberado,mark_invoiced,1
+26791,banco_empresa.db,594,MABOR,MABOR,1.0,Liberado,2025-12-12,2025-12-10,1200.0,21,safe,Liberado,mark_invoiced,2
+26797,banco_empresa.db,591,NORDESTE MAIS,NORDESTE MAIS,1.0,Liberado,2025-12-11,2025-12-05,5700.0,18,safe,Liberado,mark_invoiced,1
+26798,banco_empresa.db,595,HS,HS,1.0,Liberado,2025-12-16,2025-12-07,5475.0,24,safe,Liberado,mark_invoiced,1
+26802,banco_automacao.db,985,USINA CORURIPE,CORURIPE,0.893,Liberado,2026-04-14,2025-12-10,145902.6,20,safe,Liberado,mark_invoiced,1
+26803,banco_automacao.db,985,USINA CORURIPE,CORURIPE,0.893,Liberado,2026-04-14,2025-12-10,145902.6,20,safe,Liberado,mark_invoiced,1
+26805,banco_automacao.db,985,USINA CORURIPE,CORURIPE,0.893,Liberado,2026-04-14,2025-12-10,145902.6,20,safe,Liberado,mark_invoiced,1
+26806,banco_automacao.db,985,USINA CORURIPE,CORURIPE,0.893,Liberado,2026-04-14,2025-12-10,145902.6,20,safe,Liberado,mark_invoiced,1
+26807,banco_automacao.db,986,CORURIPE,CORURIPE,1.0,Liberado,2026-04-22,2025-12-10,13142.97,21,safe,Liberado,mark_invoiced,2
+26809,banco_empresa.db,664,ISOESTE,ISOESTE,1.0,Liberado,2026-03-03,2025-12-10,1972.0,88,safe,Liberado,mark_invoiced,1
+27811,banco_empresa.db,442,MEXICHEN,MEXICHEM,0.875,Aprovado,2026-01-05,2025-12-11,1000.0,35,safe,Aprovado,mark_invoiced,1
+27814,banco_empresa.db,600,IF DOS SANTOS,IF DOS SANTOS,1.0,Liberado,2025-12-18,2025-12-12,750.0,28,safe,Liberado,mark_invoiced,1
+27816,banco_empresa.db,599,MABOR,MABOR,1.0,Liberado,2025-12-18,2025-12-12,4265.0,27,safe,Liberado,mark_invoiced,1
+27817,banco_empresa.db,599,MABOR,MABOR,1.0,Liberado,2025-12-18,2025-12-12,4265.0,27,safe,Liberado,mark_invoiced,1
+27818,banco_automacao.db,270,USINA SAO JOSE DO PINHEIRO,USINA S JOSÉ PINHEIRO,0.905,Liberado,2026-01-16,2025-12-13,36500.0,11,safe,Liberado,mark_invoiced,1
+28821,banco_empresa.db,616,MONDELEZ,MONDELEZ,1.0,Liberado,2026-01-13,2025-12-18,1540.51,43,safe,Liberado,mark_invoiced,1
+28822,banco_empresa.db,604,MONDELEZ,MONDELEZ,1.0,Liberado,2025-12-26,2025-12-18,2392.06,33,safe,Liberado,mark_invoiced,1
+28828,banco_automacao.db,272,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Liberado,2026-01-22,2025-12-19,34992.92,13,safe,Liberado,mark_invoiced,1
+28831,banco_empresa.db,611,CORR PLASTIK,CORR PLASTIK,1.0,Liberado,2026-01-12,2025-12-24,3500.0,41,safe,Liberado,mark_invoiced,3
+28832,banco_empresa.db,614,CORR PLASTIK,CORR PLASTIK,1.0,Liberado,2026-01-12,2025-12-24,5000.0,42,safe,Liberado,mark_invoiced,2
+28835,banco_empresa.db,624,FORTLEV,FORTLEV,1.0,Liberado,2026-01-22,2025-12-30,18000.0,51,safe,Liberado,mark_invoiced,1
+28836,banco_empresa.db,624,FORTLEV,FORTLEV,1.0,Liberado,2026-01-22,2025-12-30,18000.0,51,safe,Liberado,mark_invoiced,1
+28840,banco_empresa.db,658,USINA SAO JOSE S/A,USINA SAO JOSE S/A,1.0,Liberado,2026-02-27,2025-12-29,5244.0,82,safe,Liberado,mark_invoiced,1
+28841,banco_empresa.db,443,USINA SÃO JOSE SA,USINA SAO JOSE S/A,1.0,Liberado,2026-01-06,2025-12-29,5244.0,37,safe,Liberado,mark_invoiced,1
+28843,banco_empresa.db,764,VITRIUM,VITRIUM,1.0,Liberado,2026-06-05,2025-12-29,1500.0,177,safe,Liberado,mark_invoiced,1
+28845,banco_empresa.db,621,FIBRASA,FIBRASA,1.0,Liberado,2026-01-16,2025-12-29,1900.0,47,safe,Liberado,mark_invoiced,1
+28849,banco_empresa.db,626,MONDELEZ,MONDELEZ,1.0,Liberado,2026-02-02,2026-01-05,29756.5,55,safe,Liberado,mark_invoiced,1
+28850,banco_empresa.db,610,TOTAL PLAST,TOTAL PLAST,1.0,Liberado,2026-01-09,2026-01-05,21290.64,40,safe,Liberado,mark_invoiced,1
+28855,banco_empresa.db,629,FIABESA,Fiabesa Guararapes,0.847,Liberado,2026-02-06,2026-01-06,1230.0,59,safe,Liberado,mark_invoiced,1
+28862,banco_empresa.db,666,LA CARNE,LA CARNE,1.0,Liberado,2026-03-03,2026-01-07,1450.0,90,safe,Liberado,mark_invoiced,1
+28866,banco_empresa.db,643,AMBEV,AMBEV,1.0,Liberado,2026-02-18,2026-01-08,7000.0,73,safe,Liberado,mark_invoiced,1
+28872,banco_empresa.db,444,COAF CRUANGI,COAF CRUANGI,1.0,Liberado,2026-01-20,2026-01-09,28500.0,48,safe,Liberado,mark_invoiced,1
+28874,banco_empresa.db,631,USINA GIASA,USINA GIASA,1.0,Liberado,2026-02-09,2026-01-09,3700.0,61,safe,Liberado,mark_invoiced,1
+28875,banco_empresa.db,623,FORTLEV,FORTLEV,1.0,Liberado,2026-01-22,2026-01-11,2500.0,50,safe,Liberado,mark_invoiced,1
+28876,banco_empresa.db,618,EDK,EDK,1.0,Liberado,2026-01-14,2026-01-11,3040.0,45,safe,Liberado,mark_invoiced,1
+28885,banco_empresa.db,640,SOS,SOS MAQUINAS,0.812,Liberado,2026-02-12,2026-01-14,11414.25,71,safe,Liberado,mark_invoiced,2
+28886,banco_empresa.db,671,UNILEVER,UNILEVER,1.0,Liberado,2026-03-10,2026-01-15,4562.0,96,safe,Liberado,mark_invoiced,1
+28887,banco_empresa.db,625,EDK,EDK,1.0,Liberado,2026-01-23,2026-01-15,6091.5,54,safe,Liberado,mark_invoiced,1
+28889,banco_empresa.db,695,FRI-SABOR,FRI SABOR,1.0,Liberado,2026-04-01,2026-01-15,1300.0,117,safe,Liberado,mark_invoiced,1
+28890,banco_empresa.db,795,FRI SABOR,FRI SABOR,1.0,Liberado,2026-07-13,2026-01-15,1350.0,207,safe,Liberado,mark_invoiced,2
+28891,banco_empresa.db,735,FRI SABOR,FRI SABOR,1.0,Liberado,2026-05-06,2026-01-15,500.0,149,safe,Liberado,mark_invoiced,1
+28892,banco_empresa.db,795,FRI SABOR,FRI SABOR,1.0,Liberado,2026-07-13,2026-01-15,1350.0,207,safe,Liberado,mark_invoiced,2
+28893,banco_empresa.db,695,FRI-SABOR,FRI SABOR,1.0,Liberado,2026-04-01,2026-01-15,1300.0,117,safe,Liberado,mark_invoiced,1
+28894,banco_empresa.db,741,I. F. DOS SANTOS,I.F.DOSSANTOS,0.87,Liberado,2026-05-08,2026-01-15,4085.0,156,safe,Liberado,mark_invoiced,1
+28899,banco_automacao.db,274,CEARA MIRIM,CEARA MIRIM,1.0,Liberado,2026-02-02,2026-01-19,5700.0,16,safe,Liberado,mark_invoiced,1
+28900,banco_automacao.db,374,RV ENERGIA AGROINDUSTRIAL,RV ENERGIA E AGROINDUSTRIA,0.941,Liberado,2026-01-26,2026-01-20,6900.0,14,safe,Liberado,mark_invoiced,1
+29903,banco_empresa.db,668,MONDELEZ,MONDELEZ,1.0,Liberado,2026-03-06,2026-01-21,11660.0,94,safe,Liberado,mark_invoiced,2
+29918,banco_empresa.db,739,INGREDION,INGREDION,1.0,Aprovado,2026-05-08,2026-01-23,40320.0,153,safe,Aprovado,mark_invoiced,1
+29919,banco_empresa.db,636,USINA SAO JOSE SA,USINA SAO JOSE S/A,1.0,Liberado,2026-02-12,2026-01-22,6209.2,68,safe,Liberado,mark_invoiced,1
+29920,banco_automacao.db,375,BATERIA MOURA,BATERIA MOURA,1.0,Liberado,2026-02-02,2026-01-26,14084.7,17,safe,Liberado,mark_invoiced,2
+29921,banco_empresa.db,645,CORR PLASTIK,CORR PLASTIK,1.0,Liberado,2026-02-18,2026-01-26,7400.0,75,safe,Liberado,mark_invoiced,1
+29922,banco_empresa.db,628,INDORAMA,INDORAMA,1.0,Liberado,2026-02-04,2026-01-27,13232.0,58,safe,Liberado,mark_invoiced,1
+29923,banco_empresa.db,649,INDORAMA,INDORAMA,1.0,Liberado,2026-02-23,2026-01-27,17318.5,78,safe,Liberado,mark_invoiced,1
+29924,banco_empresa.db,710,FORTLEVE,FORTLEV,0.969,Liberado,2026-04-08,2026-01-28,2500.0,129,safe,Liberado,mark_invoiced,1
+29933,banco_empresa.db,668,MONDELEZ,MONDELEZ,1.0,Liberado,2026-03-06,2026-01-30,11660.0,94,safe,Liberado,mark_invoiced,2
+29935,banco_empresa.db,668,MONDELEZ,MONDELEZ,1.0,Liberado,2026-03-06,2026-01-30,11660.0,94,safe,Liberado,mark_invoiced,2
+29936,banco_empresa.db,645,CORR PLASTIK,CORR PLASTIK,1.0,Liberado,2026-02-18,2026-01-30,7400.0,75,safe,Liberado,mark_invoiced,2
+29937,banco_automacao.db,381,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-02-18,2026-01-30,11704.0,3,safe,Liberado,mark_invoiced,1
+29938,banco_automacao.db,379,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-02-18,2026-01-30,3600.5,5,safe,Liberado,mark_invoiced,1
+29939,banco_automacao.db,379,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-02-18,2026-01-30,3600.5,5,safe,Liberado,mark_invoiced,1
+29940,banco_automacao.db,380,USINA PORTO RICO,USINA PORTO RICO,1.0,Liberado,2026-02-18,2026-01-30,3662.25,4,safe,Liberado,mark_invoiced,1
+29941,banco_empresa.db,632,AÇO MAIS,AÇO MAIS,1.0,Liberado,2026-02-09,2026-01-30,12597.0,64,safe,Liberado,mark_invoiced,1
+29943,banco_empresa.db,642,FIABESA,Fiabesa Guararapes,0.847,Liberado,2026-02-13,2026-02-03,850.0,72,safe,Liberado,mark_invoiced,1
+29946,banco_empresa.db,659,UNILEVER,UNILEVER,1.0,Liberado,2026-03-02,2026-02-03,3122.0,83,safe,Liberado,mark_invoiced,1
+29947,banco_empresa.db,674,USINA OLHO DAGUA,USINA OLHO D AGUA,0.97,Liberado,2026-03-10,2026-02-04,23000.0,99,safe,Liberado,mark_invoiced,1
+29948,banco_empresa.db,675,BOMBRIL,BOMBRIL,1.0,Liberado,2026-03-12,2026-02-05,7125.0,100,safe,Liberado,mark_invoiced,1
+29949,banco_empresa.db,650,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-02-23,2026-02-05,2450.0,79,safe,Liberado,mark_invoiced,1
+29952,banco_empresa.db,637,NORAL,NORAL,1.0,Liberado,2026-02-12,2026-02-09,1622.0,SNF,safe,Liberado,mark_invoiced,1
+29953,banco_empresa.db,673,MABOR,MABOR,1.0,Liberado,2026-03-10,2026-02-09,2700.0,98,safe,Liberado,mark_invoiced,1
+29955,banco_empresa.db,638,INJETEC,INJETEC,1.0,Liberado,2026-02-12,2026-02-10,500.0,69,safe,Liberado,mark_invoiced,1
+29956,banco_empresa.db,647,EDK,EDK,1.0,Liberado,2026-02-19,2026-02-11,11466.5,76,safe,Liberado,mark_invoiced,1
+29957,banco_empresa.db,647,EDK,EDK,1.0,Liberado,2026-02-19,2026-02-11,11466.5,76,safe,Liberado,mark_invoiced,1
+29958,banco_empresa.db,691,UNILEVER,UNILEVER,1.0,Liberado,2026-03-30,2026-02-11,10500.0,110,safe,Liberado,mark_invoiced,1
+29961,banco_empresa.db,635,AMBEV,AMBEV,1.0,Liberado,2026-02-12,2025-11-18,5000.0,67,safe,Liberado,mark_invoiced,1
+29962,banco_empresa.db,686,AMBEV,AMBEV,1.0,Liberado,2026-03-18,2025-11-18,5000.0,105,safe,Liberado,mark_invoiced,1
+29963,banco_empresa.db,718,MONDELEZ,MONDELEZ,1.0,Liberado,2026-04-14,2026-02-13,19344.79,135,safe,Liberado,mark_invoiced,1
+29964,banco_empresa.db,718,MONDELEZ,MONDELEZ,1.0,Liberado,2026-04-14,2026-02-13,19344.79,135,safe,Liberado,mark_invoiced,1
+29967,banco_empresa.db,680,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-03-13,2026-02-18,20850.0,102,safe,Liberado,mark_invoiced,1
+29968,banco_empresa.db,651,FIABESA,FIABESA,1.0,Liberado,2026-02-23,2026-02-18,1000.0,80,safe,Liberado,mark_invoiced,1
+29969,banco_empresa.db,680,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-03-13,2026-02-18,20850.0,102,safe,Liberado,mark_invoiced,1
+29970,banco_empresa.db,656,CAFE OURO VERDE,CAFÉ OURO VERDE,1.0,Liberado,2026-02-26,2026-02-19,6120.0,81,safe,Liberado,mark_invoiced,1
+29971,banco_empresa.db,692,MONDELEZ,MONDELEZ,1.0,Liberado,2026-03-23,2026-02-18,1428.27,111,safe,Liberado,mark_invoiced,1
+29972,banco_empresa.db,672,EDK MINERAÇÃO,EDK,0.808,Liberado,2026-03-10,2026-02-23,13775.0,97,safe,Liberado,mark_invoiced,1
+29973,banco_empresa.db,672,EDK MINERAÇÃO,EDK,0.808,Liberado,2026-03-10,2026-02-23,13775.0,97,safe,Liberado,mark_invoiced,1
+29974,banco_empresa.db,672,EDK MINERAÇÃO,EDK,0.808,Liberado,2026-03-10,2026-02-23,13775.0,97,safe,Liberado,mark_invoiced,1
+29976,banco_empresa.db,664,ISOESTE,ISOESTE,1.0,Liberado,2026-03-03,2026-02-20,1972.0,88,safe,Liberado,mark_invoiced,1
+29979,banco_empresa.db,667,FIBRASA,FIBRASA,1.0,Liberado,2026-03-05,2026-02-23,11020.0,91,safe,Liberado,mark_invoiced,1
+29980,banco_empresa.db,667,FIBRASA,FIBRASA,1.0,Liberado,2026-03-05,2026-02-23,11020.0,91,safe,Liberado,mark_invoiced,1
+29983,banco_automacao.db,978,CAPRICCHE S.A,CAPRICCHE,1.0,Liberado,2026-04-01,2026-02-23,10400.0,16,safe,Liberado,mark_invoiced,1
+29984,banco_automacao.db,978,CAPRICCHE S.A,CAPRICCHE,1.0,Liberado,2026-04-01,2026-02-23,10400.0,16,safe,Liberado,mark_invoiced,1
+29991,banco_empresa.db,713,MONDELEZ,MONDELEZ,1.0,Liberado,2026-04-09,2026-02-24,2670.35,131,safe,Liberado,mark_invoiced,1
+29997,banco_automacao.db,385,MARELLI,MARELLI,1.0,Liberado,2026-03-04,2026-02-27,5371.04,9,safe,Liberado,mark_invoiced,1
+30001,banco_empresa.db,661,FIABESA,FIABESA,1.0,Liberado,2026-03-03,2026-03-02,3000.0,85,safe,Liberado,mark_invoiced,1
+30009,banco_empresa.db,669,NOVA CONPEL,CONPEL,0.886,Liberado,2026-03-06,2026-03-04,3000.0,95,safe,Liberado,mark_invoiced,2
+30010,banco_empresa.db,676,FORTLEV,FORTLEV,1.0,Liberado,2026-03-12,2026-03-04,1000.0,101,safe,Liberado,mark_invoiced,1
+30012,banco_empresa.db,715,COAF,COAF,1.0,Liberado,2026-04-13,2026-03-04,27000.0,133,safe,Liberado,mark_invoiced,1
+30013,banco_empresa.db,715,COAF,COAF,1.0,Liberado,2026-04-13,2026-03-04,27000.0,133,safe,Liberado,mark_invoiced,1
+30014,banco_empresa.db,766,BRF,BRF,1.0,Aprovado,2026-06-05,2026-03-04,16850.0,179,safe,Aprovado,mark_invoiced,1
+30015,banco_empresa.db,759,BRF,BRF,1.0,Liberado,2026-06-03,2026-03-04,25000.0,172,safe,Liberado,mark_invoiced,1
+30016,banco_empresa.db,679,EDK MINERAÇÃO,EDK,0.808,Em Reparo,2026-03-13,2026-03-04,8825.5,103,safe,Em Reparo,mark_invoiced,1
+30018,banco_solucoes.db,1,BRASIL MOLEJO,BRASIL MOLEJO,1.0,Liberado,2026-03-30,2026-03-05,11875.0,1,safe,Liberado,mark_invoiced,2
+30021,banco_automacao.db,388,CORR PLASTIK,CORRPLASTIK,0.957,Liberado,2026-03-11,2026-03-09,16333.34,13,safe,Liberado,mark_invoiced,3
+30023,banco_empresa.db,690,IF DOS SANTOS,I.F.DOSSANTOS,0.818,Liberado,2026-03-19,2026-03-09,1000.0,109,safe,Liberado,mark_invoiced,1
+30026,banco_automacao.db,998,USINA SÃO JOSE DO PINHEIRO,USINA JOSE PINHEIRO,0.905,Aprovado,2026-05-22,2026-03-09,5000.0,30,safe,Aprovado,mark_invoiced,1
+30027,banco_empresa.db,679,EDK MINERAÇÃO,EDK MINERAÇÃO,1.0,Liberado,2026-03-13,2026-03-09,8825.5,103,safe,Liberado,mark_invoiced,1
+30030,banco_empresa.db,719,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-04-14,2026-03-10,14250.0,136,safe,Liberado,mark_invoiced,1
+30044,banco_solucoes.db,8,CONTINENTE ATACAREJO,Continente Atacarejo de Alimentos LTDA,0.917,Liberado,2026-05-20,2026-03-12,13537.5,6,safe,Liberado,mark_invoiced,1
+30045,banco_empresa.db,711,VIANA & MOURA,VIANA & MOURA,1.0,Liberado,2026-04-07,2026-03-12,2400.0,127,safe,Liberado,mark_invoiced,1
+30046,banco_empresa.db,711,VIANA & MOURA,VIANA & MOURA,1.0,Liberado,2026-04-07,2026-03-12,2400.0,127,safe,Liberado,mark_invoiced,1
+30050,banco_empresa.db,719,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-04-14,2026-03-16,14250.0,136,safe,Liberado,mark_invoiced,1
+30054,banco_empresa.db,719,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-04-14,2026-03-18,14250.0,136,safe,Liberado,mark_invoiced,1
+30057,banco_empresa.db,832,ALPHA PLAST,ALPHA PLAST,1.0,Aprovado,2026-08-03,2026-03-19,4100.0,221,safe,Aprovado,mark_invoiced,1
+30060,banco_empresa.db,832,ALPHA PLAST,ALPHA PLAST,1.0,Liberado,2026-08-03,2026-03-19,4100.0,221,safe,Liberado,mark_invoiced,1
+30063,banco_empresa.db,705,NORDESTE MAIS ALIMENTOS,NORDESTE MAIS,0.891,Liberado,2026-04-01,2026-03-23,6350.0,125,safe,Liberado,mark_invoiced,2
+30064,banco_automacao.db,980,CORR PLASTIK,CORRPLASTIK,0.957,Liberado,2026-03-30,2026-03-23,7666.66,14,safe,Liberado,mark_invoiced,3
+30065,banco_empresa.db,694,TOTAL PLAST,TOTAL PLAST,1.0,Liberado,2026-04-01,2026-03-24,4000.0,116,safe,Liberado,mark_invoiced,1
+30075,banco_empresa.db,721,TOTAL PLAST,TOTAL PLAST,1.0,Liberado,2026-04-15,2026-03-30,6300.0,138,safe,Liberado,mark_invoiced,1
+30077,banco_automacao.db,979,ORIZON,ORIZON BIOMETANO JABOATAO DOS GUARARAPES,0.792,Liberado,2026-04-02,2026-03-31,17400.0,17,safe,Liberado,mark_invoiced,1
+30081,banco_empresa.db,728,MONDELEZ,MONDELEZ,1.0,Liberado,2026-05-04,2026-04-01,13116.21,144,safe,Liberado,mark_invoiced,1
+30087,banco_empresa.db,733,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-05-05,2026-04-01,5000.0,147,safe,Aprovado,mark_invoiced,1
+30088,banco_empresa.db,750,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-05-18,2026-04-01,11412.75,163,safe,Aprovado,mark_invoiced,1
+30091,banco_empresa.db,800,CAMPARI,CAMPARI,1.0,Aprovado,2026-07-15,2026-04-02,4500.0,210,safe,Aprovado,mark_invoiced,1
+30094,banco_empresa.db,712,ASA,ASA,1.0,Liberado,2026-04-09,2026-04-06,5500.0,130,safe,Liberado,mark_invoiced,1
+30095,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Aprovado,2026-05-07,2026-04-08,104355.0,25,safe,Aprovado,mark_invoiced,1
+30096,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Liberado,2026-05-07,2026-04-08,104355.0,25,safe,Liberado,mark_invoiced,1
+30097,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Entrada,2026-05-07,2026-04-08,104355.0,25,safe,Entrada,mark_invoiced,1
+30098,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Entrada,2026-05-07,2026-04-08,104355.0,25,safe,Entrada,mark_invoiced,1
+30099,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Entrada,2026-05-07,2026-04-08,104355.0,25,safe,Entrada,mark_invoiced,1
+30100,banco_automacao.db,992,CORURIPE,CORURIPE,1.0,Entrada,2026-05-07,2026-04-08,104355.0,25,safe,Entrada,mark_invoiced,1
+30101,banco_automacao.db,993,CORURIPE,CORURIPE,1.0,Aprovado,2026-05-08,2026-04-08,17311.5,26,safe,Aprovado,mark_invoiced,1
+30119,banco_empresa.db,723,FIABESA,FIABESA,1.0,Liberado,2026-04-22,2026-04-14,600.0,139,safe,Liberado,mark_invoiced,1
+30126,banco_empresa.db,791,INDUMOTOR,INDUMOTOR,1.0,Aprovado,2026-07-09,2026-04-15,2500.0,SMF,safe,Aprovado,mark_invoiced,1
+30127,banco_empresa.db,791,INDUMOTOR,INDUMOTOR,1.0,Liberado,2026-07-09,2026-04-15,2500.0,SMF,safe,Liberado,mark_invoiced,1
+30139,banco_automacao.db,991,COAF,COAF,1.0,Entrada,2026-05-04,2026-04-16,8000.0,23,safe,Entrada,mark_invoiced,1
+30140,banco_automacao.db,991,COAF,COAF,1.0,Entrada,2026-05-04,2026-04-16,8000.0,23,safe,Entrada,mark_invoiced,1
+30141,banco_empresa.db,722,INJETEC,INJETEC,1.0,Liberado,2026-04-16,2026-04-16,500.0,SNF,safe,Liberado,mark_invoiced,1
+30142,banco_automacao.db,987,CORR PLASTIK,CORRPLASTIK,0.957,Liberado,2026-05-04,2026-04-16,15500.0,22,safe,Liberado,mark_invoiced,4
+30143,banco_solucoes.db,3,AÇO MAIS LTDA,AÇO MAIS,1.0,Liberado,2026-04-22,2026-04-17,7487.0,3,safe,Liberado,mark_invoiced,1
+30147,banco_automacao.db,991,COAF,COAF,1.0,Entrada,2026-05-04,2026-04-23,8000.0,23,safe,Entrada,mark_invoiced,1
+30148,banco_empresa.db,755,CAMPARI,CAMPARI,1.0,Aprovado,2026-06-01,2026-04-23,5750.0,168,safe,Aprovado,mark_invoiced,1
+30149,banco_empresa.db,742,ARA TEXTIL,ARA TEXTIL,1.0,Liberado,2026-05-08,2026-04-23,7500.0,157,safe,Liberado,mark_invoiced,1
+30166,banco_empresa.db,767,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-04-23,16625.0,180,safe,Liberado,mark_invoiced,1
+30167,banco_empresa.db,767,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-04-23,16625.0,180,safe,Liberado,mark_invoiced,1
+30168,banco_empresa.db,767,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-04-23,16625.0,180,safe,Liberado,mark_invoiced,1
+30169,banco_empresa.db,767,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-04-23,16625.0,180,safe,Liberado,mark_invoiced,1
+30170,banco_empresa.db,767,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-04-23,16625.0,180,safe,Liberado,mark_invoiced,1
+30173,banco_automacao.db,994,USINA SÃO JOSE,USINA SÃO JOSE,1.0,Liberado,2026-05-12,2026-04-24,19500.0,27,safe,Liberado,mark_invoiced,1
+30174,banco_automacao.db,994,USINA SÃO JOSE,USINA SÃO JOSE,1.0,Liberado,2026-05-12,2026-04-24,19500.0,27,safe,Liberado,mark_invoiced,1
+30178,banco_empresa.db,737,PERFIL PLAST,PERFIL PLAST,1.0,Liberado,2026-05-07,2026-04-24,3250.0,151,safe,Liberado,mark_invoiced,1
+30181,banco_empresa.db,744,NORDESTE MAIS,NORDESTE MAIS,1.0,Liberado,2026-05-13,2026-04-28,6000.0,159,safe,Liberado,mark_invoiced,3
+30188,banco_empresa.db,768,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-05-05,9200.0,181,safe,Liberado,mark_invoiced,1
+30189,banco_empresa.db,768,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-05-05,9200.0,181,safe,Liberado,mark_invoiced,1
+30190,banco_empresa.db,768,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-05-05,9200.0,181,safe,Liberado,mark_invoiced,1
+30191,banco_empresa.db,768,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-05-05,9200.0,181,safe,Liberado,mark_invoiced,1
+30199,banco_automacao.db,996,CORRPLASTIK,CORRPLASTIK,1.0,Liberado,2026-05-20,2026-05-08,4650.0,29,safe,Liberado,mark_invoiced,2
+30200,banco_empresa.db,770,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-06-05,2026-05-08,26352.0,183,safe,Ag. Aprovação,mark_invoiced,1
+30204,banco_empresa.db,771,FIABESA,FIABESA,1.0,Entrada,2026-06-08,2026-05-13,3000.0,184,safe,Entrada,mark_invoiced,2
+30210,banco_empresa.db,757,FIABESA,FIABESA,1.0,Aprovado,2026-06-01,2026-05-13,400.0,170,safe,Aprovado,mark_invoiced,1
+30212,banco_empresa.db,747,AÇO MAIS,AÇO MAIS,1.0,Liberado,2026-05-15,2026-05-14,700.0,160,safe,Liberado,mark_invoiced,1
+30214,banco_automacao.db,995,CAPRICCHE,CAPRICCHE,1.0,Liberado,2026-05-18,2026-05-14,10000.0,28,safe,Liberado,mark_invoiced,1
+30221,banco_automacao.db,1015,USINA CAETE,USINA CAETE DE SÃO MIGUEL,0.875,Ag. Aprovação,2026-07-09,2026-05-15,2755.0,44,safe,Ag. Aprovação,mark_invoiced,1
+30222,banco_empresa.db,753,EDK MINERAÇÃO,EDK MINERAÇÃO,1.0,Ag. Aprovação,2026-05-21,2026-05-18,2000.0,166,safe,Ag. Aprovação,mark_invoiced,1
+30227,banco_empresa.db,769,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-06-05,2026-05-20,8600.0,182,safe,Ag. Aprovação,mark_invoiced,1
+30228,banco_empresa.db,769,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-06-05,2026-05-20,8600.0,182,safe,Ag. Aprovação,mark_invoiced,1
+30229,banco_empresa.db,769,MONDELEZ,MONDELEZ,1.0,Sem conserto,2026-06-05,2026-05-20,8600.0,182,safe,Sem conserto,mark_invoiced,1
+30230,banco_empresa.db,769,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-06-05,2026-05-20,8600.0,182,safe,Ag. Aprovação,mark_invoiced,1
+30232,banco_solucoes.db,10,VISE,VISE,1.0,Liberado,2026-06-09,2026-05-20,5000.0,8,safe,Liberado,mark_invoiced,1
+30233,banco_empresa.db,778,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-15,2026-05-21,7500.0,191,safe,Liberado,mark_invoiced,1
+30234,banco_empresa.db,778,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-15,2026-05-21,7500.0,191,safe,Liberado,mark_invoiced,1
+30235,banco_empresa.db,778,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-06-15,2026-05-21,7500.0,191,safe,Ag. Aprovação,mark_invoiced,1
+30236,banco_empresa.db,770,MONDELEZ,MONDELEZ,1.0,Liberado,2026-06-05,2026-05-21,26352.0,183,safe,Liberado,mark_invoiced,1
+30238,banco_automacao.db,1009,CORR PLASTIK,CORRPLASTIK,0.957,Aprovado,2026-07-07,2026-05-21,9200.0,42,safe,Aprovado,mark_invoiced,3
+30239,banco_empresa.db,793,MASTER BOI,MASTER BOI LTDA,1.0,Liberado,2026-07-13,2026-05-25,2375.0,202,safe,Liberado,mark_invoiced,1
+30241,banco_empresa.db,793,MASTER BOI,MASTER BOI LTDA,1.0,Liberado,2026-07-13,2026-05-25,2375.0,202,safe,Liberado,mark_invoiced,1
+30245,banco_empresa.db,781,VIANE & MOURA,VIANA & MOURA,0.909,Liberado,2026-07-01,2026-05-26,4500.0,194,safe,Liberado,mark_invoiced,1
+30250,banco_empresa.db,775,AMBEV,AMBEV,1.0,Ag. Aprovação,2026-06-10,2026-05-27,39235.0,188,safe,Ag. Aprovação,mark_invoiced,1
+30252,banco_empresa.db,784,FIABESA,FIABESA,1.0,Aprovado,2026-07-01,2026-05-28,1000.0,197,safe,Aprovado,mark_invoiced,1
+30253,banco_empresa.db,756,TOTAL PLAST,TOTAL PLAST,1.0,Aprovado,2026-06-01,2026-05-29,5000.0,169,safe,Aprovado,mark_invoiced,1
+30255,banco_empresa.db,787,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-07-02,2026-06-02,5500.0,200,safe,Aprovado,mark_invoiced,1
+30258,banco_empresa.db,788,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-07-03,2026-06-03,3000.0,201,safe,Aprovado,mark_invoiced,1
+30259,banco_empresa.db,788,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-07-03,2026-06-03,3000.0,201,safe,Aprovado,mark_invoiced,1
+30261,banco_automacao.db,1005,CAPRICHE,CAPRICCHE,0.941,Ag. Aprovação,2026-07-01,2026-06-03,10400.0,39,safe,Ag. Aprovação,mark_invoiced,1
+30262,banco_automacao.db,1005,CAPRICHE,CAPRICCHE,0.941,Ag. Aprovação,2026-07-01,2026-06-03,10400.0,39,safe,Ag. Aprovação,mark_invoiced,1
+30264,banco_empresa.db,790,VITRIUM,VITRIUM,1.0,Ag. Aprovação,2026-07-07,2026-06-05,4000.0,204,safe,Ag. Aprovação,mark_invoiced,1
+30267,banco_empresa.db,825,FIABESA,FIABESA,1.0,Aprovado,2026-08-05,2026-06-08,5500.0,231,safe,Aprovado,mark_invoiced,1
+30294,banco_empresa.db,776,ISIS,ISIS,1.0,Liberado,2026-06-11,2026-06-10,1000.0,189,safe,Liberado,mark_invoiced,1
+30295,banco_automacao.db,1001,LGS AUTOMAÇÃO,LGS AUTOMACAO E ENGENHARIA LTDA,0.875,Liberado,2026-06-16,2026-06-10,1995.0,33,safe,Liberado,mark_invoiced,1
+30297,banco_empresa.db,782,MECHILAN - COMERCIO DE PEÇAS PESADAS,COMERCIO DE PECAS PESADAS,0.898,Ag. Aprovação,2026-07-01,2026-06-10,1500.0,195,safe,Ag. Aprovação,mark_invoiced,2
+30298,banco_empresa.db,779,MONDELEZ,MONDELEZ,1.0,Entrada,2026-06-20,2026-06-11,1902.93,192,safe,Entrada,mark_invoiced,1
+30299,banco_automacao.db,1000,COCO DO VALE,COCO DO VALE,1.0,Entrada,2026-06-15,2026-06-11,3000.0,32,safe,Entrada,mark_invoiced,1
+30303,banco_empresa.db,792,M DIAS RN,M DIAS BRANCO RN,0.72,Ag. Aprovação,2026-07-10,2026-06-15,12500.0,205,safe,Ag. Aprovação,mark_invoiced,1
+30305,banco_empresa.db,786,FIABESA,FIABESA,1.0,Entrada,2026-07-01,2026-06-15,1500.0,199,safe,Entrada,mark_invoiced,1
+30307,banco_empresa.db,820,MABOR,MABOR,1.0,Liberado,2026-08-04,2026-06-16,2137.5,225,safe,Liberado,mark_invoiced,2
+30308,banco_empresa.db,820,MABOR,MABOR,1.0,Liberado,2026-08-04,2026-06-16,2137.5,225,safe,Liberado,mark_invoiced,2
+30309,banco_empresa.db,820,MABOR,MABOR,1.0,Liberado,2026-08-04,2026-06-16,2137.5,225,safe,Liberado,mark_invoiced,2
+30311,banco_automacao.db,1004,COLORATA PACKING,Colorata Packing Colorata Industria,0.91,Entrada,2026-06-18,2026-06-17,500.0,SNF,safe,Entrada,mark_invoiced,1
+30316,banco_empresa.db,806,JOSAPAR,JOSAPAR,1.0,Ag. Aprovação,2026-07-23,2026-06-19,500.0,215,safe,Ag. Aprovação,mark_invoiced,1
+30322,banco_empresa.db,780,AMBEV,AMBEV,1.0,Ag. Aprovação,2026-07-01,2026-06-25,32000.0,193,safe,Ag. Aprovação,mark_invoiced,1
+30323,banco_empresa.db,780,AMBEV,AMBEV,1.0,Ag. Aprovação,2026-07-01,2026-06-25,32000.0,193,safe,Ag. Aprovação,mark_invoiced,1
+30324,banco_empresa.db,780,AMBEV,AMBEV,1.0,Ag. Aprovação,2026-07-01,2026-06-25,32000.0,193,safe,Ag. Aprovação,mark_invoiced,1
+30325,banco_empresa.db,780,AMBEV,AMBEV,1.0,Ag. Aprovação,2026-07-01,2026-06-25,32000.0,193,safe,Ag. Aprovação,mark_invoiced,1
+30326,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-07-01,2026-06-25,22500.0,198,safe,Ag. Aprovação,mark_invoiced,1
+30327,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30328,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30329,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30330,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30331,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30332,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30333,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30334,banco_empresa.db,785,MONDELEZ,MONDELEZ,1.0,Entrada,2026-07-01,2026-06-25,22500.0,198,safe,Entrada,mark_invoiced,1
+30336,banco_empresa.db,847,FIABESA,FIABESA,1.0,Aprovado,2026-08-21,2026-06-26,1200.0,256,safe,Aprovado,mark_invoiced,1
+30337,banco_empresa.db,829,FIABESA,FIABESA,1.0,Liberado,2026-08-05,2026-06-26,2000.0,234,safe,Liberado,mark_invoiced,1
+30341,banco_empresa.db,846,MONDELEZ,MONDELEZ,1.0,Liberado,2026-08-21,2026-06-26,6900.0,255,safe,Liberado,mark_invoiced,1
+30345,banco_automacao.db,1012,USINA PORTO RICO,USINA PORTO RICO,1.0,Aprovado,2026-07-09,2026-06-29,33000.0,43,safe,Aprovado,mark_invoiced,1
+30348,banco_empresa.db,839,MASTER BOI,MASTER BOI LTDA,1.0,Aprovado,2026-08-13,2026-06-30,2090.0,249,safe,Aprovado,mark_invoiced,1
+30349,banco_solucoes.db,11,FERREIRA COSTA,FERREIA COSTA,0.963,Aprovado,2026-07-07,2026-07-01,2185.0,09,safe,Aprovado,mark_invoiced,1
+30350,banco_empresa.db,827,MONDELEZ,MONDELEZ,1.0,Ag. Aprovação,2026-08-05,2026-07-02,1500.0,232,safe,Ag. Aprovação,mark_invoiced,1
+30352,banco_empresa.db,801,IF DOS SANTOS,IF DOS SANTOS,1.0,Liberado,2026-07-15,2026-07-02,2000.0,211,safe,Liberado,mark_invoiced,1
+30353,banco_empresa.db,801,IF DOS SANTOS,IF DOS SANTOS,1.0,Liberado,2026-07-15,2026-07-02,2000.0,211,safe,Liberado,mark_invoiced,1
+30355,banco_empresa.db,797,COAF CRUANGI,COAF CRUANGI,1.0,Liberado,2026-07-14,2026-07-02,2500.0,208,safe,Liberado,mark_invoiced,1
+30356,banco_empresa.db,797,COAF CRUANGI,COAF CRUANGI,1.0,Liberado,2026-07-14,2026-07-02,2500.0,208,safe,Liberado,mark_invoiced,1
+30357,banco_automacao.db,1007,COCO DE VALE,COCO DO VALE,1.0,Entrada,2026-07-03,2026-07-02,10750.0,41,safe,Entrada,mark_invoiced,2
+30358,banco_empresa.db,811,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-08-03,2026-07-03,6122.0,217,safe,Aprovado,mark_invoiced,1
+30359,banco_automacao.db,1006,MEKSOL,MEKSOL BRASIL APOIO ADMINISTRATIVO LTDA,0.794,Liberado,2026-07-03,2026-07-03,1000.0,40,safe,Liberado,mark_invoiced,1
+30363,banco_empresa.db,798,PNEUMATEX,PNEUMATEX,1.0,Ag. Aprovação,2026-07-14,2026-07-03,2000.0,209,safe,Ag. Aprovação,mark_invoiced,1
+30364,banco_empresa.db,814,I F DOS SANTOS,IF DOS SANTOS,0.947,Liberado,2026-08-03,2026-07-06,2800.0,220,safe,Liberado,mark_invoiced,1
+30365,banco_empresa.db,814,I F DOS SANTOS,IF DOS SANTOS,0.947,Liberado,2026-08-03,2026-07-06,2800.0,220,safe,Liberado,mark_invoiced,1
+30366,banco_automacao.db,1022,USINA SAO JOSE PINHEIRO,USINA S JOSÉ PINHEIRO,0.905,Ag. Aprovação,2026-08-07,2026-07-06,18095.6,52,safe,Ag. Aprovação,mark_invoiced,1
+30367,banco_empresa.db,814,I F DOS SANTOS,IF DOS SANTOS,0.947,Liberado,2026-08-03,2026-07-06,2800.0,220,safe,Liberado,mark_invoiced,1
+30374,banco_empresa.db,823,ALPARGATAS CARPINA,ALPARGATAS CARPINA,1.0,Aprovado,2026-08-04,2026-07-08,15000.0,228,safe,Aprovado,mark_invoiced,1
+30376,banco_empresa.db,817,FRI SABOR,FRI SABOR,1.0,Liberado,2026-08-03,2026-07-08,1100.0,222,safe,Liberado,mark_invoiced,1
+30382,banco_empresa.db,826,RUPLAST,RUPLAST,1.0,Liberado,2026-08-05,2026-07-13,800.0,230,safe,Liberado,mark_invoiced,1
+30384,banco_empresa.db,836,VITRIUM,VITRIUM,1.0,Ag. Aprovação,2026-08-12,2026-07-13,3000.0,240,safe,Ag. Aprovação,mark_invoiced,1
+30385,banco_automacao.db,1016,CEARA MIRIM,CEARA MIRIM,1.0,Ag. Aprovação,2026-08-03,2026-07-14,3895.0,47,safe,Ag. Aprovação,mark_invoiced,1
+30386,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30387,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30389,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30391,banco_automacao.db,1028,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-19,2026-07-14,22507.95,55,safe,Aprovado,mark_invoiced,2
+30392,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30393,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30394,banco_automacao.db,1026,USINA SERRA GRANDE,USINA SERRA GRANDE,1.0,Aprovado,2026-08-13,2026-07-14,18494.24,54,safe,Aprovado,mark_invoiced,2
+30395,banco_automacao.db,1032,USINA TRAPICHE,USINA TRAPICHE,1.0,Entrada,2026-08-21,2026-07-14,12925.7,58,safe,Entrada,mark_invoiced,2
+30396,banco_automacao.db,1032,USINA TRAPICHE,USINA TRAPICHE,1.0,Entrada,2026-08-21,2026-07-14,12925.7,58,safe,Entrada,mark_invoiced,2
+30397,banco_automacao.db,1032,USINA TRAPICHE,USINA TRAPICHE,1.0,Aprovado,2026-08-21,2026-07-14,12925.7,58,safe,Aprovado,mark_invoiced,2
+30398,banco_automacao.db,1032,USINA TRAPICHE,USINA TRAPICHE,1.0,Aprovado,2026-08-21,2026-07-14,12925.7,58,safe,Aprovado,mark_invoiced,2
+30399,banco_empresa.db,813,NORDESTE MAIS ALIMENTOS,NORDESTE MAIS,0.891,Aprovado,2026-08-03,2026-07-15,6882.0,219,safe,Aprovado,mark_invoiced,1
+30403,banco_empresa.db,818,PNEUMATEX LTDA,PNEUMATEX,1.0,Ag. Aprovação,2026-08-04,2026-07-20,1500.0,223,safe,Ag. Aprovação,mark_invoiced,1
+30404,banco_empresa.db,837,ISOESTE,ISOESTE,1.0,Liberado,2026-08-12,2026-07-21,2000.0,244,safe,Liberado,mark_invoiced,1
+30412,banco_automacao.db,1023,CORR PLASTIK,CORR PLASTIK,1.0,Aprovado,2026-08-12,2026-07-23,8990.0,53,safe,Aprovado,mark_invoiced,3
+30418,banco_automacao.db,1017,USINA CUCAU,USINA CUCAU,1.0,Aprovado,2026-08-03,2026-07-27,7600.0,48,safe,Aprovado,mark_invoiced,1
+30419,banco_empresa.db,812,FIABESA,FIABESA,1.0,Ag. Aprovação,2026-08-03,2026-07-27,1500.0,218,safe,Ag. Aprovação,mark_invoiced,1
+30424,banco_empresa.db,833,SIDORE,SIDORE INDUSTRIA E COMERCIO,0.938,Aprovado,2026-08-10,2026-07-27,1200.0,237,safe,Aprovado,mark_invoiced,1
+30428,banco_empresa.db,840,USINA ESTIVAS,USINA ESTIVAS,1.0,Aprovado,2026-08-13,2026-07-28,36105.0,250,safe,Aprovado,mark_invoiced,2
+30433,banco_empresa.db,842,FIBRASA,FIBRASA,1.0,Liberado,2026-08-17,2026-07-29,5500.0,251,safe,Liberado,mark_invoiced,1
+30438,banco_automacao.db,1018,CORR PLASTIK,CORR PLASTIK,1.0,Aprovado,2026-08-05,2026-07-30,3200.0,49,safe,Aprovado,mark_invoiced,3
+30444,banco_empresa.db,822,ASIAPLAST,ASIAPLAST,1.0,Aprovado,2026-08-04,2026-08-03,3800.0,226,safe,Aprovado,mark_invoiced,1
+30447,banco_empresa.db,845,MONDELEZ,MONDELEZ,1.0,Aprovado,2026-08-21,2026-08-04,1400.0,254,safe,Aprovado,mark_invoiced,1
+30454,banco_empresa.db,834,ALPARGATAS CARPINA,ALPARGATAS CARPINA,1.0,Ag. Aprovação,2026-08-12,2026-08-06,17000.0,239,safe,Ag. Aprovação,mark_invoiced,1
+30457,banco_empresa.db,835,FIABESA,FIABESA,1.0,Aprovado,2026-08-12,2026-08-07,2000.0,241,safe,Aprovado,mark_invoiced,1
+30463,banco_empresa.db,843,USINA SÃO JOSÉ,USINA SAO JOSE S/A,1.0,Aprovado,2026-08-20,2026-08-12,12223.65,275,safe,Aprovado,mark_invoiced,1
+30464,banco_empresa.db,843,USINA SÃO JOSÉ,USINA SAO JOSE S/A,1.0,Ag. Aprovação,2026-08-20,2026-08-12,12223.65,275,safe,Ag. Aprovação,mark_invoiced,1

@@ -1,0 +1,11 @@
+db,company,rowid,legacy_id,client,nfs,nfd,orcamento,data_fat_raw,data_venc_raw,amount,status,issue_original,due_original,issue_corrected,due_corrected,valid_original,expense_copy,total_summary,intercompany,recoverable,repair_rule,action
+banco_empresa.db,universo_eletronica,198,198,GRAFICA S/ MARTA,704,911,10548,25/09/2024,09/11/2024,2850.0,PAGO,2024-09-25,2024-11-09,2024-09-25,2024-11-09,True,False,False,False,True,,dedupe_remove
+banco_empresa.db,universo_eletronica,562,562,FIABESA,1002,1244,19381,03/11/2025,24/11/2025,500.0,PAGO,2025-11-03,2025-11-24,2025-11-03,2025-11-24,True,False,False,False,True,,dedupe_remove
+banco_empresa.db,universo_eletronica,563,563,FIABESA,1003,1275,19552,03/11/0205,24/11/2025,1850.0,PAGO,,2025-11-24,2025-11-03,2025-11-24,False,False,False,False,True,year_typo_205->2025,dedupe_remove
+banco_empresa.db,universo_eletronica,564,564,FIABESA,1004,1311,19348,03/11/2025,24/11/2025,2100.0,PAGO,2025-11-03,2025-11-24,2025-11-03,2025-11-24,True,False,False,False,True,,dedupe_remove
+banco_empresa.db,universo_eletronica,654,654,ARCONTEC,30,SNF,25740,25/02/2026,21/02/2026,3000.0,PAGO,2026-02-25,2026-02-21,2026-02-25,2026-02-21,True,False,False,False,True,,dedupe_remove
+banco_empresa.db,universo_eletronica,816,816,FRI SABOR,222,SNF,30376,03/08/2026,01/09/2026,1100.0,EM ABERTO,2026-08-03,2026-09-01,2026-08-03,2026-09-01,True,False,False,False,True,,dedupe_remove
+banco_automacao.db,universo_automacao,277,277,CEARA MIRIM,175,220,14949,19/02/2025,12/03/2025,4975.5,PAGO,2025-02-19,2025-03-12,2025-02-19,2025-03-12,True,False,False,False,True,,dedupe_remove
+banco_automacao.db,universo_automacao,279,279,CEARA MIRIM,176,220,14948,20/02/2025,13/03/2025,2325.0,PAGO,2025-02-20,2025-03-13,2025-02-20,2025-03-13,True,False,False,False,True,,dedupe_remove
+banco_automacao.db,universo_automacao,280,280,CEARA MIRIM,183,226,14947,27/02/2025,28/03/2025,3720.0,PAGO,2025-02-27,2025-03-28,2025-02-27,2025-03-28,True,False,False,False,True,,dedupe_remove
+banco_automacao.db,universo_automacao,281,281,CEARA MIRIM,184,AG NF,14934,27/02/2025,28/03/2025,1674.0,PAGO,2025-02-27,2025-03-28,2025-02-27,2025-03-28,True,False,False,False,True,,dedupe_remove
