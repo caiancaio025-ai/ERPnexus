@@ -79,3 +79,4 @@
 @media(max-width:600px){.lab-toolbar{grid-template-columns:1fr}.lab-search{grid-column:auto}}
 
 .lab-detail-header-actions{display:flex;align-items:center;gap:10px}.lab-close-button{display:grid;place-items:center;width:42px;height:42px;border:0;background:transparent;color:#fff;cursor:pointer;border-radius:9px}.lab-close-button:hover{background:#152b43}
+.lab-entry-upload{display:flex!important;align-items:center;gap:14px;padding:15px;border:1px dashed #345879;border-radius:12px;background:#091725;margin:12px 0!important;cursor:pointer;transition:.18s ease}.lab-entry-upload:hover{border-color:#51b9ff;background:#0c1d30}.lab-entry-upload input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.lab-entry-upload div{display:grid;gap:4px}.lab-entry-upload span,.lab-entry-upload small{color:#8da4bb;font-size:12px}.lab-entry-upload small{max-width:900px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -22,10 +22,40 @@ def normalize_serial(serial: str | None) -> str | None:
 
 
 async def next_work_order_number(db: AsyncSession) -> str:
-    number = await db.scalar(text("SELECT nextval('laboratory_work_order_number_seq')"))
-    if number is None:
+    """Gera o próximo número de OS sem regressão após importações legadas.
+
+    A base histórica foi importada com números altos (ex.: OS-30479), enquanto a
+    sequence PostgreSQL original podia continuar em 1. Antes de consumir o número,
+    sincronizamos a sequence com o maior sufixo numérico já persistido. O advisory
+    lock evita duas aberturas concorrentes recalcularem o mesmo intervalo.
+    """
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('laboratory_work_order_number_seq'))"))
+    max_existing = await db.scalar(
+        text(
+            """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(number FROM 4) AS BIGINT)), 0)
+            FROM laboratory_work_orders
+            WHERE number ~ '^OS-[0-9]+$'
+            """
+        )
+    )
+    candidate = await db.scalar(text("SELECT nextval('laboratory_work_order_number_seq')"))
+    if candidate is None:
         raise RuntimeError("Não foi possível gerar o número da OS.")
-    return f"OS-{int(number):04d}"
+
+    max_number = int(max_existing or 0)
+    number = int(candidate)
+    if number <= max_number:
+        await db.execute(
+            text("SELECT setval('laboratory_work_order_number_seq', :next_number, false)"),
+            {"next_number": max_number + 1},
+        )
+        corrected = await db.scalar(text("SELECT nextval('laboratory_work_order_number_seq')"))
+        if corrected is None:
+            raise RuntimeError("Não foi possível sincronizar o número da OS.")
+        number = int(corrected)
+
+    return f"OS-{number:04d}"
 
 
 async def find_or_create_equipment(

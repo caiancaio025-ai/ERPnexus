@@ -794,6 +794,21 @@ async def quote_pdf_endpoint(
 # -------------------------------------------------------------- documents --
 
 
+@router.get("/work-orders/{work_order_id}/documents", response_model=list[DocumentOutput])
+async def list_documents(
+    work_order_id: int,
+    _: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _work_order_or_404(db, work_order_id)
+    query = (
+        select(LaboratoryDocument)
+        .where(LaboratoryDocument.work_order_id == work_order_id)
+        .order_by(LaboratoryDocument.created_at.desc(), LaboratoryDocument.id.desc())
+    )
+    return list((await db.scalars(query)).all())
+
+
 @router.post(
     "/work-orders/{work_order_id}/documents",
     response_model=DocumentOutput,
