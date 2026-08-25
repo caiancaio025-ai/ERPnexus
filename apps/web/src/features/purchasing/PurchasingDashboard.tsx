@@ -152,21 +152,39 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   async function load() {
     setError("");
-    try {
-      const companyQuery = company === "all" ? "" : `?company_code=${company}`;
-      const [summaryData, orderData, supplierData] = await Promise.all([
-        apiClient.request<PurchaseSummary>(`/api/purchasing/summary${companyQuery}`),
-        apiClient.request<PurchaseOrder[]>(`/api/purchasing/orders${query ? `?${query}` : ""}`),
-        apiClient.request<Supplier[]>("/api/purchasing/suppliers"),
-      ]);
-      setSummary(summaryData);
-      setOrders(orderData);
+    const companyQuery = company === "all" ? "" : `?company_code=${company}`;
+    const [summaryResult, ordersResult, suppliersResult] = await Promise.allSettled([
+      apiClient.request<PurchaseSummary>(`/api/purchasing/summary${companyQuery}`),
+      apiClient.request<PurchaseOrder[]>(`/api/purchasing/orders${query ? `?${query}` : ""}`),
+      apiClient.request<Supplier[]>("/api/purchasing/suppliers"),
+    ]);
+
+    const failures: string[] = [];
+
+    if (summaryResult.status === "fulfilled") {
+      setSummary(summaryResult.value);
+    } else {
+      failures.push(`Resumo: ${summaryResult.reason instanceof Error ? summaryResult.reason.message : "falha ao carregar"}`);
+    }
+
+    if (ordersResult.status === "fulfilled") {
+      setOrders(ordersResult.value);
+    } else {
+      failures.push(`Pedidos: ${ordersResult.reason instanceof Error ? ordersResult.reason.message : "falha ao carregar"}`);
+    }
+
+    if (suppliersResult.status === "fulfilled") {
+      const supplierData = suppliersResult.value;
       setSuppliers(supplierData);
       if (!form.supplier_id && supplierData[0]) {
         setForm((current) => ({ ...current, supplier_id: String(supplierData[0].id) }));
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Falha ao carregar Compras.");
+    } else {
+      failures.push(`Fornecedores: ${suppliersResult.reason instanceof Error ? suppliersResult.reason.message : "falha ao carregar"}`);
+    }
+
+    if (failures.length) {
+      setError(failures.join(" | "));
     }
   }
 
@@ -176,7 +194,10 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   useEffect(() => {
     if (view === "audit") {
-      apiClient.request<PurchaseAudit[]>("/api/purchasing/audit").then(setAudit).catch((reason: Error) => setError(reason.message));
+      setError("");
+      apiClient.request<PurchaseAudit[]>("/api/purchasing/audit")
+        .then(setAudit)
+        .catch((reason: Error) => setError(`Auditoria: ${reason.message}`));
     }
   }, [view]);
 
@@ -302,19 +323,22 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         body: JSON.stringify({ name, origin: form.origin }),
       });
 
-      // Reconsulta a API depois do POST. Assim a interface só considera o
-      // fornecedor salvo quando ele realmente aparece na lista persistida.
-      const persistedSuppliers = await apiClient.request<Supplier[]>("/api/purchasing/suppliers");
-      const persisted = persistedSuppliers.find((item) => item.id === supplier.id);
-      if (!persisted) {
-        throw new Error("O fornecedor foi recebido pela API, mas não apareceu na lista persistida.");
-      }
-
-      setSuppliers(persistedSuppliers);
-      setForm((current) => ({ ...current, supplier_id: String(persisted.id) }));
+      // O POST só retorna depois do COMMIT no backend. Portanto o objeto
+      // retornado já é o fornecedor persistido e pode ser selecionado
+      // imediatamente. A atualização da lista é feita sem transformar uma
+      // eventual falha de GET em falso erro de cadastro.
+      setSuppliers((items) => {
+        const withoutCurrent = items.filter((item) => item.id !== supplier.id);
+        return [...withoutCurrent, supplier].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      setForm((current) => ({ ...current, supplier_id: String(supplier.id) }));
       setSupplierName("");
       setSupplierModal(false);
-      setMessage(`Fornecedor ${persisted.name} salvo e selecionado.`);
+      setMessage(`Fornecedor ${supplier.name} salvo e selecionado.`);
+
+      void apiClient.request<Supplier[]>("/api/purchasing/suppliers")
+        .then(setSuppliers)
+        .catch(() => undefined);
     } catch (reason) {
       setSupplierError(reason instanceof Error ? reason.message : "Não foi possível cadastrar o fornecedor.");
     } finally {

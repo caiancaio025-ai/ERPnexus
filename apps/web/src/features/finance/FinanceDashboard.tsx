@@ -154,6 +154,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [attachment, setAttachment] = useState<File | null>(null); const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [workOrders, setWorkOrders] = useState<FinanceWorkOrderOption[]>([]);
+  const [workOrderSearch, setWorkOrderSearch] = useState("");
   const [billingReadiness, setBillingReadiness] = useState<BillingReadiness | null>(null);
   const [billingConfirmation, setBillingConfirmation] = useState<BillingConfirmation>(emptyBillingConfirmation());
   const [error, setError] = useState("");
@@ -204,10 +205,15 @@ export function FinanceDashboard({ user, onLogout }: Props) {
 
   useEffect(() => {
     if (!modalOpen || form.entry_type !== "income") return;
-    apiClient.request<FinanceWorkOrderOption[]>(`/api/finance/work-orders?company_code=${form.company_code}`)
-      .then(setWorkOrders)
-      .catch((reason: Error) => setError(reason.message));
-  }, [modalOpen, form.entry_type, form.company_code]);
+    const term = workOrderSearch.trim();
+    if (term.length < 2) { setWorkOrders([]); return; }
+    const timer = window.setTimeout(() => {
+      apiClient.request<FinanceWorkOrderOption[]>(`/api/finance/work-orders?company_code=${form.company_code}&search=${encodeURIComponent(term)}`)
+        .then(setWorkOrders)
+        .catch((reason: Error) => setError(reason.message));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [modalOpen, form.entry_type, form.company_code, workOrderSearch]);
 
   useEffect(() => {
     if (!modalOpen || form.entry_type !== "income" || !form.work_order_id) { setBillingReadiness(null); return; }
@@ -250,7 +256,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     });
   }, [entries, search, statusFilter]);
 
-  function openNew(type: EntryType) { setSelected(null); setForm(initialForm(selectedCompany, type)); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
+  function openNew(type: EntryType) { setSelected(null); setForm(initialForm(selectedCompany, type)); setWorkOrderSearch(""); setWorkOrders([]); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
   async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
     entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
     series: entry.series ?? "", nfse_number: entry.nfse_number ?? "", nfe_number: entry.nfe_number ?? "", counterparty_name: entry.counterparty_name, description: entry.description,
@@ -260,7 +266,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   });
     const stored = (entry.billing_compliance?.confirmation ?? {}) as Partial<BillingConfirmation>;
     setBillingConfirmation({ ...emptyBillingConfirmation(), ...stored });
-    setAttachment(null); setModalOpen(true); }
+    setWorkOrderSearch(""); setWorkOrders([]); setAttachment(null); setModalOpen(true); }
 
   async function saveEntry(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
@@ -395,7 +401,11 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         <div className="form-row"><label>Empresa<select value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
         {form.entry_type === "income" && <section className="billing-workflow-card">
           <header><div><span>INTEGRAÇÃO COM A OS</span><strong>Conformidade de faturamento</strong></div><ShieldCheck size={22}/></header>
-          <label>Vincular Ordem de Serviço<select value={form.work_order_id} onChange={(e) => { setForm({ ...form, work_order_id: e.target.value }); setBillingConfirmation(emptyBillingConfirmation()); }}><option value="">Receita sem vínculo com OS</option>{workOrders.map((order) => <option key={order.id} value={order.id}>{order.number} · {order.customer_name} · {order.equipment_label}</option>)}</select></label>
+          <div className="finance-os-search"><label>Buscar Ordem de Serviço<div className="finance-os-searchbox"><Search size={17}/><input value={workOrderSearch} onChange={(e) => setWorkOrderSearch(e.target.value)} placeholder="Digite OS, cliente ou série..." /></div></label>
+            {form.work_order_id && billingReadiness && <div className="finance-os-selected"><div><small>OS SELECIONADA</small><strong>{billingReadiness.work_order_number} · {billingReadiness.customer_name}</strong></div><button type="button" onClick={() => { setForm({ ...form, work_order_id: "" }); setBillingReadiness(null); setBillingConfirmation(emptyBillingConfirmation()); setWorkOrderSearch(""); setWorkOrders([]); }}>Trocar OS</button></div>}
+            {!form.work_order_id && workOrderSearch.trim().length >= 2 && <div className="finance-os-results">{workOrders.map((order) => <button type="button" key={order.id} onClick={() => { setForm({ ...form, work_order_id: String(order.id) }); setWorkOrderSearch(`${order.number} · ${order.customer_name}`); setBillingConfirmation(emptyBillingConfirmation()); }}><strong>{order.number}</strong><span>{order.customer_name} · {order.equipment_label}</span>{order.approved_value != null && <small>{money(Number(order.approved_value))}</small>}</button>)}{!workOrders.length && <div>Nenhuma OS encontrada.</div>}</div>}
+            {!form.work_order_id && workOrderSearch.trim().length < 2 && <small className="finance-os-hint">Digite pelo menos 2 caracteres para localizar a OS. Deixe em branco para receita sem vínculo.</small>}
+          </div>
           {billingReadiness && <div className="billing-readiness">
             <div className="billing-readiness__summary"><span><b>{billingReadiness.work_order_number}</b><small>{billingReadiness.customer_name}</small></span>{billingReadiness.approved_value != null && <strong>{money(Number(billingReadiness.approved_value))}</strong>}</div>
             {(billingReadiness.billing_instructions || billingReadiness.financial_notes) && <div className="billing-guidance"><TriangleAlert size={16}/><span>{billingReadiness.billing_instructions || billingReadiness.financial_notes}</span></div>}
