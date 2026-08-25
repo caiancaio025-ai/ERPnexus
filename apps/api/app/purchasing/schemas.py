@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CompanyCode = Literal["universo_eletronica", "universo_automacao", "solucoes_eletronica"]
 PurchaseOrigin = Literal["national", "international"]
@@ -23,7 +23,7 @@ class SupplierOutput(SupplierInput):
     model_config = ConfigDict(from_attributes=True)
     id: int
     is_active: bool
-    created_at: datetime
+    created_at: datetime | None = None
 
 
 class PurchaseInput(BaseModel):
@@ -77,8 +77,20 @@ class PurchaseOutput(BaseModel):
     notes: str | None
     attachment_name: str | None
     attachment_mime: str | None
-    created_at: datetime
-    updated_at: datetime
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_legacy_status(cls, value: object) -> object:
+        # Compatibilidade com pedidos criados por versões antigas do NEXUS.
+        # O status histórico `in_transit` representa o mesmo estágio atual
+        # chamado `shipped` (Em transporte). Normalizamos apenas na saída,
+        # sem alterar silenciosamente o registro no banco.
+        if value == "in_transit":
+            return "shipped"
+        return value
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class PurchaseSummary(BaseModel):
