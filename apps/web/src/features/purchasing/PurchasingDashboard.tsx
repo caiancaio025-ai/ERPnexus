@@ -28,7 +28,6 @@ import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
 import type { AuthUser } from "../auth/AuthCard";
-import { MaterialRequestsPanel } from "./MaterialRequestsPanel";
 import type {
   CompanyCode,
   PurchaseAudit,
@@ -41,7 +40,7 @@ import type {
 import "./purchasing.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
-type View = "dashboard" | "requests" | "new" | "orders" | "audit";
+type View = "dashboard" | "new" | "orders" | "audit";
 
 type FormState = {
   company_code: CompanyCode;
@@ -134,15 +133,12 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   const [editing, setEditing] = useState<PurchaseOrder | null>(null);
   const [supplierModal, setSupplierModal] = useState(false);
   const [supplierName, setSupplierName] = useState("");
+  const [supplierSaving, setSupplierSaving] = useState(false);
+  const [supplierError, setSupplierError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
-
-  useEffect(() => {
-    const requestedView = new URLSearchParams(window.location.search).get("view");
-    if (requestedView === "requests") setView("requests");
-  }, []);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -242,6 +238,9 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
     setError("");
     setMessage("");
     try {
+      if (!form.supplier_id || !Number.isInteger(Number(form.supplier_id)) || Number(form.supplier_id) <= 0) {
+        throw new Error("Selecione ou cadastre um fornecedor antes de salvar a compra.");
+      }
       const payload = {
         ...form,
         supplier_id: Number(form.supplier_id),
@@ -288,20 +287,43 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   async function addSupplier(event: React.FormEvent) {
     event.preventDefault();
-    const supplier = await apiClient.request<Supplier>("/api/purchasing/suppliers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: supplierName, origin: form.origin }),
-    });
-    setSuppliers((items) => [...items, supplier].sort((a, b) => a.name.localeCompare(b.name)));
-    setForm((current) => ({ ...current, supplier_id: String(supplier.id) }));
-    setSupplierName("");
-    setSupplierModal(false);
+    const name = supplierName.trim().replace(/\s+/g, " ");
+    if (name.length < 2) {
+      setSupplierError("Informe um nome de fornecedor com pelo menos 2 caracteres.");
+      return;
+    }
+
+    setSupplierSaving(true);
+    setSupplierError("");
+    try {
+      const supplier = await apiClient.request<Supplier>("/api/purchasing/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, origin: form.origin }),
+      });
+
+      // Reconsulta a API depois do POST. Assim a interface só considera o
+      // fornecedor salvo quando ele realmente aparece na lista persistida.
+      const persistedSuppliers = await apiClient.request<Supplier[]>("/api/purchasing/suppliers");
+      const persisted = persistedSuppliers.find((item) => item.id === supplier.id);
+      if (!persisted) {
+        throw new Error("O fornecedor foi recebido pela API, mas não apareceu na lista persistida.");
+      }
+
+      setSuppliers(persistedSuppliers);
+      setForm((current) => ({ ...current, supplier_id: String(persisted.id) }));
+      setSupplierName("");
+      setSupplierModal(false);
+      setMessage(`Fornecedor ${persisted.name} salvo e selecionado.`);
+    } catch (reason) {
+      setSupplierError(reason instanceof Error ? reason.message : "Não foi possível cadastrar o fornecedor.");
+    } finally {
+      setSupplierSaving(false);
+    }
   }
 
   const nav: { id: View; label: string; icon: typeof ShoppingCart }[] = [
     { id: "dashboard", label: "Dashboard & alertas", icon: Boxes },
-    { id: "requests", label: "Solicitações do laboratório", icon: FileSearch },
     { id: "new", label: "Lançar nova compra", icon: PackagePlus },
     { id: "orders", label: "Gerenciar pedidos", icon: ClipboardList },
     { id: "audit", label: "Auditoria de compras", icon: History },
@@ -317,7 +339,6 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             const Icon = item.icon;
             return <motion.button key={item.id} className={view === item.id ? "active" : ""} onClick={() => item.id === "new" ? openNew() : setView(item.id)} whileTap={{ scale: 0.97 }}><Icon size={18} />{item.label}</motion.button>;
           })}
-          <button onClick={() => navigate("/laboratorio")}><ArrowLeft size={18} />Ir para Laboratório</button>
           <button onClick={() => navigate("/painel")}><ArrowLeft size={18} />Voltar ao painel geral</button>
         </nav>
         <div className="purchasing-user"><span>{user.name.slice(0, 2).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout} aria-label="Sair"><LogOut size={18} /></button></div>
@@ -325,7 +346,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
       <section className="purchasing-content">
         <header className="purchasing-header">
-          <div><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "orders" ? "Gerenciar pedidos" : view === "requests" ? "Solicitações de material" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
+          <div><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "orders" ? "Gerenciar pedidos" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
           <motion.button className="primary-action" onClick={openNew} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}><Plus size={18} />Nova compra</motion.button>
         </header>
 
@@ -352,15 +373,13 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           </section>
         </>}
 
-        {view === "requests" && <MaterialRequestsPanel />}
-
         {view === "orders" && <section className="purchase-panel">
           <div className="panel-title orders-title"><div><small>ACOMPANHAMENTO</small><h2>Pedidos de compra</h2></div><div className="order-filters"><label><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Série, NF, produto, fornecedor..." /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">Todos os status</option><option value="overdue">Atrasados</option><option value="due_soon">Próximas entregas</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
           <OrderTable orders={orders} onOpen={openEdit} />
         </section>}
 
         {view === "new" && <form className="purchase-form" onSubmit={saveOrder}>
-          <div className="form-top"><button type="button" className="supplier-manager" onClick={() => setSupplierModal(true)}><Settings size={17} />Gerenciar lista de lojas/fornecedores</button>{editing && <span className="purchase-code">{editing.code}</span>}</div>
+          <div className="form-top"><button type="button" className="supplier-manager" onClick={() => { setSupplierError(""); setSupplierModal(true); }}><Settings size={17} />Cadastrar / selecionar fornecedor</button>{editing && <span className="purchase-code">{editing.code}</span>}</div>
           <div className="form-grid">
             <Field label="Empresa"><select value={form.company_code} onChange={(e) => setForm({ ...form, company_code: e.target.value as CompanyCode })}>{companies.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></Field>
             <Field label="Nº série do equipamento"><input value={form.equipment_serial} onChange={(e) => setForm({ ...form, equipment_serial: e.target.value })} placeholder="Vínculo futuro com o laboratório" /></Field>
@@ -384,7 +403,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         {view === "audit" && <section className="purchase-panel"><div className="panel-title"><div><small>RASTREABILIDADE</small><h2>Histórico de ações</h2></div></div><div className="audit-list">{audit.map((item) => <article key={item.id}><History size={17} /><div><strong>{item.description}</strong><span>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</span></div></article>)}{audit.length === 0 && <div className="empty-state">Nenhum evento de auditoria.</div>}</div></section>}
       </section>
 
-      <AnimatePresence>{supplierModal && <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="supplier-modal" onSubmit={addSupplier} initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}><button type="button" className="modal-close" onClick={() => setSupplierModal(false)}><X /></button><Store size={28} /><h2>Novo fornecedor</h2><p>Cadastre lojas e fornecedores para reutilizar nos pedidos.</p><input autoFocus required value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="Nome da loja ou fornecedor" /><button className="save-button">Cadastrar fornecedor</button></motion.form></motion.div>}</AnimatePresence>
+      <AnimatePresence>{supplierModal && <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="supplier-modal" onSubmit={addSupplier} initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}><button type="button" className="modal-close" onClick={() => setSupplierModal(false)}><X /></button><Store size={28} /><h2>Novo fornecedor</h2><p>Cadastre lojas e fornecedores para reutilizar nos pedidos. O fornecedor é obrigatório para concluir uma compra.</p>{supplierError && <div className="purchase-alert error">{supplierError}</div>}<input autoFocus required minLength={2} value={supplierName} onChange={(e) => { setSupplierName(e.target.value); if (supplierError) setSupplierError(""); }} placeholder="Nome da loja ou fornecedor" /><button className="save-button" disabled={supplierSaving}>{supplierSaving ? "Cadastrando..." : "Cadastrar e selecionar"}</button></motion.form></motion.div>}</AnimatePresence>
     </main>
   );
 }

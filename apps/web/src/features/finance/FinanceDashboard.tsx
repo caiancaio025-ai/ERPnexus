@@ -154,7 +154,6 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [attachment, setAttachment] = useState<File | null>(null); const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [workOrders, setWorkOrders] = useState<FinanceWorkOrderOption[]>([]);
-  const [workOrderSearch, setWorkOrderSearch] = useState("");
   const [billingReadiness, setBillingReadiness] = useState<BillingReadiness | null>(null);
   const [billingConfirmation, setBillingConfirmation] = useState<BillingConfirmation>(emptyBillingConfirmation());
   const [error, setError] = useState("");
@@ -205,15 +204,10 @@ export function FinanceDashboard({ user, onLogout }: Props) {
 
   useEffect(() => {
     if (!modalOpen || form.entry_type !== "income") return;
-    const term = workOrderSearch.trim();
-    if (term.length < 2) { setWorkOrders([]); return; }
-    const timer = window.setTimeout(() => {
-      apiClient.request<FinanceWorkOrderOption[]>(`/api/finance/work-orders?company_code=${form.company_code}&search=${encodeURIComponent(term)}`)
-        .then(setWorkOrders)
-        .catch((reason: Error) => setError(reason.message));
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [modalOpen, form.entry_type, form.company_code, workOrderSearch]);
+    apiClient.request<FinanceWorkOrderOption[]>(`/api/finance/work-orders?company_code=${form.company_code}`)
+      .then(setWorkOrders)
+      .catch((reason: Error) => setError(reason.message));
+  }, [modalOpen, form.entry_type, form.company_code]);
 
   useEffect(() => {
     if (!modalOpen || form.entry_type !== "income" || !form.work_order_id) { setBillingReadiness(null); return; }
@@ -256,7 +250,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     });
   }, [entries, search, statusFilter]);
 
-  function openNew(type: EntryType) { setSelected(null); setForm(initialForm(selectedCompany, type)); setWorkOrderSearch(""); setWorkOrders([]); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
+  function openNew(type: EntryType) { setSelected(null); setForm(initialForm(selectedCompany, type)); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
   async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
     entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
     series: entry.series ?? "", nfse_number: entry.nfse_number ?? "", nfe_number: entry.nfe_number ?? "", counterparty_name: entry.counterparty_name, description: entry.description,
@@ -266,7 +260,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   });
     const stored = (entry.billing_compliance?.confirmation ?? {}) as Partial<BillingConfirmation>;
     setBillingConfirmation({ ...emptyBillingConfirmation(), ...stored });
-    setWorkOrderSearch(""); setWorkOrders([]); setAttachment(null); setModalOpen(true); }
+    setAttachment(null); setModalOpen(true); }
 
   async function saveEntry(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
@@ -278,6 +272,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           : null;
       const body = JSON.stringify({
         ...form,
+        // O Financeiro usa a emissão como competência operacional.
+        // posting_date permanece no contrato da API por compatibilidade histórica,
+        // mas não é mais um campo manual na interface.
         posting_date: form.issue_date,
         amount: parseAmount(form.amount),
         invoice_type: form.entry_type === "income" ? invoiceType : null,
@@ -398,11 +395,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         <div className="form-row"><label>Empresa<select value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
         {form.entry_type === "income" && <section className="billing-workflow-card">
           <header><div><span>INTEGRAÇÃO COM A OS</span><strong>Conformidade de faturamento</strong></div><ShieldCheck size={22}/></header>
-          <div className="finance-os-search"><label>Buscar Ordem de Serviço<div className="finance-os-searchbox"><Search size={17}/><input value={workOrderSearch} onChange={(e) => setWorkOrderSearch(e.target.value)} placeholder="Digite OS, cliente ou série..." /></div></label>
-            {form.work_order_id && billingReadiness && <div className="finance-os-selected"><div><small>OS SELECIONADA</small><strong>{billingReadiness.work_order_number} · {billingReadiness.customer_name}</strong></div><button type="button" onClick={() => { setForm({ ...form, work_order_id: "" }); setBillingReadiness(null); setBillingConfirmation(emptyBillingConfirmation()); setWorkOrderSearch(""); }}>Trocar OS</button></div>}
-            {!form.work_order_id && workOrderSearch.trim().length >= 2 && <div className="finance-os-results">{workOrders.map((order) => <button type="button" key={order.id} onClick={() => { setForm({ ...form, work_order_id: String(order.id) }); setWorkOrderSearch(`${order.number} · ${order.customer_name}`); setBillingConfirmation(emptyBillingConfirmation()); }}><strong>{order.number}</strong><span>{order.customer_name} · {order.equipment_label}</span>{order.approved_value != null && <small>{money(Number(order.approved_value))}</small>}</button>)}{!workOrders.length && <div>Nenhuma OS encontrada.</div>}</div>}
-            {!form.work_order_id && workOrderSearch.trim().length < 2 && <small className="finance-os-hint">Digite pelo menos 2 caracteres para localizar a OS. Deixe em branco para receita sem vínculo.</small>}
-          </div>
+          <label>Vincular Ordem de Serviço<select value={form.work_order_id} onChange={(e) => { setForm({ ...form, work_order_id: e.target.value }); setBillingConfirmation(emptyBillingConfirmation()); }}><option value="">Receita sem vínculo com OS</option>{workOrders.map((order) => <option key={order.id} value={order.id}>{order.number} · {order.customer_name} · {order.equipment_label}</option>)}</select></label>
           {billingReadiness && <div className="billing-readiness">
             <div className="billing-readiness__summary"><span><b>{billingReadiness.work_order_number}</b><small>{billingReadiness.customer_name}</small></span>{billingReadiness.approved_value != null && <strong>{money(Number(billingReadiness.approved_value))}</strong>}</div>
             {(billingReadiness.billing_instructions || billingReadiness.financial_notes) && <div className="billing-guidance"><TriangleAlert size={16}/><span>{billingReadiness.billing_instructions || billingReadiness.financial_notes}</span></div>}
@@ -418,9 +411,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         </section>}
         <div className="form-row"><label>{form.entry_type === "income" ? "Cliente" : "Cliente / fornecedor"}<input required value={form.counterparty_name} onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}/></label>{form.entry_type === "expense" && <label>Classificação<select value={form.expense_kind} onChange={(e) => setForm({ ...form, expense_kind: e.target.value as ExpenseKind })}>{Object.entries(expenseLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>}</div>
         <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>Valor<input required inputMode="decimal" placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
-        {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="Número da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="Número da NF-e"/></label></div><label>Série<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">Preencha pelo menos uma das caixas: NFS-e ou NF-e.</small></>}
+        {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="Número da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="Número da NF-e"/></label></div><label>Série<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">{selected && !form.nfse_number && !form.nfe_number ? "Registro histórico sem NF: pode ser editado e salvo normalmente." : "Preencha pelo menos uma das caixas: NFS-e ou NF-e."}</small></>}
         {form.entry_type === "expense" && <label>Documento / referência<input value={form.document_number} onChange={(e) => setForm({ ...form, document_number: e.target.value })}/></label>}
-        <div className="form-row form-row--two"><label>Data de emissão<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label><label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label></div>
+        <div className="form-row"><label>Data de emissão<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label><label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label></div>
         {form.entry_type === "expense" && <label>Chave PIX ou código do boleto<textarea rows={2} value={form.payment_code} onChange={(e) => setForm({ ...form, payment_code: e.target.value })}/></label>}
         <label>Observações<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/></label>
         <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>

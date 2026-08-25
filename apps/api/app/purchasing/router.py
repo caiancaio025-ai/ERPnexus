@@ -7,7 +7,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_module
@@ -89,14 +90,58 @@ async def create_supplier(
     _: CurrentUser,
     db: DbSession,
 ):
+    # O nome é a chave funcional do fornecedor. A comparação é case-insensitive
+    # e com espaços normalizados, para impedir duplicidades visuais e permitir
+    # reativar cadastros antigos sem criar um segundo registro.
+    normalized_name = " ".join(payload.name.split()).strip()
+    if len(normalized_name) < 2:
+        raise HTTPException(status_code=422, detail="Informe um fornecedor válido.")
+
     existing = await db.scalar(
-        select(Supplier).where(Supplier.name.ilike(payload.name.strip()))
+        select(Supplier).where(func.lower(Supplier.name) == normalized_name.lower())
     )
     if existing:
-        raise HTTPException(status_code=409, detail="Fornecedor já cadastrado.")
-    supplier = Supplier(**payload.model_dump())
+        if existing.is_active:
+            # Para a operação de compra, tratar fornecedor já existente como
+            # sucesso é mais útil do que devolver 409. O frontend passa a
+            # selecionar o cadastro existente automaticamente.
+            return existing
+        existing.is_active = True
+        existing.name = normalized_name
+        existing.origin = payload.origin
+        existing.website = payload.website or None
+        existing.contact_name = payload.contact_name or None
+        existing.contact_phone = payload.contact_phone or None
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
+    supplier_data = payload.model_dump()
+    supplier_data.update(
+        name=normalized_name,
+        website=payload.website or None,
+        contact_name=payload.contact_name or None,
+        contact_phone=payload.contact_phone or None,
+    )
+    supplier = Supplier(**supplier_data)
     db.add(supplier)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Protege contra concorrência: se outro request cadastrou o mesmo nome
+        # entre o SELECT e o COMMIT, recuperamos o registro já persistido.
+        await db.rollback()
+        existing = await db.scalar(
+            select(Supplier).where(func.lower(Supplier.name) == normalized_name.lower())
+        )
+        if not existing:
+            raise HTTPException(status_code=409, detail="Não foi possível concluir o cadastro do fornecedor.")
+        if not existing.is_active:
+            existing.is_active = True
+            await db.commit()
+            await db.refresh(existing)
+        return existing
+
     await db.refresh(supplier)
     return supplier
 

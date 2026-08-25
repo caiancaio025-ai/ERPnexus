@@ -8,7 +8,7 @@ type LaboratoryDocument = {
   id: number;
   work_order_id: number;
   item_id: number | null;
-  category: "entry" | "technical" | "exit" | "general";
+  category: "entrada" | "analise" | "reparo" | "testes" | "saida" | "general";
   original_name: string;
   mime_type: string;
   size_bytes: number;
@@ -39,7 +39,7 @@ export function EquipmentDocumentsPanel({ workOrderId }: { workOrderId: number }
       for (const file of Array.from(files)) {
         const body = new FormData();
         body.append("file", file);
-        await apiClient.post(`/laboratory/work-orders/${workOrderId}/documents?category=entry`, body);
+        await apiClient.post(`/laboratory/work-orders/${workOrderId}/documents?category=entrada`, body);
       }
       await load();
     } catch (reason) {

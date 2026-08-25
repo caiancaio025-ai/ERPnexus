@@ -192,10 +192,18 @@ def _quote_totals(payload: QuoteInput) -> tuple:
 
 
 def _period_bounds(year: int | None, month: int | None) -> tuple[date | None, date | None]:
+    """Retorna o intervalo de entrada do Laboratório.
+
+    - ano + mês: filtra apenas o mês;
+    - apenas ano: filtra todos os meses daquele ano;
+    - nenhum dos dois: todo o histórico.
+    """
     if year is None and month is None:
         return None, None
-    if year is None or month is None:
-        raise HTTPException(status_code=422, detail="Mês e ano devem ser informados juntos.")
+    if year is None:
+        raise HTTPException(status_code=422, detail="Informe o ano para filtrar por mês.")
+    if month is None:
+        return date(year, 1, 1), date(year + 1, 1, 1)
     start = date(year, month, 1)
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
     return start, end
@@ -792,21 +800,6 @@ async def quote_pdf_endpoint(
 
 
 # -------------------------------------------------------------- documents --
-
-
-@router.get("/work-orders/{work_order_id}/documents", response_model=list[DocumentOutput])
-async def list_documents(
-    work_order_id: int,
-    _: User = Depends(current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await _work_order_or_404(db, work_order_id)
-    query = (
-        select(LaboratoryDocument)
-        .where(LaboratoryDocument.work_order_id == work_order_id)
-        .order_by(LaboratoryDocument.created_at.desc(), LaboratoryDocument.id.desc())
-    )
-    return list((await db.scalars(query)).all())
 
 
 @router.post(

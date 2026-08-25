@@ -86,7 +86,12 @@ class FinancialEntryBase(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def validate_business_rules(self):
+    def normalize_business_fields(self):
+        # "Brasil" era o nome histórico usado no SQLite da Universo Automação.
+        # Normalizamos no write para que registros legados continuem editáveis.
+        if self.company_code == "universo_automacao" and self.bank_name.strip().casefold() == "brasil":
+            self.bank_name = "Banco do Brasil"
+
         allowed_banks = {
             "universo_eletronica": {"Itaú", "Bradesco"},
             "universo_automacao": {"Banco do Brasil", "Bradesco"},
@@ -94,15 +99,17 @@ class FinancialEntryBase(BaseModel):
         }
         if self.bank_name not in allowed_banks[self.company_code]:
             raise ValueError("Banco não permitido para a empresa selecionada.")
-        if self.entry_type == "expense" and self.expense_kind is None:
-            raise ValueError("Informe a classificação da despesa.")
-        if self.entry_type == "income":
+
+        if self.entry_type == "expense":
+            if self.expense_kind is None:
+                raise ValueError("Informe a classificação da despesa.")
+            self.invoice_type = None
+            self.nfse_number = None
+            self.nfe_number = None
+        else:
             self.expense_kind = None
-        if self.entry_type == "income":
             nfse = (self.nfse_number or "").strip()
             nfe = (self.nfe_number or "").strip()
-            if not nfse and not nfe:
-                raise ValueError("Informe o número da NFS-e ou da NF-e.")
             self.nfse_number = nfse or None
             self.nfe_number = nfe or None
             if nfse and not nfe:
@@ -130,6 +137,14 @@ class BillingConfirmation(BaseModel):
 class FinancialEntryInput(FinancialEntryBase):
     work_order_id: int | None = None
     billing_confirmation: BillingConfirmation | None = None
+
+    @model_validator(mode="after")
+    def require_invoice_for_new_income(self):
+        # Regra apenas para NOVOS lançamentos. Registros históricos importados
+        # podem não possuir NFS-e/NF-e e precisam continuar editáveis.
+        if self.entry_type == "income" and not self.nfse_number and not self.nfe_number:
+            raise ValueError("Informe o número da NFS-e ou da NF-e.")
+        return self
 
 
 class FinancialEntryUpdate(FinancialEntryBase):

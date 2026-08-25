@@ -1,0 +1,48 @@
+{
+  "version": "13.0",
+  "description": "Espelho financeiro bruto dos SQLite fornecidos pelo usuário",
+  "sources": {
+    "banco_automacao.db": {
+      "sha256": "296a85f6101cb88ddcb23bcede7d59b405f4fe849da615e211fbf680a91702ec",
+      "company_code": "universo_automacao",
+      "tables": {
+        "faturamento_bradesco": {
+          "rows": 1019,
+          "sum": "7773349.81"
+        },
+        "saidas_operacionais": {
+          "rows": 965,
+          "sum": "3333569.73"
+        }
+      }
+    },
+    "banco_empresa.db": {
+      "sha256": "fdc84023730f7014fb45edc0ce9b4bfaea8029b536b77c9f9c4c6e7e4ff18cdc",
+      "company_code": "universo_eletronica",
+      "tables": {
+        "faturamento_bradesco": {
+          "rows": 824,
+          "sum": "5477183.53"
+        },
+        "saidas_operacionais": {
+          "rows": 2046,
+          "sum": "6762094.00"
+        }
+      }
+    },
+    "banco_solucoes.db": {
+      "sha256": "2043e91fc49d408722758b6dff1aa1457268717f2b662ce80ca01f78904a9680",
+      "company_code": "solucoes_eletronica",
+      "tables": {
+        "faturamento_bradesco": {
+          "rows": 11,
+          "sum": "77024.50"
+        },
+        "saidas_operacionais": {
+          "rows": 8,
+          "sum": "34175.00"
+        }
+      }
+    }
+  }
+}

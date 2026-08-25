@@ -146,7 +146,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [company, setCompany] = useState<CompanyCode | "all">("all");
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "all">("all");
   const now = new Date();
-  const [monthFilter, setMonthFilter] = useState(now.getMonth() + 1);
+  const [monthFilter, setMonthFilter] = useState<number | "all">(now.getMonth() + 1);
   const [yearFilter, setYearFilter] = useState(now.getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([now.getFullYear()]);
   const [periodReady, setPeriodReady] = useState(false);
@@ -166,9 +166,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [saved, setSaved] = useState(false);
 
   const query = useMemo(() => {
-    const params = new URLSearchParams({
-      page: String(page), page_size: "25", month: String(monthFilter), year: String(yearFilter),
-    });
+    const params = new URLSearchParams({ page: String(page), page_size: "25", year: String(yearFilter) });
+    if (monthFilter !== "all") params.set("month", String(monthFilter));
     if (company !== "all") params.set("company_code", company);
     const effectiveStatus =
       view === "no_repair" ? "no_repair" :
@@ -201,7 +200,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     setLoading(true); setError("");
     try {
       const companyQuery = company === "all" ? "" : `?company_code=${company}`;
-      const summaryParams = new URLSearchParams({ month: String(monthFilter), year: String(yearFilter) });
+      const summaryParams = new URLSearchParams({ year: String(yearFilter) });
+      if (monthFilter !== "all") summaryParams.set("month", String(monthFilter));
       if (company !== "all") summaryParams.set("company_code", company);
       const [summaryData, orders, customerData, technicianData] = await Promise.all([
         apiClient.get<WorkOrderSummary>(`/laboratory/summary?${summaryParams.toString()}`),
@@ -251,7 +251,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         const body = new FormData();
         body.append("file", file);
         try {
-          await apiClient.post(`/laboratory/work-orders/${created.id}/documents?category=entry`, body);
+          await apiClient.post(`/laboratory/work-orders/${created.id}/documents?category=entrada`, body);
           uploaded += 1;
         } catch {
           failedUploads += 1;
@@ -338,7 +338,11 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
 
         <section className="lab-toolbar">
           <div className="lab-search"><Search size={18} /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar O.S., cliente, equipamento, NF entrada ou saída" /></div>
-          <select aria-label="Mês de entrada" value={monthFilter} onChange={(e) => { setMonthFilter(Number(e.target.value)); setPage(1); }}>
+          <select aria-label="Mês de entrada" value={monthFilter} onChange={(e) => {
+            setMonthFilter(e.target.value === "all" ? "all" : Number(e.target.value));
+            setPage(1);
+          }}>
+            <option value="all">Todos os meses</option>
             {monthLabels.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
           </select>
           <select aria-label="Ano de entrada" value={yearFilter} onChange={(e) => { setYearFilter(Number(e.target.value)); setPage(1); }}>

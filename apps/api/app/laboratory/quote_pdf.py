@@ -80,11 +80,23 @@ def _section_title(text: str, style: ParagraphStyle) -> Table:
 
 
 def _text_panel(text: object | None, style: ParagraphStyle, min_height: float = 13 * mm) -> Table:
+    """Painel textual com altura dinâmica.
+
+    A versão anterior fixava ``rowHeights`` mesmo quando o Paragraph precisava
+    de mais espaço; o ReportLab então desenhava o texto para fora da célula e
+    ele invadia a seção seguinte. Aqui calculamos a altura real do Paragraph e
+    usamos o maior valor entre conteúdo+paddings e a altura mínima visual.
+    """
     content = Paragraph(_safe(text).replace("\n", "<br/>"), style)
+    horizontal_padding = 16
+    vertical_padding = 14
+    content_width = 174 * mm - horizontal_padding
+    _, content_height = content.wrap(content_width, A4[1])
+    row_height = max(min_height, content_height + vertical_padding)
     return Table(
         [[content]],
         colWidths=[174 * mm],
-        rowHeights=[min_height],
+        rowHeights=[row_height],
         style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
             ("BOX", (0, 0), (-1, -1), 0.45, GRID),
@@ -258,9 +270,9 @@ def quote_pdf(
     ]))
     story += [cards, Spacer(1, 8)]
 
-    story += [_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body), Spacer(1, 7)]
-    story += [_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body, 21 * mm), Spacer(1, 7)]
-    story += [_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body, 21 * mm), Spacer(1, 7)]
+    story += [KeepTogether([_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body)]), Spacer(1, 7)]
+    story += [KeepTogether([_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body, 21 * mm)]), Spacer(1, 7)]
+    story += [KeepTogether([_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body, 21 * mm)]), Spacer(1, 7)]
 
     story += [_section_title("SERVIÇOS E COMPONENTES", section), Spacer(1, 3)]
     rows: list[list[object]] = [["Descrição", "Qtd.", "Unitário", "Total"]]
@@ -431,79 +443,159 @@ STATUS_LABELS_PT: dict[str, str] = {
 }
 
 
+def _fit_label_text(
+    c: Canvas,
+    text: str,
+    *,
+    max_width: float,
+    preferred_size: float,
+    min_size: float,
+    font: str = "Helvetica-Bold",
+) -> float:
+    """Return the largest font size that fits max_width."""
+    value = (text or "").strip()
+    size = preferred_size
+    while size > min_size and stringWidth(value, font, size) > max_width:
+        size -= 0.25
+    return max(size, min_size)
+
+
 def label_pdf(
     work_order: LaboratoryWorkOrder,
     equipment: LaboratoryEquipment,
     tracking_token: str,
 ) -> bytes:
-    """Etiqueta 40 x 40 mm.
+    """Etiqueta de laboratório 40 x 40 mm, legível e sem sobreposição.
 
-    work_order: LaboratoryWorkOrder (usa .number, .customer_name, .reported_defect, .status)
-    equipment: LaboratoryEquipment (usa .equipment_type, .manufacturer, .model)
-    tracking_token: work_order.tracking_token, usado na URL pública de rastreamento.
+    Layout:
+    - cliente em linha própria;
+    - número da O.S. destacado em linha própria;
+    - equipamento/fabricante/modelo;
+    - defeito;
+    - NF de entrada no rodapé, no lugar do status;
+    - QR de rastreamento com 17 mm.
     """
     buffer = BytesIO()
     width, height = 40 * mm, 40 * mm
     c = Canvas(buffer, pagesize=(width, height))
+    margin = 2.2 * mm
+
     c.setLineWidth(0.6)
     c.rect(1.2 * mm, 1.2 * mm, width - 2.4 * mm, height - 2.4 * mm)
 
-    c.setFont("Helvetica-Bold", 8.5)
-    customer = work_order.customer_name[:22].upper()
-    c.drawString(2.2 * mm, height - 5.5 * mm, customer)
-    c.setFont("Helvetica-Bold", 7.5)
-    c.drawRightString(width - 2.2 * mm, height - 5.5 * mm, work_order.number)
-    c.line(2.2 * mm, height - 7 * mm, width - 2.2 * mm, height - 7 * mm)
+    # Cabeçalho: cliente e O.S. em linhas independentes para nunca se sobreporem.
+    customer = (work_order.customer_name or "CLIENTE NÃO INFORMADO").strip().upper()
+    customer_size = _fit_label_text(
+        c,
+        customer,
+        max_width=width - (2 * margin),
+        preferred_size=7.4,
+        min_size=4.8,
+    )
+    c.setFont("Helvetica-Bold", customer_size)
+    c.drawString(margin, height - 5.0 * mm, customer)
 
-    c.setFont("Helvetica-Bold", 6.4)
-    equip = (equipment.equipment_type or "EQUIPAMENTO")[:30].upper()
-    c.drawString(2.2 * mm, height - 10.5 * mm, equip)
-    c.setFont("Helvetica", 5.6)
-    specs = " · ".join(filter(None, [equipment.manufacturer, equipment.model]))[:36]
-    c.drawString(2.2 * mm, height - 13.3 * mm, specs)
+    os_number = (work_order.number or "OS").strip().upper()
+    os_size = _fit_label_text(
+        c,
+        os_number,
+        max_width=width - (2 * margin),
+        preferred_size=9.4,
+        min_size=7.0,
+    )
+    c.setFont("Helvetica-Bold", os_size)
+    c.drawString(margin, height - 9.0 * mm, os_number)
+    c.line(margin, height - 10.3 * mm, width - margin, height - 10.3 * mm)
 
-    defect = (work_order.reported_defect or "—")[:70]
-    c.setFont("Helvetica-Bold", 5.2)
-    c.drawString(2.2 * mm, height - 17 * mm, "DEFEITO:")
+    # Equipamento.
+    equip = (equipment.equipment_type or "EQUIPAMENTO").strip().upper()
+    equip_size = _fit_label_text(
+        c,
+        equip,
+        max_width=width - (2 * margin),
+        preferred_size=6.2,
+        min_size=4.8,
+    )
+    c.setFont("Helvetica-Bold", equip_size)
+    c.drawString(margin, height - 13.6 * mm, equip)
+
+    specs = " · ".join(
+        value.strip()
+        for value in [equipment.manufacturer or "", equipment.model or ""]
+        if value and value.strip()
+    )
+    if specs:
+        specs = specs.upper()
+        specs_size = _fit_label_text(
+            c,
+            specs,
+            max_width=width - (2 * margin),
+            preferred_size=5.3,
+            min_size=4.2,
+            font="Helvetica",
+        )
+        c.setFont("Helvetica", specs_size)
+        c.drawString(margin, height - 16.4 * mm, specs)
+
+    # Defeito.
+    c.setFont("Helvetica-Bold", 5.0)
+    c.drawString(margin, height - 19.9 * mm, "DEFEITO:")
+    defect = (work_order.reported_defect or "DEFEITO NÃO INFORMADO").strip().upper()
     _wrap_text(
         c,
         defect,
-        2.2 * mm,
-        height - 20.3 * mm,
-        max_width=36 * mm,
+        margin,
+        height - 22.8 * mm,
+        max_width=18.5 * mm,
         font="Helvetica",
-        size=5.4,
-        max_lines=1,
+        size=4.8,
+        max_lines=2,
     )
 
-    status_label = STATUS_LABELS_PT.get(work_order.status, work_order.status)
-    c.setFont("Helvetica-Bold", 5.6)
-    label_w = stringWidth(status_label.upper(), "Helvetica-Bold", 5.6) + 3 * mm
-    c.setFillColor(colors.black)
-    c.rect(2.2 * mm, 2.2 * mm, label_w, 3.6 * mm, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.drawString(2.2 * mm + 1.5 * mm, 3.1 * mm, status_label.upper())
-    c.setFillColor(colors.black)
-
+    # QR de rastreamento.
     tracking_url = f"{settings.tracking_base_url.rstrip('/')}/{tracking_token}"
     widget = qr.QrCodeWidget(tracking_url)
     widget.barLevel = "M"
     bounds = widget.getBounds()
-    size = 17 * mm
+    qr_size = 17 * mm
     drawing = Drawing(
-        size,
-        size,
+        qr_size,
+        qr_size,
         transform=[
-            size / (bounds[2] - bounds[0]),
+            qr_size / (bounds[2] - bounds[0]),
             0,
             0,
-            size / (bounds[3] - bounds[1]),
+            qr_size / (bounds[3] - bounds[1]),
             0,
             0,
         ],
     )
     drawing.add(widget)
-    drawing.drawOn(c, width - size - 2 * mm, 2.2 * mm)
+    drawing.drawOn(c, width - qr_size - 2 * mm, 2.2 * mm)
+
+    # Rodapé: NF de entrada substitui o antigo destaque de recebimento/status.
+    entry_invoice = str(getattr(work_order, "entry_invoice", "") or "NÃO INFORMADA").strip().upper()
+    footer_label = "NF ENTRADA"
+    footer_value = entry_invoice
+    footer_x = margin
+    footer_y = 2.2 * mm
+    footer_w = 18.0 * mm
+    footer_h = 6.8 * mm
+
+    c.setLineWidth(0.45)
+    c.rect(footer_x, footer_y, footer_w, footer_h, fill=0, stroke=1)
+    c.setFont("Helvetica-Bold", 4.2)
+    c.drawString(footer_x + 1.0 * mm, footer_y + 4.4 * mm, footer_label)
+    value_size = _fit_label_text(
+        c,
+        footer_value,
+        max_width=footer_w - 2.0 * mm,
+        preferred_size=5.4,
+        min_size=3.8,
+    )
+    c.setFont("Helvetica-Bold", value_size)
+    c.drawString(footer_x + 1.0 * mm, footer_y + 1.5 * mm, footer_value)
 
     c.save()
     return buffer.getvalue()
+
