@@ -51,6 +51,7 @@ from app.laboratory.schemas import (
 from app.notifications.service import notify_quote_users
 from app.laboratory.service import (
     TERMINAL_STATUSES,
+    apply_work_order_update,
     can_transition_status,
     find_or_create_equipment,
     list_work_orders_page,
@@ -510,22 +511,7 @@ async def update_work_order(
         user_id=user.id,
     )
 
-    work_order.equipment_id = equipment.id
-    work_order.customer_id = payload.customer_id
-    work_order.customer_name = payload.customer_name.strip()
-    work_order.equipment_serial = payload.serial_number
-    work_order.priority = payload.priority
-    work_order.reported_defect = payload.reported_defect
-    work_order.entry_condition = payload.entry_condition
-    work_order.accessories_received = payload.accessories_received
-    work_order.assigned_technician_id = payload.assigned_technician_id
-    work_order.entry_invoice = payload.entry_invoice
-    work_order.exit_invoice = payload.exit_invoice
-    work_order.parts_cost = payload.parts_cost or None
-    work_order.quoted_value = payload.quoted_value or None
-    work_order.approved_value = payload.approved_value or None
-    work_order.internal_notes = payload.internal_notes
-    work_order.customer_notes = payload.customer_notes
+    apply_work_order_update(work_order, payload, equipment_id=equipment.id)
     work_order.version += 1
 
     await db.commit()

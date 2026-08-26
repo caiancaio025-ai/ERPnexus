@@ -10,7 +10,9 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN pip install --no-cache-dir ".[auth,ai]" && chown -R nexus:nexus /app
+RUN pip install --no-cache-dir ".[auth,ai]" \
+    && mkdir -p /app/storage \
+    && chown -R nexus:nexus /app
 
 USER nexus
 EXPOSE 8000

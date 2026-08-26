@@ -147,6 +147,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [entries, setEntries] = useState<FinancialEntry[]>([]); const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [search, setSearch] = useState("");
+  const [serverSearch, setServerSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EntryStatus | "overdue" | "all">("all");
   const [eventFilter, setEventFilter] = useState<FinanceStatus | "all">("all");
   const [selected, setSelected] = useState<FinancialEntry | null>(null); const [modalOpen, setModalOpen] = useState(false);
@@ -179,7 +180,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     try {
       const [nextSummary, nextEntries] = await Promise.all([
         apiClient.request<FinanceSummary>(`/api/finance/summary?${scope}`),
-        apiClient.request<FinancialEntry[]>(`/api/finance/entries?${scope}${view === "income" ? "&entry_type=income" : view === "expense" ? "&entry_type=expense" : ""}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+        apiClient.request<FinancialEntry[]>(`/api/finance/entries?${scope}${view === "income" ? "&entry_type=income" : view === "expense" ? "&entry_type=expense" : ""}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${serverSearch ? `&search=${encodeURIComponent(serverSearch)}` : ""}`),
       ]);
       if (requestId !== requestSequence.current) return;
       setSummary(nextSummary); setEntries(nextEntries);
@@ -192,7 +193,15 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       if (requestId === requestSequence.current) setLoading(false);
     }
   }
-  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter]);
+  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter, serverSearch]);
+  useEffect(() => {
+    const term = search.trim();
+    // Ao apagar a pesquisa, remove o filtro do servidor imediatamente. Isso
+    // evita manter em memória somente o subconjunto retornado pela busca anterior.
+    if (term.length < 2) { setServerSearch(""); return; }
+    const timer = window.setTimeout(() => setServerSearch(term), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
   useEffect(() => { if (!error) return; const timer = window.setTimeout(() => setError(""), 6500); return () => window.clearTimeout(timer); }, [error]);
   useEffect(() => { localStorage.setItem("nexus.finance.sidebar", sidebarCollapsed ? "collapsed" : "expanded"); }, [sidebarCollapsed]);
 
@@ -297,7 +306,23 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       const entry = await apiClient.request<FinancialEntry>(selected ? `/api/finance/entries/${selected.id}` : "/api/finance/entries", {
         method: selected ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body,
       });
-      if (attachment) { const upload = new FormData(); upload.append("file", attachment); await apiClient.request(`/api/finance/entries/${entry.id}/attachment`, { method: "POST", body: upload }); }
+      if (attachment) {
+        const upload = new FormData();
+        upload.append("file", attachment);
+        try {
+          await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}/attachment`, { method: "POST", body: upload });
+        } catch (uploadReason) {
+          // O lançamento já foi persistido antes do envio do arquivo. Mantemos o
+          // usuário fora do risco de clicar em Salvar novamente e duplicar a receita/despesa.
+          setSelected(await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}`));
+          setAttachment(null);
+          setError(uploadReason instanceof Error
+            ? `Lançamento salvo, mas o anexo não foi enviado: ${uploadReason.message}`
+            : "Lançamento salvo, mas o anexo não foi enviado.");
+          await loadData();
+          return;
+        }
+      }
       setModalOpen(false); await loadData();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao salvar."); }
     finally { setSaving(false); }

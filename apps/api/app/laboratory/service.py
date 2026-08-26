@@ -21,6 +21,32 @@ def normalize_serial(serial: str | None) -> str | None:
     return re.sub(r"[^A-Z0-9]", "", serial.upper())
 
 
+def apply_work_order_update(work_order, payload, *, equipment_id: int) -> None:
+    """Aplica os campos editáveis da O.S., incluindo a empresa emissora.
+
+    Mantemos esta atribuição em um único ponto para impedir regressão em que
+    ``company_code`` era usado para localizar o equipamento, mas não era salvo
+    na própria O.S.
+    """
+    work_order.company_code = payload.company_code
+    work_order.equipment_id = equipment_id
+    work_order.customer_id = payload.customer_id
+    work_order.customer_name = payload.customer_name.strip()
+    work_order.equipment_serial = payload.serial_number
+    work_order.priority = payload.priority
+    work_order.reported_defect = payload.reported_defect
+    work_order.entry_condition = payload.entry_condition
+    work_order.accessories_received = payload.accessories_received
+    work_order.assigned_technician_id = payload.assigned_technician_id
+    work_order.entry_invoice = payload.entry_invoice
+    work_order.exit_invoice = payload.exit_invoice
+    work_order.parts_cost = payload.parts_cost or None
+    work_order.quoted_value = payload.quoted_value or None
+    work_order.approved_value = payload.approved_value or None
+    work_order.internal_notes = payload.internal_notes
+    work_order.customer_notes = payload.customer_notes
+
+
 async def next_work_order_number(db: AsyncSession) -> str:
     """Gera o próximo número de OS sem regressão após importações legadas.
 

@@ -1,7 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -36,6 +35,7 @@ from app.finance.schemas import (
     TransferOutput,
 )
 from app.finance.service import build_finance_summary
+from app.finance.storage import persist_attachment
 
 router = APIRouter(prefix="/finance", dependencies=[Depends(require_module("financeiro"))])
 UPLOAD_ROOT = Path(settings.storage_root) / "finance"
@@ -497,7 +497,7 @@ async def unsettle_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: Async
     return entry
 
 
-@router.post("/entries/{entry_id}/attachment")
+@router.post("/entries/{entry_id}/attachment", response_model=FinancialEntryOutput)
 async def upload_attachment(
     entry_id: int,
     file: UploadFile = REQUIRED_FILE,
@@ -513,11 +513,21 @@ async def upload_attachment(
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
 
-    suffix = detected.extension
-    directory = UPLOAD_ROOT / entry.company_code
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{entry.id}-{uuid4().hex}{suffix}"
-    target.write_bytes(content)
+    previous_path = Path(entry.attachment_path) if entry.attachment_path else None
+    try:
+        target = persist_attachment(
+            UPLOAD_ROOT,
+            company_code=entry.company_code,
+            entry_id=entry.id,
+            extension=detected.extension,
+            content=content,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Armazenamento de anexos indisponível. Verifique o volume /app/storage da API.",
+        ) from exc
+
     before = _snapshot(entry)
     entry.attachment_name, entry.attachment_path, entry.attachment_mime = (
         file.filename or target.name,
@@ -534,8 +544,21 @@ async def upload_attachment(
             _snapshot(entry),
         )
     )
-    await db.commit()
-    return {"filename": file.filename or target.name}
+    try:
+        await db.commit()
+        await db.refresh(entry)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+
+    if previous_path and previous_path != target:
+        try:
+            previous_path.unlink(missing_ok=True)
+        except OSError:
+            # A troca já foi confirmada no banco; falha de limpeza do arquivo
+            # antigo não deve invalidar o anexo novo.
+            pass
+    return entry
 
 
 @router.get("/entries/{entry_id}/attachment")
