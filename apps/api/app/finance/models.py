@@ -61,6 +61,8 @@ class FinancialEntry(Base):
     work_order_id: Mapped[int | None] = mapped_column(
         ForeignKey("laboratory_work_orders.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attachment_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     attachment_mime: Mapped[str | None] = mapped_column(String(100), nullable=True)

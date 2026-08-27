@@ -2,9 +2,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_module
@@ -14,6 +15,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.file_validation import InvalidUpload, validate_upload
 from app.customers.models import CustomerBillingProfile
+from app.finance.idempotency import finance_request_fingerprint
 from app.finance.models import FinancialAuditEvent, FinancialEntry, FinancialTransfer
 from app.laboratory.models import LaboratoryStatusHistory, LaboratoryWorkOrder
 from app.notifications.service import notify_modules
@@ -55,6 +57,7 @@ QUERY_END_DATE = Query(default=None)
 QUERY_DATE_BASIS = Query(default="posting")
 QUERY_OPTIONAL_INT = Query(default=None)
 REQUIRED_FILE = File(...)
+IDEMPOTENCY_KEY_HEADER = Header(default=None, alias="Idempotency-Key", max_length=128)
 
 
 def _snapshot(entry: FinancialEntry) -> dict:
@@ -339,7 +342,23 @@ async def create_entry(
     payload: FinancialEntryInput,
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
+    idempotency_key: str | None = IDEMPOTENCY_KEY_HEADER,
 ):
+    normalized_key = idempotency_key.strip() if idempotency_key else None
+    fingerprint = finance_request_fingerprint(payload) if normalized_key else None
+
+    if normalized_key:
+        existing = await db.scalar(
+            select(FinancialEntry).where(FinancialEntry.idempotency_key == normalized_key).limit(1)
+        )
+        if existing:
+            if existing.idempotency_fingerprint != fingerprint:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A mesma chave de envio foi reutilizada com dados diferentes.",
+                )
+            return existing
+
     data = payload.model_dump(exclude={"billing_confirmation"})
     work_order_id = data.pop("work_order_id", None)
     work_order = None
@@ -352,28 +371,33 @@ async def create_entry(
         billing_compliance = await _validate_billing_confirmation(
             db, work_order, payload.billing_confirmation
         )
-        duplicated = await db.scalar(
-            select(FinancialEntry.id).where(
-                FinancialEntry.work_order_id == work_order_id,
-                FinancialEntry.entry_type == "income",
-                FinancialEntry.is_deleted.is_(False),
-            ).limit(1)
-        )
-        if duplicated:
-            raise HTTPException(
-                status_code=409,
-                detail=f"A {work_order.number} já possui uma receita vinculada (lançamento #{duplicated}).",
-            )
 
     entry = FinancialEntry(
         **data,
         work_order_id=work_order_id,
         billing_compliance=billing_compliance,
+        idempotency_key=normalized_key,
+        idempotency_fingerprint=fingerprint,
         status="pending",
         created_by=user.id,
     )
     db.add(entry)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        if normalized_key:
+            existing = await db.scalar(
+                select(FinancialEntry).where(FinancialEntry.idempotency_key == normalized_key).limit(1)
+            )
+            if existing:
+                if existing.idempotency_fingerprint != fingerprint:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="A mesma chave de envio foi reutilizada com dados diferentes.",
+                    )
+                return existing
+        raise
     if work_order is not None:
         await _mark_work_order_invoiced(db, work_order, user.id, entry)
     db.add(

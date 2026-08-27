@@ -153,6 +153,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [selected, setSelected] = useState<FinancialEntry | null>(null); const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<EntryForm>(initialForm("universo_eletronica", "income"));
   const [attachment, setAttachment] = useState<File | null>(null); const [saving, setSaving] = useState(false);
+  const [createRequestKey, setCreateRequestKey] = useState(() => crypto.randomUUID());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [workOrders, setWorkOrders] = useState<FinanceWorkOrderOption[]>([]);
   const [workOrderSearch, setWorkOrderSearch] = useState("");
@@ -265,7 +266,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     });
   }, [entries, search, statusFilter]);
 
-  function openNew(type: EntryType) { setSelected(null); setForm(initialForm(selectedCompany, type)); setWorkOrderSearch(""); setWorkOrders([]); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
+  function openNew(type: EntryType) { setSelected(null); setCreateRequestKey(crypto.randomUUID()); setForm(initialForm(selectedCompany, type)); setWorkOrderSearch(""); setWorkOrders([]); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
   async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
     entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
     series: entry.series ?? "", nfse_number: entry.nfse_number ?? "", nfe_number: entry.nfe_number ?? "", counterparty_name: entry.counterparty_name, description: entry.description,
@@ -304,7 +305,12 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         billing_confirmation: form.entry_type === "income" && form.work_order_id ? billingConfirmation : null,
       });
       const entry = await apiClient.request<FinancialEntry>(selected ? `/api/finance/entries/${selected.id}` : "/api/finance/entries", {
-        method: selected ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body,
+        method: selected ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(!selected ? { "Idempotency-Key": createRequestKey } : {}),
+        },
+        body,
       });
       if (attachment) {
         const upload = new FormData();
