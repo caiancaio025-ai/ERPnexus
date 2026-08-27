@@ -33,3 +33,6 @@ legacy_import_report/
 NEXUS_LAB_ATUAL.zip
 *.tar
 *.tar.gz
+# Local database backup directories / dumps
+backups/
+*.dump

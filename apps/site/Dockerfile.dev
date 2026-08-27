@@ -6,4 +6,4 @@ RUN npm ci
 COPY . .
 
 EXPOSE 4321
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["sh", "-c", "rm -f /app/.astro/dev.json && exec npm run dev -- --host 0.0.0.0"]
