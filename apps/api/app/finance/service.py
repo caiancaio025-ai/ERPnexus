@@ -106,74 +106,103 @@ async def build_finance_summary(
 
     # Saldo acumulado é mantido apenas como dado técnico. Ele depende de saldo inicial
     # e do histórico completo de baixas, portanto não deve ser confundido com o resultado
-    # do período filtrado.
-    opening_balance = _money(await db.scalar(select(func.sum(FinancialAccount.opening_balance))))
-    settled_income_all = _money(await db.scalar(select(func.sum(FinancialEntry.amount)).where(
-        *scope, FinancialEntry.entry_type == "income", FinancialEntry.status == "received"
-    )))
-    settled_expense_all = _money(await db.scalar(select(func.sum(FinancialEntry.amount)).where(
-        *scope, FinancialEntry.entry_type == "expense", FinancialEntry.status == "paid"
-    )))
+    # do período filtrado. O saldo inicial preserva a semântica histórica: soma todas as
+    # contas cadastradas, enquanto as baixas respeitam o escopo da empresa selecionada.
+    opening_balance_sq = select(func.sum(FinancialAccount.opening_balance)).scalar_subquery()
+    global_row = (await db.execute(
+        select(
+            opening_balance_sq.label("opening_balance"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "income") & (FinancialEntry.status == "received"), FinancialEntry.amount),
+                else_=0,
+            )).label("settled_income_all"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "expense") & (FinancialEntry.status == "paid"), FinancialEntry.amount),
+                else_=0,
+            )).label("settled_expense_all"),
+        ).where(*scope)
+    )).one()
+    opening_balance = _money(global_row.opening_balance)
+    settled_income_all = _money(global_row.settled_income_all)
+    settled_expense_all = _money(global_row.settled_expense_all)
     current_balance = opening_balance + settled_income_all - settled_expense_all
 
-    period_rows = await db.execute(
-        select(FinancialEntry.entry_type, func.sum(FinancialEntry.amount), func.count(FinancialEntry.id))
-        .where(*period_scope)
-        .group_by(FinancialEntry.entry_type)
-    )
-    period_amounts: dict[str, Decimal] = {}
-    period_counts: dict[str, int] = {}
-    for kind, total, count in period_rows.all():
-        period_amounts[str(kind)] = _money(total)
-        period_counts[str(kind)] = int(count or 0)
-    period_income = period_amounts.get("income", ZERO)
-    period_expense = period_amounts.get("expense", ZERO)
+    # Todos os KPIs do período são calculados em uma única agregação. Isso preserva
+    # exatamente os mesmos filtros, mas elimina vários round-trips sequenciais ao banco.
+    period_row = (await db.execute(
+        select(
+            func.sum(case((FinancialEntry.entry_type == "income", FinancialEntry.amount), else_=0)).label("period_income"),
+            func.sum(case((FinancialEntry.entry_type == "expense", FinancialEntry.amount), else_=0)).label("period_expense"),
+            func.count(FinancialEntry.id).label("period_entry_count"),
+            func.sum(case((FinancialEntry.entry_type == "income", 1), else_=0)).label("period_income_count"),
+            func.sum(case((FinancialEntry.entry_type == "expense", 1), else_=0)).label("period_expense_count"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "income") & (FinancialEntry.status == "received"), FinancialEntry.amount),
+                else_=0,
+            )).label("settled_income"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "expense") & (FinancialEntry.status == "paid"), FinancialEntry.amount),
+                else_=0,
+            )).label("settled_expense"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "income") & (FinancialEntry.status == "pending"), FinancialEntry.amount),
+                else_=0,
+            )).label("pending_income"),
+            func.sum(case(
+                ((FinancialEntry.entry_type == "expense") & (FinancialEntry.status == "pending"), FinancialEntry.amount),
+                else_=0,
+            )).label("pending_expense"),
+            func.sum(case(
+                (
+                    (FinancialEntry.entry_type == "income")
+                    & (FinancialEntry.status == "pending")
+                    & (FinancialEntry.due_date < today),
+                    FinancialEntry.amount,
+                ),
+                else_=0,
+            )).label("overdue_income"),
+            func.sum(case(
+                (
+                    (FinancialEntry.entry_type == "expense")
+                    & (FinancialEntry.status == "pending")
+                    & (FinancialEntry.due_date < today),
+                    FinancialEntry.amount,
+                ),
+                else_=0,
+            )).label("overdue_expense"),
+            func.sum(case(
+                ((FinancialEntry.status == "pending") & (FinancialEntry.due_date < today), 1),
+                else_=0,
+            )).label("overdue_count"),
+            func.sum(case(
+                (
+                    (FinancialEntry.status == "pending")
+                    & (FinancialEntry.due_date >= today)
+                    & (FinancialEntry.due_date <= due_limit),
+                    1,
+                ),
+                else_=0,
+            )).label("due_soon_count"),
+        ).where(*period_scope)
+    )).one()
+
+    period_income = _money(period_row.period_income)
+    period_expense = _money(period_row.period_expense)
     period_result = period_income - period_expense
-
-    settled_rows = await db.execute(
-        select(FinancialEntry.entry_type, func.sum(FinancialEntry.amount))
-        .where(
-            *period_scope,
-            ((FinancialEntry.entry_type == "income") & (FinancialEntry.status == "received"))
-            | ((FinancialEntry.entry_type == "expense") & (FinancialEntry.status == "paid")),
-        )
-        .group_by(FinancialEntry.entry_type)
-    )
-    settled = {str(kind): _money(total) for kind, total in settled_rows.all()}
-    settled_income = settled.get("income", ZERO)
-    settled_expense = settled.get("expense", ZERO)
-
-    pending_rows = await db.execute(
-        select(FinancialEntry.entry_type, func.sum(FinancialEntry.amount))
-        .where(*period_scope, FinancialEntry.status == "pending")
-        .group_by(FinancialEntry.entry_type)
-    )
-    pending = {str(kind): _money(total) for kind, total in pending_rows.all()}
-    pending_income = pending.get("income", ZERO)
-    pending_expense = pending.get("expense", ZERO)
+    period_entry_count = int(period_row.period_entry_count or 0)
+    period_income_count = int(period_row.period_income_count or 0)
+    period_expense_count = int(period_row.period_expense_count or 0)
+    settled_income = _money(period_row.settled_income)
+    settled_expense = _money(period_row.settled_expense)
+    pending_income = _money(period_row.pending_income)
+    pending_expense = _money(period_row.pending_expense)
+    overdue_income = _money(period_row.overdue_income)
+    overdue_expense = _money(period_row.overdue_expense)
+    overdue_count = int(period_row.overdue_count or 0)
+    due_soon_count = int(period_row.due_soon_count or 0)
 
     # Projetado do filtro: realizado líquido + pendências líquidas do mesmo período.
     projected_balance = (settled_income - settled_expense) + (pending_income - pending_expense)
-
-    overdue_rows = await db.execute(
-        select(FinancialEntry.entry_type, func.sum(FinancialEntry.amount), func.count(FinancialEntry.id))
-        .where(*period_scope, FinancialEntry.status == "pending", FinancialEntry.due_date < today)
-        .group_by(FinancialEntry.entry_type)
-    )
-    overdue_amounts: dict[str, Decimal] = {}
-    overdue_counts: dict[str, int] = {}
-    for kind, total, count in overdue_rows.all():
-        overdue_amounts[str(kind)] = _money(total)
-        overdue_counts[str(kind)] = int(count or 0)
-    overdue_income = overdue_amounts.get("income", ZERO)
-    overdue_expense = overdue_amounts.get("expense", ZERO)
-    overdue_count = sum(overdue_counts.values())
-
-    due_soon_count = int(await db.scalar(
-        select(func.count()).select_from(FinancialEntry).where(
-            *period_scope, FinancialEntry.status == "pending", FinancialEntry.due_date.between(today, due_limit)
-        )
-    ) or 0)
 
     entries = (await db.scalars(
         select(FinancialEntry).where(*period_scope)
@@ -229,9 +258,9 @@ async def build_finance_summary(
         pending_expense=float(pending_expense),
         overdue_income=float(overdue_income),
         overdue_expense=float(overdue_expense),
-        period_entry_count=sum(period_counts.values()),
-        period_income_count=period_counts.get("income", 0),
-        period_expense_count=period_counts.get("expense", 0),
+        period_entry_count=period_entry_count,
+        period_income_count=period_income_count,
+        period_expense_count=period_expense_count,
         period_start=period_start,
         period_end=period_end,
         date_basis=date_basis,
@@ -239,8 +268,8 @@ async def build_finance_summary(
         overdue_count=overdue_count,
         due_soon_count=due_soon_count,
         kpis=[
-            FinanceKpi(label="Receitas filtradas", value=float(period_income), detail=f"{period_counts.get('income', 0)} lançamentos", tone="positive"),
-            FinanceKpi(label="Saídas filtradas", value=float(period_expense), detail=f"{period_counts.get('expense', 0)} lançamentos", tone="negative"),
+            FinanceKpi(label="Receitas filtradas", value=float(period_income), detail=f"{period_income_count} lançamentos", tone="positive"),
+            FinanceKpi(label="Saídas filtradas", value=float(period_expense), detail=f"{period_expense_count} lançamentos", tone="negative"),
             FinanceKpi(label="Resultado filtrado", value=float(period_result), detail=detail, tone="positive" if period_result >= 0 else "negative"),
             FinanceKpi(label="Recebido no filtro", value=float(settled_income), detail="Receitas já baixadas", tone="positive"),
             FinanceKpi(label="Pago no filtro", value=float(settled_expense), detail="Saídas já baixadas", tone="negative"),
