@@ -155,11 +155,20 @@ async def build_finance_summary(
     # Projetado do filtro: realizado líquido + pendências líquidas do mesmo período.
     projected_balance = (settled_income - settled_expense) + (pending_income - pending_expense)
 
-    overdue_count = int(await db.scalar(
-        select(func.count()).select_from(FinancialEntry).where(
-            *period_scope, FinancialEntry.status == "pending", FinancialEntry.due_date < today
-        )
-    ) or 0)
+    overdue_rows = await db.execute(
+        select(FinancialEntry.entry_type, func.sum(FinancialEntry.amount), func.count(FinancialEntry.id))
+        .where(*period_scope, FinancialEntry.status == "pending", FinancialEntry.due_date < today)
+        .group_by(FinancialEntry.entry_type)
+    )
+    overdue_amounts: dict[str, Decimal] = {}
+    overdue_counts: dict[str, int] = {}
+    for kind, total, count in overdue_rows.all():
+        overdue_amounts[str(kind)] = _money(total)
+        overdue_counts[str(kind)] = int(count or 0)
+    overdue_income = overdue_amounts.get("income", ZERO)
+    overdue_expense = overdue_amounts.get("expense", ZERO)
+    overdue_count = sum(overdue_counts.values())
+
     due_soon_count = int(await db.scalar(
         select(func.count()).select_from(FinancialEntry).where(
             *period_scope, FinancialEntry.status == "pending", FinancialEntry.due_date.between(today, due_limit)
@@ -218,6 +227,8 @@ async def build_finance_summary(
         settled_expense=float(settled_expense),
         pending_income=float(pending_income),
         pending_expense=float(pending_expense),
+        overdue_income=float(overdue_income),
+        overdue_expense=float(overdue_expense),
         period_entry_count=sum(period_counts.values()),
         period_income_count=period_counts.get("income", 0),
         period_expense_count=period_counts.get("expense", 0),

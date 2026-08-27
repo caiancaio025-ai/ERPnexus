@@ -31,6 +31,7 @@ from app.finance.schemas import (
     FinanceWorkOrderOption,
     FinancialEntryInput,
     FinancialEntryOutput,
+    FinancialEntryPage,
     FinancialEntryUpdate,
     SettlementInput,
     TransferInput,
@@ -56,6 +57,9 @@ QUERY_START_DATE = Query(default=None)
 QUERY_END_DATE = Query(default=None)
 QUERY_DATE_BASIS = Query(default="posting")
 QUERY_OPTIONAL_INT = Query(default=None)
+QUERY_PAGE = Query(default=1, ge=1)
+QUERY_PAGE_SIZE = Query(default=50, ge=10, le=200)
+QUERY_OVERDUE = Query(default=False)
 REQUIRED_FILE = File(...)
 IDEMPOTENCY_KEY_HEADER = Header(default=None, alias="Idempotency-Key", max_length=128)
 
@@ -259,24 +263,32 @@ async def summary(
     )
 
 
-@router.get("/entries", response_model=list[FinancialEntryOutput])
+@router.get("/entries", response_model=FinancialEntryPage)
 async def list_entries(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE, consolidated: bool = QUERY_CONSOLIDATED,
     entry_type: EntryType | None = QUERY_ENTRY_TYPE,
     entry_status: EntryStatus | None = QUERY_ENTRY_STATUS,
+    overdue: bool = QUERY_OVERDUE,
     year: int | None = QUERY_YEAR, month: int | None = QUERY_MONTH,
     start_date: date | None = QUERY_START_DATE, end_date: date | None = QUERY_END_DATE,
     date_basis: DateBasis = QUERY_DATE_BASIS,
     search: str | None = QUERY_SEARCH,
+    page: int = QUERY_PAGE, page_size: int = QUERY_PAGE_SIZE,
     _: User = CURRENT_USER_DEP, db: AsyncSession = DB_DEP,
 ):
-    query = select(FinancialEntry).where(FinancialEntry.is_deleted.is_(False))
+    if overdue and entry_status and entry_status != "pending":
+        raise HTTPException(status_code=422, detail="Filtro de atraso só pode ser combinado com status pendente.")
+
+    conditions = [FinancialEntry.is_deleted.is_(False)]
     if company_code and not consolidated:
-        query = query.where(FinancialEntry.company_code == company_code)
+        conditions.append(FinancialEntry.company_code == company_code)
     if entry_type:
-        query = query.where(FinancialEntry.entry_type == entry_type)
+        conditions.append(FinancialEntry.entry_type == entry_type)
     if entry_status:
-        query = query.where(FinancialEntry.status == entry_status)
+        conditions.append(FinancialEntry.status == entry_status)
+    if overdue:
+        conditions.extend([FinancialEntry.status == "pending", FinancialEntry.due_date < date.today()])
+
     date_column = {
         "posting": FinancialEntry.posting_date,
         "issue": FinancialEntry.issue_date,
@@ -286,29 +298,45 @@ async def list_entries(
     if start_date or end_date:
         if start_date and end_date and end_date < start_date:
             raise HTTPException(status_code=422, detail="Data final deve ser igual ou posterior à data inicial.")
-        query = query.where(date_column.is_not(None))
+        conditions.append(date_column.is_not(None))
         if start_date:
-            query = query.where(date_column >= start_date)
+            conditions.append(date_column >= start_date)
         if end_date:
-            query = query.where(date_column <= end_date)
+            conditions.append(date_column <= end_date)
     elif year:
-        query = query.where(date_column.is_not(None), date_column >= date(year, month or 1, 1))
+        conditions.extend([date_column.is_not(None), date_column >= date(year, month or 1, 1)])
         end = date(year + 1, 1, 1) if not month or month == 12 else date(year, month + 1, 1)
-        query = query.where(date_column < end)
+        conditions.append(date_column < end)
+
     if search:
         term = f"%{search.strip()}%"
-        query = query.where(or_(
+        work_order_ids = select(LaboratoryWorkOrder.id).where(LaboratoryWorkOrder.number.ilike(term))
+        conditions.append(or_(
             FinancialEntry.description.ilike(term), FinancialEntry.counterparty_name.ilike(term),
             FinancialEntry.series.ilike(term),
             FinancialEntry.document_number.ilike(term),
             FinancialEntry.nfse_number.ilike(term),
             FinancialEntry.nfe_number.ilike(term), FinancialEntry.bank_name.ilike(term),
+            FinancialEntry.work_order_id.in_(work_order_ids),
         ))
-    ordered = query.order_by(
-        date_column.desc(),
-        FinancialEntry.id.desc(),
-    ).limit(5000)
-    return list((await db.scalars(ordered)).all())
+
+    total = int(await db.scalar(
+        select(func.count()).select_from(FinancialEntry).where(*conditions)
+    ) or 0)
+    pages = (total + page_size - 1) // page_size if total else 0
+    resolved_page = min(page, max(pages, 1))
+    offset = (resolved_page - 1) * page_size
+    ordered = (
+        select(FinancialEntry)
+        .where(*conditions)
+        .order_by(date_column.desc(), FinancialEntry.id.desc())
+        .limit(page_size)
+        .offset(offset)
+    )
+    items = list((await db.scalars(ordered)).all())
+    return FinancialEntryPage(
+        items=items, page=resolved_page, page_size=page_size, total=total, pages=pages
+    )
 
 
 @router.get("/date-bounds")

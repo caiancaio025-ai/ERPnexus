@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownRight, ArrowLeftRight, ArrowUpRight, Bell, Building2, CalendarRange,
   CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Download, Eye, FileSearch,
@@ -12,7 +12,7 @@ import { CashFlowChart, CompositionDonut } from "./components/FinanceCharts";
 import type { AuthUser } from "../auth/AuthCard";
 import type {
   AuditEvent, BillingConfirmation, BillingReadiness, CompanyCode, CompanyFilter, DateBasis, EntryStatus, EntryType, ExpenseKind,
-  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, InvoiceType,
+  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, InvoiceType,
 } from "./types";
 import "./finance.css";
 
@@ -81,10 +81,9 @@ const dateBasisLabels: Record<DateBasis, string> = {
 };
 
 
-function FinancePeriodSummary({ view, summary, entries, periodLabel }: { view: FinanceView; summary: FinanceSummary; entries: FinancialEntry[]; periodLabel: string }) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const overdueIncome = entries.filter((item) => item.entry_type === "income" && item.status === "pending" && new Date(`${item.due_date}T00:00:00`) < today).reduce((total, item) => total + Number(item.amount), 0);
-  const overdueExpense = entries.filter((item) => item.entry_type === "expense" && item.status === "pending" && new Date(`${item.due_date}T00:00:00`) < today).reduce((total, item) => total + Number(item.amount), 0);
+function FinancePeriodSummary({ view, summary, periodLabel }: { view: FinanceView; summary: FinanceSummary; periodLabel: string }) {
+  const overdueIncome = summary.overdue_income;
+  const overdueExpense = summary.overdue_expense;
 
   if (view === "income") return <>
     <section className="finance-kpis finance-kpis--classic">
@@ -146,6 +145,8 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [dateBounds, setDateBounds] = useState<FinanceDateBounds | null>(null);
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [entries, setEntries] = useState<FinancialEntry[]>([]); const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [entryPage, setEntryPage] = useState(1);
+  const [entryPagination, setEntryPagination] = useState({ total: 0, pages: 0, pageSize: 50 });
   const [search, setSearch] = useState("");
   const [serverSearch, setServerSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EntryStatus | "overdue" | "all">("all");
@@ -173,34 +174,42 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     const requestId = ++requestSequence.current;
     if (!startDate || !endDate) return;
     if (endDate < startDate) {
-      setSummary(null); setEntries([]); setError("A data final não pode ser anterior à data inicial.");
+      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 }); setError("A data final não pode ser anterior à data inicial.");
       return;
     }
     setLoading(true); setError("");
     const scope = queryScope(company, startDate, endDate, dateBasis);
+    const isLedger = view === "income" || view === "expense";
+    const entryQuery = `${scope}&entry_type=${view === "income" ? "income" : "expense"}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${statusFilter === "overdue" ? "&overdue=true" : ""}${serverSearch ? `&search=${encodeURIComponent(serverSearch)}` : ""}&page=${entryPage}&page_size=50`;
     try {
       const [nextSummary, nextEntries] = await Promise.all([
         apiClient.request<FinanceSummary>(`/api/finance/summary?${scope}`),
-        apiClient.request<FinancialEntry[]>(`/api/finance/entries?${scope}${view === "income" ? "&entry_type=income" : view === "expense" ? "&entry_type=expense" : ""}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${serverSearch ? `&search=${encodeURIComponent(serverSearch)}` : ""}`),
+        isLedger
+          ? apiClient.request<FinancialEntryPage>(`/api/finance/entries?${entryQuery}`)
+          : Promise.resolve<FinancialEntryPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 0 }),
       ]);
       if (requestId !== requestSequence.current) return;
-      setSummary(nextSummary); setEntries(nextEntries);
+      setSummary(nextSummary);
+      setEntries(nextEntries.items);
+      setEntryPagination({ total: nextEntries.total, pages: nextEntries.pages, pageSize: nextEntries.page_size });
+      if (isLedger && nextEntries.page !== entryPage) setEntryPage(nextEntries.page);
       if (view === "audit") setAudit(await apiClient.request<AuditEvent[]>(`/api/finance/audit?start_date=${startDate}&end_date=${endDate}`));
     } catch (reason) {
       if (requestId !== requestSequence.current) return;
-      setSummary(null); setEntries([]);
+      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 });
       setError(reason instanceof Error ? reason.message : "Não foi possível concluir a operação.");
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
   }
-  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter, serverSearch]);
+  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter, serverSearch, entryPage]);
+  useEffect(() => { setEntryPage(1); }, [company, startDate, endDate, dateBasis, view, statusFilter]);
   useEffect(() => {
     const term = search.trim();
     // Ao apagar a pesquisa, remove o filtro do servidor imediatamente. Isso
     // evita manter em memória somente o subconjunto retornado pela busca anterior.
-    if (term.length < 2) { setServerSearch(""); return; }
-    const timer = window.setTimeout(() => setServerSearch(term), 250);
+    if (term.length < 2) { setServerSearch(""); setEntryPage(1); return; }
+    const timer = window.setTimeout(() => { setServerSearch(term); setEntryPage(1); }, 250);
     return () => window.clearTimeout(timer);
   }, [search]);
   useEffect(() => { if (!error) return; const timer = window.setTimeout(() => setError(""), 6500); return () => window.clearTimeout(timer); }, [error]);
@@ -242,29 +251,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   }, [modalOpen, form.entry_type, form.work_order_id, workOrders]);
 
   const filteredEvents = (events: FinanceEvent[]) => eventFilter === "all" ? events : events.filter((item) => item.status === eventFilter);
-  const visibleEntries = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return entries.filter((item) => {
-      const matchesSearch = !term || [
-        item.description,
-        item.counterparty_name,
-        item.series,
-        item.nfse_number,
-        item.nfe_number,
-        item.document_number,
-        item.bank_name,
-      ].some((value) => value?.toLowerCase().includes(term));
-
-      const dueDate = new Date(`${item.due_date}T00:00:00`);
-      const isOverdue = item.status === "pending" && dueDate < today;
-      const matchesStatus = statusFilter !== "overdue" || isOverdue;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [entries, search, statusFilter]);
+  const visibleEntries = entries;
 
   function openNew(type: EntryType) { setSelected(null); setCreateRequestKey(crypto.randomUUID()); setForm(initialForm(selectedCompany, type)); setWorkOrderSearch(""); setWorkOrders([]); setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true); }
   async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
@@ -400,7 +387,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       {error && <div className="finance-toast" role="alert"><TriangleAlert size={18}/><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar"><X size={16}/></button></div>}
       {loading && <div className="finance-filter-loading">Atualizando período…</div>}
 
-      {summary && !loading && <FinancePeriodSummary view={view} summary={summary} entries={entries} periodLabel={periodLabel} />}
+      {summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
 
       {view === "operations" && summary && <>
         <CashFlowChart points={summary.cash_flow} />
@@ -410,8 +397,8 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <div className="event-column expense-column"><header><div><ArrowDownRight/><span>Saídas</span></div><strong>{money(summary.period_expense)}</strong></header><div className="finance-events">{filteredEvents(summary.expense_events).map((event) => <EventCard key={event.id} event={event} onOpen={openEntry}/>) || null}{!filteredEvents(summary.expense_events).length && <p className="finance-empty">Nenhuma saída no período.</p>}</div></div></section>
       </>}
 
-      {(view === "income" || view === "expense") && <section className="ledger-panel"><header><div><span>{view === "income" ? "CONTAS A RECEBER" : "CONTAS A PAGAR"}</span><h2>{view === "income" ? "Receitas" : "Saídas"} do período</h2></div><div className="ledger-tools"><label><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente, série, NFS-e ou NF-e"/></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as EntryStatus | "overdue" | "all")}><option value="all">Todos os status</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option><option value={view === "income" ? "received" : "paid"}>Baixado</option></select></div></header>
-        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>Série</span><span>NFS-e</span><span>NF-e</span><span>Emissão</span><span>Vencimento</span><span>Valor</span><span>Status</span><span/></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <button className="ledger-row ledger-row--detailed" key={entry.id} onClick={() => openEntry(entry.id)}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}</small></span><span>{entry.series || "—"}</span><span>{entry.nfse_number || "—"}</span><span>{entry.nfe_number || "—"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><ChevronRight size={17}/></button>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lançamento encontrado.</p>}</div></section>}
+      {(view === "income" || view === "expense") && <section className="ledger-panel"><header><div><span>{view === "income" ? "CONTAS A RECEBER" : "CONTAS A PAGAR"}</span><h2>{view === "income" ? "Receitas" : "Saídas"} do período</h2></div><div className="ledger-tools"><label><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente, OS, série, NFS-e ou NF-e"/></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as EntryStatus | "overdue" | "all")}><option value="all">Todos os status</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option><option value={view === "income" ? "received" : "paid"}>Baixado</option></select></div></header>
+        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>Série</span><span>NFS-e</span><span>NF-e</span><span>Emissão</span><span>Vencimento</span><span>Valor</span><span>Status</span><span/></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <button className="ledger-row ledger-row--detailed" key={entry.id} onClick={() => openEntry(entry.id)}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}</small></span><span>{entry.series || "—"}</span><span>{entry.nfse_number || "—"}</span><span>{entry.nfe_number || "—"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><ChevronRight size={17}/></button>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lançamento encontrado.</p>}</div><footer className="finance-pagination"><span>{entryPagination.total ? `${(entryPage - 1) * entryPagination.pageSize + 1}–${Math.min(entryPage * entryPagination.pageSize, entryPagination.total)} de ${entryPagination.total} lançamentos` : "0 lançamentos"}</span><div><button type="button" disabled={entryPage <= 1 || loading} onClick={() => setEntryPage((current) => Math.max(1, current - 1))}><ChevronLeft size={16}/>Anterior</button><strong>Página {entryPagination.pages ? entryPage : 0} de {entryPagination.pages}</strong><button type="button" disabled={entryPagination.pages === 0 || entryPage >= entryPagination.pages || loading} onClick={() => setEntryPage((current) => current + 1)}>Próxima<ChevronRight size={16}/></button></div></footer></section>}
 
       {view === "forecast" && summary && <>
         <CashFlowChart

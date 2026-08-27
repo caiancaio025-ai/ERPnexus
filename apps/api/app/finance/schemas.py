@@ -48,6 +48,8 @@ class FinanceSummary(BaseModel):
     settled_expense: float
     pending_income: float
     pending_expense: float
+    overdue_income: float
+    overdue_expense: float
     period_entry_count: int
     period_income_count: int
     period_expense_count: int
@@ -190,6 +192,14 @@ class FinancialEntryOutput(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class FinancialEntryPage(BaseModel):
+    items: list[FinancialEntryOutput]
+    page: int
+    page_size: int
+    total: int
+    pages: int
 
 
 class SettlementInput(BaseModel):

@@ -18,6 +18,7 @@ export type CashFlowPoint = { label: string; income: number; expense: number; ba
 export type FinanceSummary = {
   current_balance: number; period_income: number; period_expense: number; period_result: number;
   settled_income: number; settled_expense: number; pending_income: number; pending_expense: number;
+  overdue_income: number; overdue_expense: number;
   period_entry_count: number; period_income_count: number; period_expense_count: number;
   period_start: string; period_end: string; date_basis: DateBasis; projected_balance: number;
   overdue_count: number; due_soon_count: number; kpis: FinanceKpi[]; urgent_events: FinanceEvent[];
@@ -33,6 +34,14 @@ export type FinancialEntry = {
   payment_code?: string | null; notes?: string | null; work_order_id?: number | null; billing_compliance?: Record<string, unknown> | null; attachment_name?: string | null;
   attachment_mime?: string | null; created_at: string; updated_at: string;
 };
+export type FinancialEntryPage = {
+  items: FinancialEntry[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
 export type AuditEvent = {
   id: number; entity_type: string; entity_id: number; action: string; description: string;
   user_id: number; user_name: string; before_data?: Record<string, unknown> | null;
