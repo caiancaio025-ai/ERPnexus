@@ -3,7 +3,6 @@ from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
 from urllib.parse import quote
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -28,6 +27,12 @@ from app.laboratory.models import (
     LaboratoryWorkOrder,
 )
 from app.laboratory.quote_pdf import label_pdf, quote_pdf
+from app.laboratory.storage import (
+    commit_laboratory_document,
+    delete_laboratory_document as delete_laboratory_document_storage,
+    persist_laboratory_document,
+    resolve_laboratory_storage_path,
+)
 from app.laboratory.schemas import (
     CompanyCode,
     CustomerInput,
@@ -809,11 +814,19 @@ async def upload_document(
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
 
-    suffix = detected.extension
-    directory = UPLOAD_ROOT / work_order.company_code / work_order.number
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{uuid4().hex}{suffix}"
-    target.write_bytes(content)
+    try:
+        target = persist_laboratory_document(
+            UPLOAD_ROOT,
+            company_code=work_order.company_code,
+            work_order_number=work_order.number,
+            extension=detected.extension,
+            content=content,
+        )
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Armazenamento de documentos indisponível. Verifique o volume /app/storage da API.",
+        ) from exc
 
     document = LaboratoryDocument(
         work_order_id=work_order.id,
@@ -825,9 +838,12 @@ async def upload_document(
         checksum_sha256=sha256(content).hexdigest(),
         uploaded_by=user.id,
     )
-    db.add(document)
-    await db.commit()
-    await db.refresh(document)
+    await commit_laboratory_document(
+        db,
+        document,
+        root=UPLOAD_ROOT,
+        stored_path=target,
+    )
     return document
 
 
@@ -838,11 +854,17 @@ async def preview_document(
     db: AsyncSession = DB_DEP,
 ):
     document = await db.get(LaboratoryDocument, document_id)
-    if not document or not Path(document.storage_path).is_file():
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+    try:
+        path = resolve_laboratory_storage_path(UPLOAD_ROOT, document.storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Caminho de armazenamento inválido.") from exc
+    if not path.is_file():
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
     safe_name = quote(document.original_name)
     return FileResponse(
-        document.storage_path,
+        path,
         media_type=document.mime_type,
         headers={
             "Content-Disposition": f"inline; filename*=UTF-8''{safe_name}",
@@ -861,11 +883,10 @@ async def delete_document(
     document = await db.get(LaboratoryDocument, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
-    path = Path(document.storage_path)
-    await db.delete(document)
-    await db.commit()
-    if path.is_file():
-        path.unlink()
+    try:
+        await delete_laboratory_document_storage(db, document, root=UPLOAD_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Caminho de armazenamento inválido.") from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # ------------------------------------------------------- material requests ---
