@@ -184,3 +184,96 @@ async def list_work_orders_page(
 
 def total_pages(total: int, page_size: int) -> int:
     return ceil(total / page_size) if total else 0
+
+
+SUMMARY_FIELDS = (
+    "total_open",
+    "analyzed",
+    "awaiting_approval",
+    "approved",
+    "awaiting_analysis",
+    "in_repair",
+    "in_testing",
+    "high_priority",
+    "completed_month",
+)
+
+
+async def work_order_period_range(
+    db: AsyncSession,
+    *,
+    company_code: str | None = None,
+) -> tuple[date | None, date | None]:
+    """Return latest/earliest opening dates with a single database round-trip."""
+    filters = []
+    if company_code:
+        filters.append(LaboratoryWorkOrder.company_code == company_code)
+
+    statement = select(
+        func.max(LaboratoryWorkOrder.opened_at).label("latest"),
+        func.min(LaboratoryWorkOrder.opened_at).label("earliest"),
+    ).where(*filters)
+    row = (await db.execute(statement)).one()
+    return row.latest, row.earliest
+
+
+async def work_order_summary_counts(
+    db: AsyncSession,
+    *,
+    company_code: str | None = None,
+    opened_from: date | None = None,
+    opened_before: date | None = None,
+    completed_from: date,
+) -> dict[str, int]:
+    """Build every Laboratory summary KPI in one aggregate query.
+
+    ``opened_from``/``opened_before`` scope every KPI exactly like the legacy
+    endpoint. ``completed_from`` only adds the historical current-month
+    completion condition used by ``completed_month``.
+    """
+    filters = []
+    if company_code:
+        filters.append(LaboratoryWorkOrder.company_code == company_code)
+    if opened_from is not None:
+        filters.append(LaboratoryWorkOrder.opened_at >= opened_from)
+    if opened_before is not None:
+        filters.append(LaboratoryWorkOrder.opened_at < opened_before)
+
+    statement = select(
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES))
+        .label("total_open"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status == "in_analysis")
+        .label("analyzed"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status == "awaiting_approval")
+        .label("awaiting_approval"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status == "approved")
+        .label("approved"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status.in_(("received", "awaiting_analysis")))
+        .label("awaiting_analysis"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status == "in_repair")
+        .label("in_repair"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(LaboratoryWorkOrder.status == "in_testing")
+        .label("in_testing"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(
+            LaboratoryWorkOrder.priority.in_(("high", "urgent")),
+            LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES),
+        )
+        .label("high_priority"),
+        func.count(LaboratoryWorkOrder.id)
+        .filter(
+            LaboratoryWorkOrder.status.in_(("completed", "delivered")),
+            LaboratoryWorkOrder.completed_at >= completed_from,
+        )
+        .label("completed_month"),
+    ).where(*filters)
+
+    row = (await db.execute(statement)).one()
+    return {field: int(getattr(row, field) or 0) for field in SUMMARY_FIELDS}

@@ -62,6 +62,8 @@ from app.laboratory.service import (
     list_work_orders_page,
     next_work_order_number,
     total_pages,
+    work_order_period_range,
+    work_order_summary_counts,
 )
 
 router = APIRouter(prefix="/laboratory", dependencies=[Depends(require_module("laboratorio"))])
@@ -221,9 +223,7 @@ async def laboratory_periods(
     _: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    filters = [LaboratoryWorkOrder.company_code == company_code] if company_code else []
-    latest = await db.scalar(select(func.max(LaboratoryWorkOrder.opened_at)).where(*filters))
-    earliest = await db.scalar(select(func.min(LaboratoryWorkOrder.opened_at)).where(*filters))
+    latest, earliest = await work_order_period_range(db, company_code=company_code)
     reference = latest or date.today()
     first_year = earliest.year if earliest else reference.year
     years = list(range(reference.year, first_year - 1, -1))
@@ -244,39 +244,15 @@ async def summary(
 ):
     today = date.today()
     month_start = today.replace(day=1)
-    base = [LaboratoryWorkOrder.company_code == company_code] if company_code else []
     period_start, period_end = _period_bounds(year, month)
-    if period_start is not None and period_end is not None:
-        base.extend((
-            LaboratoryWorkOrder.opened_at >= period_start,
-            LaboratoryWorkOrder.opened_at < period_end,
-        ))
-
-    async def count_for(*extra) -> int:
-        count = await db.scalar(
-            select(func.count(LaboratoryWorkOrder.id)).where(*base, *extra)
-        )
-        return int(count or 0)
-
-    return WorkOrderSummary(
-        total_open=await count_for(LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES)),
-        analyzed=await count_for(LaboratoryWorkOrder.status == "in_analysis"),
-        awaiting_approval=await count_for(LaboratoryWorkOrder.status == "awaiting_approval"),
-        approved=await count_for(LaboratoryWorkOrder.status == "approved"),
-        awaiting_analysis=await count_for(
-            LaboratoryWorkOrder.status.in_(("received", "awaiting_analysis"))
-        ),
-        in_repair=await count_for(LaboratoryWorkOrder.status == "in_repair"),
-        in_testing=await count_for(LaboratoryWorkOrder.status == "in_testing"),
-        high_priority=await count_for(
-            LaboratoryWorkOrder.priority.in_(("high", "urgent")),
-            LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES),
-        ),
-        completed_month=await count_for(
-            LaboratoryWorkOrder.status.in_(("completed", "delivered")),
-            LaboratoryWorkOrder.completed_at >= month_start,
-        ),
+    counts = await work_order_summary_counts(
+        db,
+        company_code=company_code,
+        opened_from=period_start,
+        opened_before=period_end,
+        completed_from=month_start,
     )
+    return WorkOrderSummary(**counts)
 
 
 # -------------------------------------------------------------- customers --
