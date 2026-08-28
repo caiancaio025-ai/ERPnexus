@@ -2,7 +2,6 @@ from datetime import date
 from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -30,6 +29,12 @@ from app.customers.models import (
     CustomerContact,
     CustomerDocument,
     CustomerNote,
+)
+from app.customers.storage import (
+    commit_customer_document,
+    delete_customer_document as delete_customer_document_storage,
+    persist_customer_document,
+    resolve_customer_storage_path,
 )
 from app.customers.schemas import (
     BillingInput,
@@ -374,10 +379,18 @@ async def upload_document(
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     checksum = sha256(content).hexdigest()
-    folder = UPLOAD_ROOT / str(customer_id)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{uuid4().hex}{detected.extension}"
-    path.write_bytes(content)
+    try:
+        path = persist_customer_document(
+            UPLOAD_ROOT,
+            customer_id=customer_id,
+            extension=detected.extension,
+            content=content,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Armazenamento de documentos indisponível. Verifique o volume /app/storage da API.",
+        ) from exc
     document = CustomerDocument(
         customer_id=customer_id,
         category=category,
@@ -392,9 +405,12 @@ async def upload_document(
         notes=notes,
         uploaded_by=user.id,
     )
-    db.add(document)
-    await db.commit()
-    await db.refresh(document)
+    await commit_customer_document(
+        db,
+        document,
+        root=UPLOAD_ROOT,
+        stored_path=path,
+    )
     return document
 
 
@@ -405,7 +421,10 @@ async def preview_document(
     document = await db.get(CustomerDocument, document_id)
     if not document or document.customer_id != customer_id:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
-    path = Path(document.storage_path)
+    try:
+        path = resolve_customer_storage_path(UPLOAD_ROOT, document.storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Caminho de armazenamento inválido.") from exc
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado no storage.")
     return FileResponse(path, media_type=document.mime_type, filename=document.original_name)
@@ -420,8 +439,8 @@ async def delete_document(
     document = await db.get(CustomerDocument, document_id)
     if not document or document.customer_id != customer_id:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
-    path = Path(document.storage_path)
-    await db.delete(document)
-    await db.commit()
-    path.unlink(missing_ok=True)
+    try:
+        await delete_customer_document_storage(db, document, root=UPLOAD_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Caminho de armazenamento inválido.") from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
