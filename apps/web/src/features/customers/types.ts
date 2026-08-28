@@ -11,6 +11,14 @@ export type CustomerListItem = {
   is_active: boolean;
 };
 
+export type CustomerPage = {
+  items: CustomerListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
 export type CustomerContact = {
   id: number;
   customer_id: number;

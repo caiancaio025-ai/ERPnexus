@@ -35,6 +35,7 @@ import type {
   CustomerContact,
   CustomerDetail,
   CustomerListItem,
+  CustomerPage,
 } from "./types";
 import "./customers.css";
 
@@ -105,6 +106,7 @@ const TABS: { key: CustomerTab; label: string; icon: typeof Building2 }[] = [
 export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<CustomerListItem[]>([]);
+  const [customerPage, setCustomerPage] = useState({ page: 1, pages: 1, total: 0 });
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [form, setForm] = useState<CustomerForm>(EMPTY_FORM);
   const [tab, setTab] = useState<CustomerTab>("overview");
@@ -119,14 +121,15 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
     [user],
   );
 
-  async function loadCustomers(term = search) {
+  async function loadCustomers(term = search, requestedPage = 1) {
     setLoading(true); setError("");
     try {
-      const params = new URLSearchParams({ company_code: company });
+      const params = new URLSearchParams({ company_code: company, page: String(requestedPage), page_size: "100" });
       if (term.trim()) params.set("search", term.trim());
-      const data = await apiClient.get<CustomerListItem[]>(`/customers?${params}`);
-      setCustomers(data);
-      if (customer && !data.some((item) => item.id === customer.id)) { setCustomer(null); setCreating(false); }
+      const data = await apiClient.get<CustomerPage>(`/customers/page?${params}`);
+      setCustomers(data.items);
+      setCustomerPage({ page: data.page, pages: data.pages, total: data.total });
+      if (customer && !data.items.some((item) => item.id === customer.id)) { setCustomer(null); setCreating(false); }
     } catch (err) { setError(err instanceof Error ? err.message : "Falha ao carregar clientes."); }
     finally { setLoading(false); }
   }
@@ -202,18 +205,18 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
         </header>
 
         <section className="customers-toolbar">
-          <label className="customers-search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void loadCustomers()} placeholder="Razão social, CNPJ ou e-mail..." /><kbd>Enter</kbd></label>
+          <label className="customers-search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void loadCustomers(search, 1)} placeholder="Razão social, CNPJ ou e-mail..." /><kbd>Enter</kbd></label>
           <select value={company} onChange={(e) => setCompany(e.target.value as CompanyCode)} aria-label="Empresa">
             {Object.entries(COMPANY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <button className="customers-secondary" onClick={() => void loadCustomers()} disabled={loading}><Search size={16} /><span>Buscar</span></button>
+          <button className="customers-secondary" onClick={() => void loadCustomers(search, 1)} disabled={loading}><Search size={16} /><span>Buscar</span></button>
         </section>
 
         {error && <p className="customers-error">{error}</p>}
 
         <div className="customers-layout">
           <section className="customers-list">
-            <header><div><strong>{customers.length}</strong><span>{customers.length === 1 ? "cliente" : "clientes"}</span></div><small>{loading ? "Atualizando..." : "Cadastro mestre"}</small></header>
+            <header><div><strong>{customerPage.total}</strong><span>{customerPage.total === 1 ? "cliente" : "clientes"}</span></div><small>{loading ? "Atualizando..." : `Página ${customerPage.page} de ${customerPage.pages}`}</small></header>
             <div className="customers-list-scroll">
               {customers.map((item) => (
                 <button key={item.id} className={customer?.id === item.id ? "active" : ""} onClick={() => void openCustomer(item.id)}>
@@ -224,6 +227,11 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
               ))}
               {!customers.length && !loading && <div className="customers-list-empty"><PackageSearch size={26} /><span>Nenhum cliente encontrado</span></div>}
             </div>
+            <footer className="customers-list-pagination">
+              <button disabled={loading || customerPage.page <= 1} onClick={() => void loadCustomers(search, customerPage.page - 1)}><ChevronLeft size={15} />Anterior</button>
+              <span>{customerPage.page} / {customerPage.pages}</span>
+              <button disabled={loading || customerPage.page >= customerPage.pages} onClick={() => void loadCustomers(search, customerPage.page + 1)}>Próxima<ChevronRight size={15} /></button>
+            </footer>
           </section>
 
           <section className="customer-detail">

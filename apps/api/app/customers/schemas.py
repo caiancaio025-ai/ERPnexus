@@ -42,6 +42,14 @@ class CustomerListItem(BaseModel):
     is_active: bool
 
 
+class CustomerPage(BaseModel):
+    items: list[CustomerListItem]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
 class ContactInput(BaseModel):
     department: str | None = None
     name: str = Field(min_length=1, max_length=160)

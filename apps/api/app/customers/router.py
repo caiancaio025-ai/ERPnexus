@@ -43,12 +43,14 @@ from app.customers.schemas import (
     CustomerCreate,
     CustomerDetail,
     CustomerListItem,
+    CustomerPage,
     CustomerQuoteSummary,
     CustomerUpdate,
     DocumentOutput,
     NoteInput,
     NoteOutput,
 )
+from app.customers.service import list_customers_page
 from app.laboratory.models import (
     LaboratoryCustomer,
     LaboratoryEquipment,
@@ -71,9 +73,36 @@ IssueDate = Annotated[date | None, Form()]
 ExpirationDate = Annotated[date | None, Form()]
 CompanyFilter = Annotated[str | None, Query()]
 SearchFilter = Annotated[str | None, Query(max_length=160)]
+PageFilter = Annotated[int, Query(ge=1)]
+PageSizeFilter = Annotated[int, Query(ge=1, le=200)]
 
 UPLOAD_ROOT = Path(settings.storage_root) / "customers"
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+
+
+@router.get("/page", response_model=CustomerPage)
+async def list_customers_paginated(
+    db: DbSession,
+    _: CurrentUser,
+    company_code: CompanyFilter = None,
+    search: SearchFilter = None,
+    page: PageFilter = 1,
+    page_size: PageSizeFilter = 100,
+):
+    result = await list_customers_page(
+        db,
+        page=page,
+        page_size=page_size,
+        company_code=company_code,
+        search=search,
+    )
+    return CustomerPage(
+        items=result.items,
+        page=result.page,
+        page_size=result.page_size,
+        total=result.total,
+        pages=result.pages,
+    )
 
 
 @router.get("", response_model=list[CustomerListItem])
