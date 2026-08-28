@@ -42,9 +42,14 @@ from app.customers.schemas import (
     ContactOutput,
     CustomerCreate,
     CustomerDetail,
+    CustomerDocumentPage,
+    CustomerEquipmentPage,
     CustomerListItem,
+    CustomerNotePage,
     CustomerPage,
+    CustomerQuotePage,
     CustomerQuoteSummary,
+    CustomerWorkOrderPage,
     CustomerUpdate,
     DocumentOutput,
     NoteInput,
@@ -52,6 +57,11 @@ from app.customers.schemas import (
 )
 from app.customers.service import (
     customer_activity_counts,
+    list_customer_documents_page,
+    list_customer_equipment_page,
+    list_customer_notes_page,
+    list_customer_quotes_page,
+    list_customer_work_orders_page,
     list_customers_page,
 )
 from app.laboratory.models import (
@@ -268,6 +278,81 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
         work_orders=work_orders,
         quotes=quote_summaries,
     )
+
+
+@router.get("/{customer_id}/equipment/page", response_model=CustomerEquipmentPage)
+async def get_customer_equipment_page(
+    customer_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    await _customer_or_404(db, customer_id)
+    result = await list_customer_equipment_page(
+        db, customer_id=customer_id, page=page, page_size=page_size
+    )
+    return CustomerEquipmentPage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+
+
+@router.get("/{customer_id}/work-orders/page", response_model=CustomerWorkOrderPage)
+async def get_customer_work_orders_page(
+    customer_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    await _customer_or_404(db, customer_id)
+    result = await list_customer_work_orders_page(
+        db, customer_id=customer_id, page=page, page_size=page_size
+    )
+    return CustomerWorkOrderPage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+
+
+@router.get("/{customer_id}/quotes/page", response_model=CustomerQuotePage)
+async def get_customer_quotes_page(
+    customer_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    await _customer_or_404(db, customer_id)
+    result = await list_customer_quotes_page(
+        db, customer_id=customer_id, page=page, page_size=page_size
+    )
+    return CustomerQuotePage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+
+
+@router.get("/{customer_id}/notes/page", response_model=CustomerNotePage)
+async def get_customer_notes_page(
+    customer_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    await _customer_or_404(db, customer_id)
+    result = await list_customer_notes_page(
+        db, customer_id=customer_id, page=page, page_size=page_size
+    )
+    return CustomerNotePage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+
+
+@router.get("/{customer_id}/documents/page", response_model=CustomerDocumentPage)
+async def get_customer_documents_page(
+    customer_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    await _customer_or_404(db, customer_id)
+    result = await list_customer_documents_page(
+        db, customer_id=customer_id, page=page, page_size=page_size
+    )
+    return CustomerDocumentPage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
 
 
 @router.put("/{customer_id}", response_model=CustomerDetail)

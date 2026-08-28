@@ -158,6 +158,46 @@ class CustomerQuoteSummary(BaseModel):
     created_at: datetime
 
 
+class CustomerEquipmentPage(BaseModel):
+    items: list[CustomerEquipmentSummary]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class CustomerWorkOrderPage(BaseModel):
+    items: list[CustomerWorkOrderSummary]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class CustomerQuotePage(BaseModel):
+    items: list[CustomerQuoteSummary]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class CustomerNotePage(BaseModel):
+    items: list[NoteOutput]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class CustomerDocumentPage(BaseModel):
+    items: list[DocumentOutput]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
 class CustomerDetail(BaseModel):
     id: int
     company_code: str
