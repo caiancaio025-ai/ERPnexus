@@ -50,7 +50,10 @@ from app.customers.schemas import (
     NoteInput,
     NoteOutput,
 )
-from app.customers.service import list_customers_page
+from app.customers.service import (
+    customer_activity_counts,
+    list_customers_page,
+)
 from app.laboratory.models import (
     LaboratoryCustomer,
     LaboratoryEquipment,
@@ -194,25 +197,9 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
             )
         ).all()
     )
-    work_orders_count = int(
-        await db.scalar(
-            select(func.count())
-            .select_from(LaboratoryWorkOrder)
-            .where(LaboratoryWorkOrder.customer_id == customer_id)
-        )
-        or 0
-    )
-    quotes_count = int(
-        await db.scalar(
-            select(func.count())
-            .select_from(LaboratoryQuote)
-            .join(
-                LaboratoryWorkOrder,
-                LaboratoryQuote.work_order_id == LaboratoryWorkOrder.id,
-            )
-            .where(LaboratoryWorkOrder.customer_id == customer_id)
-        )
-        or 0
+    work_orders_count, quotes_count = await customer_activity_counts(
+        db,
+        customer_id=customer_id,
     )
     equipment = list(
         (

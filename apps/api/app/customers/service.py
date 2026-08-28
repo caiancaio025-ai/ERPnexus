@@ -6,7 +6,11 @@ from math import ceil
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.laboratory.models import LaboratoryCustomer
+from app.laboratory.models import (
+    LaboratoryCustomer,
+    LaboratoryQuote,
+    LaboratoryWorkOrder,
+)
 
 
 @dataclass(slots=True)
@@ -33,6 +37,42 @@ def customer_filters(*, company_code: str | None, search: str | None):
             )
         )
     return filters
+
+
+async def customer_activity_counts(
+    db: AsyncSession,
+    *,
+    customer_id: int,
+) -> tuple[int, int]:
+    work_orders_count = (
+        select(func.count(LaboratoryWorkOrder.id))
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .scalar_subquery()
+    )
+
+    quotes_count = (
+        select(func.count(LaboratoryQuote.id))
+        .join(
+            LaboratoryWorkOrder,
+            LaboratoryQuote.work_order_id == LaboratoryWorkOrder.id,
+        )
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .scalar_subquery()
+    )
+
+    row = (
+        await db.execute(
+            select(
+                work_orders_count.label("work_orders_count"),
+                quotes_count.label("quotes_count"),
+            )
+        )
+    ).one()
+
+    return (
+        int(row.work_orders_count or 0),
+        int(row.quotes_count or 0),
+    )
 
 
 async def list_customers_page(
