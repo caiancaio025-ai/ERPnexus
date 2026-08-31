@@ -34,9 +34,11 @@ import { apiClient } from "../../shared/api/apiClient";
 import type {
   CustomerContact,
   CustomerDetail,
+  CustomerDocumentPage,
   CustomerEquipmentPage,
   CustomerListItem,
   CustomerPage,
+  CustomerNotePage,
   CustomerQuotePage,
   CustomerWorkOrderPage,
 } from "./types";
@@ -252,11 +254,11 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
                 {tab === "data" && <CustomerData form={form} setForm={setForm} onSubmit={saveCustomer} loading={loading} />}
                 {tab === "contacts" && customer && <Contacts customer={customer} reload={() => openCustomer(customer.id, true)} />}
                 {tab === "billing" && customer && <Billing customer={customer} reload={() => openCustomer(customer.id, true)} />}
-                {tab === "documents" && customer && <Documents customer={customer} reload={() => openCustomer(customer.id, true)} />}
+                {tab === "documents" && customer && <Documents customer={customer} />}
                 {tab === "equipment" && customer && <Equipment customer={customer} />}
                 {tab === "workorders" && customer && <WorkOrders customer={customer} />}
                 {tab === "quotes" && customer && <Quotes customer={customer} />}
-                {tab === "notes" && customer && <Notes customer={customer} reload={() => openCustomer(customer.id, true)} />}
+                {tab === "notes" && customer && <Notes customer={customer} />}
               </div>
             </>}
           </section>
@@ -348,13 +350,57 @@ function Billing({ customer, reload }: { customer: CustomerDetail; reload: () =>
   </div>;
 }
 
-function Documents({ customer, reload }: { customer: CustomerDetail; reload: () => Promise<void> }) {
+function Documents({ customer }: { customer: CustomerDetail }) {
   const [file, setFile] = useState<File | null>(null); const [category, setCategory] = useState("other"); const [reference, setReference] = useState(""); const [issue, setIssue] = useState(""); const [expiration, setExpiration] = useState(""); const [notes, setNotes] = useState("");
-  async function upload() { if (!file) return; const body = new FormData(); body.append("file", file); body.append("category", category); if (reference.trim()) body.append("reference_number", reference.trim()); if (issue) body.append("issue_date", issue); if (expiration) body.append("expiration_date", expiration); if (notes.trim()) body.append("notes", notes.trim()); await apiClient.post(`/customers/${customer.id}/documents`, body); setFile(null); setReference(""); setIssue(""); setExpiration(""); setNotes(""); await reload(); }
-  async function remove(id: number) { if (!window.confirm("Excluir este documento?")) return; await apiClient.delete(`/customers/${customer.id}/documents/${id}`); await reload(); }
-  return <div className="customer-panel"><SectionTitle icon={Paperclip} title="Documentos" subtitle="Arquivos comerciais, fiscais e operacionais vinculados ao cliente." />
+  const [data, setData] = useState<CustomerDocumentPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [pageError, setPageError] = useState("");
+
+  async function loadPage(page: number) {
+    setLoadingPage(true);
+    setPageError("");
+    try {
+      const result = await apiClient.get<CustomerDocumentPage>(`/customers/${customer.id}/documents/page?page=${page}&page_size=50`);
+      setData(result);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Falha ao carregar documentos.");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  useEffect(() => { void loadPage(1); }, [customer.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function upload() {
+    if (!file) return;
+    const body = new FormData();
+    body.append("file", file); body.append("category", category);
+    if (reference.trim()) body.append("reference_number", reference.trim());
+    if (issue) body.append("issue_date", issue);
+    if (expiration) body.append("expiration_date", expiration);
+    if (notes.trim()) body.append("notes", notes.trim());
+    await apiClient.post(`/customers/${customer.id}/documents`, body);
+    setFile(null); setReference(""); setIssue(""); setExpiration(""); setNotes("");
+    await loadPage(1);
+  }
+
+  async function remove(id: number) {
+    if (!window.confirm("Excluir este documento?")) return;
+    await apiClient.delete(`/customers/${customer.id}/documents/${id}`);
+    await loadPage(data.page);
+  }
+
+  return <div className="customer-panel">
+    <SectionTitle icon={Paperclip} title="Documentos" subtitle="Arquivos comerciais, fiscais e operacionais vinculados ao cliente." />
     <div className="document-upload expanded"><label><span>Categoria</span><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="nfe">NF-e</option><option value="nfse">NFS-e</option><option value="nfd">NFD</option><option value="quote">Orçamento</option><option value="purchase_order">Pedido de compra</option><option value="contract">Contrato</option><option value="other">Outros</option></select></label><Field label="Número / referência" value={reference} onChange={setReference}/><Field label="Emissão" type="date" value={issue} onChange={setIssue}/><Field label="Validade" type="date" value={expiration} onChange={setExpiration}/><label className="document-file"><span>Arquivo</span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></label><Field label="Observação" value={notes} onChange={setNotes}/><button className="customers-primary" onClick={() => void upload()} disabled={!file}><Upload size={16}/>Anexar</button></div>
-    <div className="documents-table"><header><span>Documento</span><span>Referência</span><span>Emissão</span><span>Validade</span><span/></header>{customer.documents.map((doc) => <div key={doc.id}><a href={`/api/customers/${customer.id}/documents/${doc.id}`} target="_blank" rel="noreferrer"><FileText size={15}/><span>{doc.original_name}</span></a><span>{doc.reference_number || "—"}</span><span>{dateBR(doc.issue_date)}</span><span>{dateBR(doc.expiration_date)}</span><button onClick={() => void remove(doc.id)} title="Excluir"><Trash2 size={14}/></button></div>)}</div>
+    {pageError && <p className="customers-error">{pageError}</p>}
+    <div className="documents-table"><header><span>Documento</span><span>Referência</span><span>Emissão</span><span>Validade</span><span/></header>{data.items.map((doc) => <div key={doc.id}><a href={`/api/customers/${customer.id}/documents/${doc.id}`} target="_blank" rel="noreferrer"><FileText size={15}/><span>{doc.original_name}</span></a><span>{doc.reference_number || "—"}</span><span>{dateBR(doc.issue_date)}</span><span>{dateBR(doc.expiration_date)}</span><button onClick={() => void remove(doc.id)} title="Excluir"><Trash2 size={14}/></button></div>)}</div>
+    {!loadingPage && !data.items.length && <p className="customers-muted">Nenhum documento vinculado.</p>}
+    <footer className="relation-pagination">
+      <button disabled={loadingPage || data.page <= 1} onClick={() => void loadPage(data.page - 1)}><ChevronLeft size={15}/>Anterior</button>
+      <span>{loadingPage ? "Carregando..." : `Página ${data.page} de ${data.pages} · ${data.total} documentos`}</span>
+      <button disabled={loadingPage || data.page >= data.pages} onClick={() => void loadPage(data.page + 1)}>Próxima<ChevronRight size={15}/></button>
+    </footer>
   </div>;
 }
 
@@ -466,10 +512,46 @@ function Quotes({ customer }: { customer: CustomerDetail }) {
   </div>;
 }
 
-function Notes({ customer, reload }: { customer: CustomerDetail; reload: () => Promise<void> }) {
+function Notes({ customer }: { customer: CustomerDetail }) {
   const [category, setCategory] = useState("general"); const [text, setText] = useState("");
-  async function save() { if (!text.trim()) return; await apiClient.post(`/customers/${customer.id}/notes`, { category, text: text.trim() }); setText(""); await reload(); }
-  return <div className="customer-panel"><SectionTitle icon={History} title="Histórico e observações" subtitle="Registro cronológico de informações relevantes do cliente." /><div className="note-editor"><label><span>Categoria</span><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="general">Geral</option><option value="commercial">Comercial</option><option value="financial">Financeiro</option><option value="technical">Técnico</option><option value="administrative">Administrativo</option></select></label><label><span>Nova observação</span><textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}/></label><button className="customers-primary" onClick={() => void save()} disabled={!text.trim()}><Plus size={16}/>Registrar</button></div><div className="notes-list">{customer.notes_history.map((note) => <article key={note.id}><span>{note.category}</span><p>{note.text}</p><small>{new Date(note.created_at).toLocaleString("pt-BR")}</small></article>)}</div></div>;
+  const [data, setData] = useState<CustomerNotePage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [pageError, setPageError] = useState("");
+
+  async function loadPage(page: number) {
+    setLoadingPage(true);
+    setPageError("");
+    try {
+      const result = await apiClient.get<CustomerNotePage>(`/customers/${customer.id}/notes/page?page=${page}&page_size=50`);
+      setData(result);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Falha ao carregar histórico.");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  useEffect(() => { void loadPage(1); }, [customer.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function save() {
+    if (!text.trim()) return;
+    await apiClient.post(`/customers/${customer.id}/notes`, { category, text: text.trim() });
+    setText("");
+    await loadPage(1);
+  }
+
+  return <div className="customer-panel">
+    <SectionTitle icon={History} title="Histórico e observações" subtitle="Registro cronológico de informações relevantes do cliente." />
+    <div className="note-editor"><label><span>Categoria</span><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="general">Geral</option><option value="commercial">Comercial</option><option value="financial">Financeiro</option><option value="technical">Técnico</option><option value="administrative">Administrativo</option></select></label><label><span>Nova observação</span><textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}/></label><button className="customers-primary" onClick={() => void save()} disabled={!text.trim()}><Plus size={16}/>Registrar</button></div>
+    {pageError && <p className="customers-error">{pageError}</p>}
+    <div className="notes-list">{data.items.map((note) => <article key={note.id}><span>{note.category}</span><p>{note.text}</p><small>{new Date(note.created_at).toLocaleString("pt-BR")}</small></article>)}</div>
+    {!loadingPage && !data.items.length && <p className="customers-muted">Nenhuma observação registrada.</p>}
+    <footer className="relation-pagination">
+      <button disabled={loadingPage || data.page <= 1} onClick={() => void loadPage(data.page - 1)}><ChevronLeft size={15}/>Anterior</button>
+      <span>{loadingPage ? "Carregando..." : `Página ${data.page} de ${data.pages} · ${data.total} registros`}</span>
+      <button disabled={loadingPage || data.page >= data.pages} onClick={() => void loadPage(data.page + 1)}>Próxima<ChevronRight size={15}/></button>
+    </footer>
+  </div>;
 }
 
 function SectionTitle({ icon: Icon, title, subtitle }: { icon: typeof Building2; title: string; subtitle: string }) { return <div className="section-title"><span><Icon size={17}/></span><div><h3>{title}</h3><p>{subtitle}</p></div></div>; }

@@ -111,6 +111,22 @@ export type CustomerQuoteSummary = {
 };
 
 
+export type CustomerNotePage = {
+  items: CustomerNote[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
+export type CustomerDocumentPage = {
+  items: CustomerDocument[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
 export type CustomerEquipmentPage = {
   items: CustomerEquipmentSummary[];
   page: number;
