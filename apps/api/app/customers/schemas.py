@@ -226,8 +226,3 @@ class CustomerDetail(BaseModel):
     recent_work_orders: list[CustomerWorkOrderSummary]
     contacts: list[ContactOutput]
     billing: BillingOutput | None
-    notes_history: list[NoteOutput]
-    documents: list[DocumentOutput]
-    equipment: list[CustomerEquipmentSummary]
-    work_orders: list[CustomerWorkOrderSummary]
-    quotes: list[CustomerQuoteSummary]

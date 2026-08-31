@@ -48,7 +48,6 @@ from app.customers.schemas import (
     CustomerNotePage,
     CustomerPage,
     CustomerQuotePage,
-    CustomerQuoteSummary,
     CustomerWorkOrderPage,
     CustomerUpdate,
     DocumentOutput,
@@ -66,9 +65,6 @@ from app.customers.service import (
 )
 from app.laboratory.models import (
     LaboratoryCustomer,
-    LaboratoryEquipment,
-    LaboratoryQuote,
-    LaboratoryWorkOrder,
 )
 
 router = APIRouter(
@@ -188,76 +184,7 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
         ).all()
     )
     billing = await db.get(CustomerBillingProfile, customer_id)
-    notes = list(
-        (
-            await db.scalars(
-                select(CustomerNote)
-                .where(CustomerNote.customer_id == customer_id)
-                .order_by(CustomerNote.created_at.desc())
-                .limit(100)
-            )
-        ).all()
-    )
-    documents = list(
-        (
-            await db.scalars(
-                select(CustomerDocument)
-                .where(CustomerDocument.customer_id == customer_id)
-                .order_by(CustomerDocument.created_at.desc())
-            )
-        ).all()
-    )
     overview = await customer_overview_summary(db, customer_id=customer_id)
-    equipment = list(
-        (
-            await db.scalars(
-                select(LaboratoryEquipment)
-                .where(
-                    LaboratoryEquipment.customer_id == customer_id,
-                    LaboratoryEquipment.is_active.is_(True),
-                )
-                .order_by(LaboratoryEquipment.updated_at.desc())
-                .limit(200)
-            )
-        ).all()
-    )
-    work_orders = list(
-        (
-            await db.scalars(
-                select(LaboratoryWorkOrder)
-                .where(LaboratoryWorkOrder.customer_id == customer_id)
-                .order_by(LaboratoryWorkOrder.opened_at.desc(), LaboratoryWorkOrder.id.desc())
-                .limit(200)
-            )
-        ).all()
-    )
-    quote_rows = list(
-        (
-            await db.execute(
-                select(LaboratoryQuote, LaboratoryWorkOrder.number)
-                .join(
-                    LaboratoryWorkOrder,
-                    LaboratoryQuote.work_order_id == LaboratoryWorkOrder.id,
-                )
-                .where(LaboratoryWorkOrder.customer_id == customer_id)
-                .order_by(LaboratoryQuote.created_at.desc())
-                .limit(200)
-            )
-        ).all()
-    )
-    quote_summaries = [
-        CustomerQuoteSummary(
-            id=quote.id,
-            work_order_id=quote.work_order_id,
-            work_order_number=work_order_number,
-            revision=quote.revision,
-            status=quote.status,
-            total=float(quote.total or 0),
-            emitted_at=quote.emitted_at,
-            created_at=quote.created_at,
-        )
-        for quote, work_order_number in quote_rows
-    ]
     values = {
         column.name: getattr(customer, column.name)
         for column in customer.__table__.columns
@@ -272,11 +199,6 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
         recent_work_orders=overview.recent_work_orders,
         contacts=contacts,
         billing=billing,
-        notes_history=notes,
-        documents=documents,
-        equipment=equipment,
-        work_orders=work_orders,
-        quotes=quote_summaries,
     )
 
 

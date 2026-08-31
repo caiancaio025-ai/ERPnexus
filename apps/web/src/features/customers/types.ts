@@ -169,9 +169,4 @@ export type CustomerDetail = CustomerListItem & {
   recent_work_orders: CustomerWorkOrderSummary[];
   contacts: CustomerContact[];
   billing: BillingProfile | null;
-  notes_history: CustomerNote[];
-  documents: CustomerDocument[];
-  equipment: CustomerEquipmentSummary[];
-  work_orders: CustomerWorkOrderSummary[];
-  quotes: CustomerQuoteSummary[];
 };

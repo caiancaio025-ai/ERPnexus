@@ -114,3 +114,11 @@ async def test_customer_overview_summary_handles_empty_customer_activity():
     assert summary.quotes_total == 0.0
     assert summary.recent_work_orders == []
     assert db.execute.await_count == 2
+
+
+def test_customer_detail_does_not_expose_legacy_heavy_collections():
+    from app.customers.schemas import CustomerDetail
+
+    legacy_fields = {"notes_history", "documents", "equipment", "work_orders", "quotes"}
+
+    assert legacy_fields.isdisjoint(CustomerDetail.model_fields)
