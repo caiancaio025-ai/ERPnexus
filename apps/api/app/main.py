@@ -5,6 +5,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.auth.admin_router import router as admin_users_router
 from app.auth.router import router as auth_router
 from app.core.config import settings
+from app.core.observability import request_observability_middleware
 from app.customers.router import router as customers_router
 from app.dashboard.router import router as dashboard_router
 from app.finance.router import router as finance_router
@@ -22,13 +23,16 @@ app = FastAPI(
     redoc_url=None,
 )
 
+app.middleware("http")(request_observability_middleware)
+
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
 )
 app.include_router(health_router, prefix="/health", tags=["health"])
 app.include_router(auth_router, tags=["auth"])
