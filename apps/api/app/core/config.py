@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     login_rate_limit_identifier_failures: int = 5
     login_rate_limit_ip_failures: int = 20
     login_rate_limit_retention_seconds: int = 86400
+
+    tracking_rate_limit_window_seconds: int = 60
+    tracking_rate_limit_ip_requests: int = 60
+    tracking_rate_limit_retention_seconds: int = 3600
+
     storage_root: str = "/app/storage"
     tracking_base_url: str = "http://localhost:8000/e"
     gemini_api_key: str | None = None

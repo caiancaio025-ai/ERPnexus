@@ -1,17 +1,14 @@
 from html import escape
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.laboratory.models import (
-    LaboratoryStatusHistory,
-    LaboratoryTechnician,
-    LaboratoryWorkOrder,
-)
+from app.laboratory.models import LaboratoryWorkOrder
+from app.tracking.rate_limit import tracking_rate_limit_state
 
 router = APIRouter()
 
@@ -37,7 +34,13 @@ _STATUS_LABELS = {
 }
 
 
-def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
+def _page(
+    title: str,
+    body: str,
+    *,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
     html = f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -77,15 +80,27 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
   </main>
 </body>
 </html>"""
-    return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "no-store"})
+    response_headers = {"Cache-Control": "no-store", **(headers or {})}
+    return HTMLResponse(html, status_code=status_code, headers=response_headers)
 
 
 @router.get("/e/{tracking_token}", response_class=HTMLResponse, include_in_schema=False)
 async def public_work_order_tracking(
     tracking_token: str,
+    request: Request,
     db: DbSession,
 ) -> HTMLResponse:
-    if len(tracking_token) not in {16, 32}:
+    rate_limit = await tracking_rate_limit_state(db, request)
+    if rate_limit.blocked:
+        return _page(
+            "Muitas consultas",
+            '<section class="card"><h1>Muitas consultas</h1>'
+            '<p class="muted">Aguarde um momento antes de consultar novamente.</p></section>',
+            status_code=429,
+            headers={"Retry-After": str(max(1, rate_limit.retry_after))},
+        )
+
+    if len(tracking_token) != 32:
         return _page(
             "Rastreamento não encontrado",
             '<section class="card"><h1>Consulta não encontrada</h1>'
@@ -106,19 +121,6 @@ async def public_work_order_tracking(
             status_code=404,
         )
 
-    last_technician = await db.scalar(
-        select(LaboratoryTechnician.name)
-        .join(
-            LaboratoryStatusHistory,
-            LaboratoryStatusHistory.user_id == LaboratoryTechnician.user_id,
-        )
-        .where(LaboratoryStatusHistory.work_order_id == work_order.id)
-        .order_by(LaboratoryStatusHistory.created_at.desc())
-        .limit(1)
-    )
-    if not last_technician and work_order.technician:
-        last_technician = work_order.technician.name
-
     equipment = work_order.equipment
     status_label = _STATUS_LABELS.get(work_order.status, work_order.status)
     opened_at = work_order.opened_at.strftime("%d/%m/%Y")
@@ -138,11 +140,8 @@ async def public_work_order_tracking(
   <h1>{escape(work_order.number)}</h1>
   <span class="status">{escape(status_label)}</span>
   <dl>
-    <dt>Cliente</dt><dd>{escape(work_order.customer_name)}</dd>
     <dt>Data de entrada</dt><dd>{escape(opened_at)}</dd>
     <dt>Equipamento</dt><dd>{escape(equipment_name)}</dd>
-    <dt>Número de série</dt><dd>{escape(work_order.equipment_serial or "Não informado")}</dd>
-    <dt>Último técnico</dt><dd>{escape(last_technician or "Ainda não atribuído")}</dd>
     <dt>Status atual</dt><dd>{escape(status_label)}</dd>
   </dl>
 </section>"""
