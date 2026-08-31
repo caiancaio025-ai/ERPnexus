@@ -78,6 +78,88 @@ async def customer_activity_counts(
 
 
 @dataclass(slots=True)
+class CustomerOverviewSummaryResult:
+    equipment_count: int
+    work_orders_count: int
+    quotes_count: int
+    quotes_total: float
+    recent_work_orders: list[dict]
+
+
+async def customer_overview_summary(
+    db: AsyncSession, *, customer_id: int
+) -> CustomerOverviewSummaryResult:
+    equipment_count = (
+        select(func.count(LaboratoryEquipment.id))
+        .where(
+            LaboratoryEquipment.customer_id == customer_id,
+            LaboratoryEquipment.is_active.is_(True),
+        )
+        .scalar_subquery()
+    )
+    work_orders_count = (
+        select(func.count(LaboratoryWorkOrder.id))
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .scalar_subquery()
+    )
+    quotes_count = (
+        select(func.count(LaboratoryQuote.id))
+        .join(
+            LaboratoryWorkOrder,
+            LaboratoryQuote.work_order_id == LaboratoryWorkOrder.id,
+        )
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .scalar_subquery()
+    )
+    quotes_total = (
+        select(func.coalesce(func.sum(LaboratoryQuote.total), 0))
+        .join(
+            LaboratoryWorkOrder,
+            LaboratoryQuote.work_order_id == LaboratoryWorkOrder.id,
+        )
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .scalar_subquery()
+    )
+
+    aggregate_row = (
+        await db.execute(
+            select(
+                equipment_count.label("equipment_count"),
+                work_orders_count.label("work_orders_count"),
+                quotes_count.label("quotes_count"),
+                quotes_total.label("quotes_total"),
+            )
+        )
+    ).one()
+
+    recent_query = (
+        select(
+            LaboratoryWorkOrder.id,
+            LaboratoryWorkOrder.number,
+            LaboratoryWorkOrder.equipment_id,
+            LaboratoryWorkOrder.equipment_serial,
+            LaboratoryWorkOrder.status,
+            LaboratoryWorkOrder.priority,
+            LaboratoryWorkOrder.opened_at,
+            LaboratoryWorkOrder.quoted_value,
+            LaboratoryWorkOrder.approved_value,
+        )
+        .where(LaboratoryWorkOrder.customer_id == customer_id)
+        .order_by(LaboratoryWorkOrder.opened_at.desc(), LaboratoryWorkOrder.id.desc())
+        .limit(4)
+    )
+    recent_rows = (await db.execute(recent_query)).mappings().all()
+
+    return CustomerOverviewSummaryResult(
+        equipment_count=int(aggregate_row.equipment_count or 0),
+        work_orders_count=int(aggregate_row.work_orders_count or 0),
+        quotes_count=int(aggregate_row.quotes_count or 0),
+        quotes_total=float(aggregate_row.quotes_total or 0),
+        recent_work_orders=[dict(row) for row in recent_rows],
+    )
+
+
+@dataclass(slots=True)
 class CustomerRelationPageResult:
     items: list
     page: int

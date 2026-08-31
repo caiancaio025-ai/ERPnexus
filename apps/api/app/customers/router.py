@@ -56,7 +56,7 @@ from app.customers.schemas import (
     NoteOutput,
 )
 from app.customers.service import (
-    customer_activity_counts,
+    customer_overview_summary,
     list_customer_documents_page,
     list_customer_equipment_page,
     list_customer_notes_page,
@@ -207,10 +207,7 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
             )
         ).all()
     )
-    work_orders_count, quotes_count = await customer_activity_counts(
-        db,
-        customer_id=customer_id,
-    )
+    overview = await customer_overview_summary(db, customer_id=customer_id)
     equipment = list(
         (
             await db.scalars(
@@ -268,8 +265,11 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
     }
     return CustomerDetail(
         **values,
-        work_orders_count=work_orders_count,
-        quotes_count=quotes_count,
+        equipment_count=overview.equipment_count,
+        work_orders_count=overview.work_orders_count,
+        quotes_count=overview.quotes_count,
+        quotes_total=overview.quotes_total,
+        recent_work_orders=overview.recent_work_orders,
         contacts=contacts,
         billing=billing,
         notes_history=notes,

@@ -162,8 +162,11 @@ export type CustomerDetail = CustomerListItem & {
   complement: string | null;
   district: string | null;
   notes: string | null;
+  equipment_count: number;
   work_orders_count: number;
   quotes_count: number;
+  quotes_total: number;
+  recent_work_orders: CustomerWorkOrderSummary[];
   contacts: CustomerContact[];
   billing: BillingProfile | null;
   notes_history: CustomerNote[];

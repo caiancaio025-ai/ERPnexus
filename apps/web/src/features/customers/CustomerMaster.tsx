@@ -244,7 +244,7 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
             {(customer || creating) && <>
               <header className="customer-detail-header">
                 <div className="customer-identity"><span>{creating ? "NOVO CADASTRO" : customer?.document || "CLIENTE"}</span><h2>{form.trade_name || form.legal_name || "Novo cliente"}</h2>{customer && <p>{[customer.city, customer.state].filter(Boolean).join(" / ") || "Localidade não informada"}</p>}</div>
-                {customer && <div className="customer-kpis"><span><b>{customer.equipment.length}</b><small>Equipamentos</small></span><span><b>{customer.work_orders_count}</b><small>OS</small></span><span><b>{customer.quotes_count}</b><small>Orçamentos</small></span></div>}
+                {customer && <div className="customer-kpis"><span><b>{customer.equipment_count}</b><small>Equipamentos</small></span><span><b>{customer.work_orders_count}</b><small>OS</small></span><span><b>{customer.quotes_count}</b><small>Orçamentos</small></span></div>}
               </header>
               <nav className="customer-tabs">
                 {TABS.map(({ key, label, icon: Icon }) => <button key={key} className={tab === key ? "active" : ""} disabled={creating && key !== "data"} onClick={() => setTab(key)}><Icon size={15} /><span>{label}</span></button>)}
@@ -270,13 +270,13 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
 
 function Overview({ customer }: { customer: CustomerDetail }) {
   const primary = customer.contacts.find((c) => c.is_primary);
-  const latestOrders = customer.work_orders.slice(0, 4);
+  const latestOrders = customer.recent_work_orders;
   return <div className="customer-panel overview-panel">
     <div className="overview-metrics">
       <article><span>Contato principal</span><strong>{primary?.name || "Não definido"}</strong><small>{primary?.department || primary?.email || "Cadastre um responsável"}</small></article>
       <article><span>Prazo de faturamento</span><strong>{customer.billing?.payment_term_days == null ? "Não definido" : `${customer.billing.payment_term_days} dias`}</strong><small>{customer.billing?.billing_cutoff_day ? `Corte no dia ${customer.billing.billing_cutoff_day}` : "Dia de corte não configurado"}</small></article>
-      <article><span>Operação técnica</span><strong>{customer.work_orders_count} OS</strong><small>{customer.equipment.length} equipamentos vinculados</small></article>
-      <article><span>Orçamentos</span><strong>{customer.quotes_count}</strong><small>{money(customer.quotes.reduce((sum, item) => sum + Number(item.total || 0), 0))} em histórico</small></article>
+      <article><span>Operação técnica</span><strong>{customer.work_orders_count} OS</strong><small>{customer.equipment_count} equipamentos vinculados</small></article>
+      <article><span>Orçamentos</span><strong>{customer.quotes_count}</strong><small>{money(customer.quotes_total)} em histórico</small></article>
     </div>
     <section className="overview-wide"><header><div><span>ATIVIDADE RECENTE</span><h3>Últimas ordens de serviço</h3></div><ClipboardList size={19} /></header>
       <div className="overview-table">

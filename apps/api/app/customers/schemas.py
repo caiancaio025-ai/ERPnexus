@@ -219,8 +219,11 @@ class CustomerDetail(BaseModel):
     state: str | None
     notes: str | None
     is_active: bool
+    equipment_count: int
     work_orders_count: int
     quotes_count: int
+    quotes_total: float
+    recent_work_orders: list[CustomerWorkOrderSummary]
     contacts: list[ContactOutput]
     billing: BillingOutput | None
     notes_history: list[NoteOutput]
