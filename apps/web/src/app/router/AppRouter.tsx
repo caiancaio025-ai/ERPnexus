@@ -1,18 +1,38 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import type { AuthUser } from "../../features/auth/AuthCard";
 import { AuthCard } from "../../features/auth/AuthCard";
-import { Dashboard } from "../../features/dashboard/Dashboard";
-import { CustomerMaster } from "../../features/customers/CustomerMaster";
-import { CommercialDashboard } from "../../features/commercial/CommercialDashboard";
-import { FinanceDashboard } from "../../features/finance/FinanceDashboard";
-import { PurchasingDashboard } from "../../features/purchasing/PurchasingDashboard";
-import { LaboratoryDashboard } from "../../features/laboratory/LaboratoryDashboard";
-import { EmployeeDashboard } from "../../features/employees/EmployeeDashboard";
 import { ModulePlaceholder } from "../ModulePlaceholder";
 import { NotFound } from "../NotFound";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicRoute } from "./PublicRoute";
+
+const Dashboard = lazy(() =>
+  import("../../features/dashboard/Dashboard").then((module) => ({ default: module.Dashboard })),
+);
+const CustomerMaster = lazy(() =>
+  import("../../features/customers/CustomerMaster").then((module) => ({ default: module.CustomerMaster })),
+);
+const CommercialDashboard = lazy(() =>
+  import("../../features/commercial/CommercialDashboard").then((module) => ({ default: module.CommercialDashboard })),
+);
+const FinanceDashboard = lazy(() =>
+  import("../../features/finance/FinanceDashboard").then((module) => ({ default: module.FinanceDashboard })),
+);
+const PurchasingDashboard = lazy(() =>
+  import("../../features/purchasing/PurchasingDashboard").then((module) => ({ default: module.PurchasingDashboard })),
+);
+const LaboratoryDashboard = lazy(() =>
+  import("../../features/laboratory/LaboratoryDashboard").then((module) => ({ default: module.LaboratoryDashboard })),
+);
+const EmployeeDashboard = lazy(() =>
+  import("../../features/employees/EmployeeDashboard").then((module) => ({ default: module.EmployeeDashboard })),
+);
+
+function RouteFallback() {
+  return <main className="loading-screen">Carregando módulo...</main>;
+}
 
 type AppRouterProps = {
   user: AuthUser | null;
@@ -37,25 +57,27 @@ export function AppRouter({ user, onLogin, onLogout }: AppRouterProps) {
   const authenticated = Boolean(user);
 
   return (
-    <Routes>
-      <Route element={<PublicRoute authenticated={authenticated} />}>
-        <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
-      </Route>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route element={<PublicRoute authenticated={authenticated} />}>
+          <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
+        </Route>
 
-      <Route element={<ProtectedRoute authenticated={authenticated} />}>
-        <Route path="/painel" element={<Dashboard user={user!} onLogout={onLogout} />} />
-        <Route path="/clientes/*" element={<CustomerMaster user={user!} onLogout={onLogout} />} />
-        <Route path="/financeiro/*" element={<FinanceDashboard user={user!} onLogout={onLogout} />} />
-        <Route path="/compras/*" element={<PurchasingDashboard user={user!} onLogout={onLogout} />} />
-        <Route path="/laboratorio/*" element={<LaboratoryDashboard user={user!} onLogout={onLogout} />} />
-        <Route path="/colaboradores/*" element={<EmployeeDashboard user={user!} onLogout={onLogout} />} />
-        <Route path="/estoque/*" element={<ModulePlaceholder />} />
-        <Route path="/comercial/*" element={<CommercialDashboard user={user!} onLogout={onLogout} />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
+        <Route element={<ProtectedRoute authenticated={authenticated} />}>
+          <Route path="/painel" element={<Dashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/clientes/*" element={<CustomerMaster user={user!} onLogout={onLogout} />} />
+          <Route path="/financeiro/*" element={<FinanceDashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/compras/*" element={<PurchasingDashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/laboratorio/*" element={<LaboratoryDashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/colaboradores/*" element={<EmployeeDashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/estoque/*" element={<ModulePlaceholder />} />
+          <Route path="/comercial/*" element={<CommercialDashboard user={user!} onLogout={onLogout} />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
 
-      <Route path="/" element={<Navigate to={authenticated ? "/painel" : "/login"} replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+        <Route path="/" element={<Navigate to={authenticated ? "/painel" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
