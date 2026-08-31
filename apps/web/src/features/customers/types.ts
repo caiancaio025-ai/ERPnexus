@@ -111,6 +111,14 @@ export type CustomerQuoteSummary = {
 };
 
 
+export type CustomerEquipmentPage = {
+  items: CustomerEquipmentSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
 export type CustomerWorkOrderPage = {
   items: CustomerWorkOrderSummary[];
   page: number;

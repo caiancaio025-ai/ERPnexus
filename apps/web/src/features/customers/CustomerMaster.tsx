@@ -34,6 +34,7 @@ import { apiClient } from "../../shared/api/apiClient";
 import type {
   CustomerContact,
   CustomerDetail,
+  CustomerEquipmentPage,
   CustomerListItem,
   CustomerPage,
   CustomerQuotePage,
@@ -357,7 +358,41 @@ function Documents({ customer, reload }: { customer: CustomerDetail; reload: () 
   </div>;
 }
 
-function Equipment({ customer }: { customer: CustomerDetail }) { return <div className="customer-panel"><SectionTitle icon={Wrench} title="Equipamentos vinculados" subtitle="Ativos técnicos associados ao cadastro." /><div className="relation-table equipment"><header><span>Série</span><span>Equipamento</span><span>Fabricante</span><span>Potência / tensão</span></header>{customer.equipment.map((item) => <div key={item.id}><strong>{item.serial_number || "Sem série"}</strong><span>{[item.equipment_type,item.model].filter(Boolean).join(" · ") || "Não informado"}</span><span>{item.manufacturer || "—"}</span><span>{[item.power,item.voltage].filter(Boolean).join(" · ") || "—"}</span></div>)}</div>{!customer.equipment.length && <p className="customers-muted">Nenhum equipamento vinculado.</p>}</div>; }
+function Equipment({ customer }: { customer: CustomerDetail }) {
+  const [data, setData] = useState<CustomerEquipmentPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [pageError, setPageError] = useState("");
+
+  async function loadPage(page: number) {
+    setLoadingPage(true);
+    setPageError("");
+    try {
+      const result = await apiClient.get<CustomerEquipmentPage>(`/customers/${customer.id}/equipment/page?page=${page}&page_size=50`);
+      setData(result);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Falha ao carregar equipamentos.");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  useEffect(() => { void loadPage(1); }, [customer.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <div className="customer-panel">
+    <SectionTitle icon={Wrench} title="Equipamentos vinculados" subtitle="Ativos técnicos associados ao cadastro." />
+    {pageError && <p className="customers-error">{pageError}</p>}
+    <div className="relation-table equipment">
+      <header><span>Série</span><span>Equipamento</span><span>Fabricante</span><span>Potência / tensão</span></header>
+      {data.items.map((item) => <div key={item.id}><strong>{item.serial_number || "Sem série"}</strong><span>{[item.equipment_type,item.model].filter(Boolean).join(" · ") || "Não informado"}</span><span>{item.manufacturer || "—"}</span><span>{[item.power,item.voltage].filter(Boolean).join(" · ") || "—"}</span></div>)}
+    </div>
+    {!loadingPage && !data.items.length && <p className="customers-muted">Nenhum equipamento vinculado.</p>}
+    <footer className="relation-pagination">
+      <button disabled={loadingPage || data.page <= 1} onClick={() => void loadPage(data.page - 1)}><ChevronLeft size={15}/>Anterior</button>
+      <span>{loadingPage ? "Carregando..." : `Página ${data.page} de ${data.pages} · ${data.total} equipamentos`}</span>
+      <button disabled={loadingPage || data.page >= data.pages} onClick={() => void loadPage(data.page + 1)}>Próxima<ChevronRight size={15}/></button>
+    </footer>
+  </div>;
+}
 
 function WorkOrders({ customer }: { customer: CustomerDetail }) {
   const [data, setData] = useState<CustomerWorkOrderPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
