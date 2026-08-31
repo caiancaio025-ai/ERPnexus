@@ -110,6 +110,23 @@ export type CustomerQuoteSummary = {
   created_at: string;
 };
 
+
+export type CustomerWorkOrderPage = {
+  items: CustomerWorkOrderSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
+export type CustomerQuotePage = {
+  items: CustomerQuoteSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
+};
+
 export type CustomerDetail = CustomerListItem & {
   state_registration: string | null;
   municipal_registration: string | null;

@@ -36,6 +36,8 @@ import type {
   CustomerDetail,
   CustomerListItem,
   CustomerPage,
+  CustomerQuotePage,
+  CustomerWorkOrderPage,
 } from "./types";
 import "./customers.css";
 
@@ -357,9 +359,77 @@ function Documents({ customer, reload }: { customer: CustomerDetail; reload: () 
 
 function Equipment({ customer }: { customer: CustomerDetail }) { return <div className="customer-panel"><SectionTitle icon={Wrench} title="Equipamentos vinculados" subtitle="Ativos técnicos associados ao cadastro." /><div className="relation-table equipment"><header><span>Série</span><span>Equipamento</span><span>Fabricante</span><span>Potência / tensão</span></header>{customer.equipment.map((item) => <div key={item.id}><strong>{item.serial_number || "Sem série"}</strong><span>{[item.equipment_type,item.model].filter(Boolean).join(" · ") || "Não informado"}</span><span>{item.manufacturer || "—"}</span><span>{[item.power,item.voltage].filter(Boolean).join(" · ") || "—"}</span></div>)}</div>{!customer.equipment.length && <p className="customers-muted">Nenhum equipamento vinculado.</p>}</div>; }
 
-function WorkOrders({ customer }: { customer: CustomerDetail }) { return <div className="customer-panel"><SectionTitle icon={ClipboardList} title="Ordens de serviço" subtitle="Histórico operacional do cliente." /><div className="relation-table workorders"><header><span>OS</span><span>Status</span><span>Série</span><span>Abertura</span><span>Valor</span></header>{customer.work_orders.map((item) => <div key={item.id}><strong>{item.number}</strong><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{item.equipment_serial || "Sem série"}</span><span>{dateBR(item.opened_at)}</span><span>{money(item.approved_value ?? item.quoted_value)}</span></div>)}</div></div>; }
+function WorkOrders({ customer }: { customer: CustomerDetail }) {
+  const [data, setData] = useState<CustomerWorkOrderPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [pageError, setPageError] = useState("");
 
-function Quotes({ customer }: { customer: CustomerDetail }) { return <div className="customer-panel"><SectionTitle icon={BadgeDollarSign} title="Orçamentos" subtitle="Revisões e valores comerciais vinculados às OS." /><div className="relation-table quotes"><header><span>OS</span><span>Revisão</span><span>Status</span><span>Emissão</span><span>Total</span></header>{customer.quotes.map((item) => <div key={item.id}><strong>{item.work_order_number}</strong><span>Rev. {item.revision}</span><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{dateBR(item.emitted_at || item.created_at)}</span><span>{money(item.total)}</span></div>)}</div></div>; }
+  async function loadPage(page: number) {
+    setLoadingPage(true);
+    setPageError("");
+    try {
+      const result = await apiClient.get<CustomerWorkOrderPage>(`/customers/${customer.id}/work-orders/page?page=${page}&page_size=50`);
+      setData(result);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Falha ao carregar ordens de serviço.");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  useEffect(() => { void loadPage(1); }, [customer.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <div className="customer-panel">
+    <SectionTitle icon={ClipboardList} title="Ordens de serviço" subtitle="Histórico operacional do cliente." />
+    {pageError && <p className="customers-error">{pageError}</p>}
+    <div className="relation-table workorders">
+      <header><span>OS</span><span>Status</span><span>Série</span><span>Abertura</span><span>Valor</span></header>
+      {data.items.map((item) => <div key={item.id}><strong>{item.number}</strong><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{item.equipment_serial || "Sem série"}</span><span>{dateBR(item.opened_at)}</span><span>{money(item.approved_value ?? item.quoted_value)}</span></div>)}
+    </div>
+    {!loadingPage && !data.items.length && <p className="customers-muted">Nenhuma OS vinculada a este cliente.</p>}
+    <footer className="relation-pagination">
+      <button disabled={loadingPage || data.page <= 1} onClick={() => void loadPage(data.page - 1)}><ChevronLeft size={15}/>Anterior</button>
+      <span>{loadingPage ? "Carregando..." : `Página ${data.page} de ${data.pages} · ${data.total} OS`}</span>
+      <button disabled={loadingPage || data.page >= data.pages} onClick={() => void loadPage(data.page + 1)}>Próxima<ChevronRight size={15}/></button>
+    </footer>
+  </div>;
+}
+
+function Quotes({ customer }: { customer: CustomerDetail }) {
+  const [data, setData] = useState<CustomerQuotePage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [pageError, setPageError] = useState("");
+
+  async function loadPage(page: number) {
+    setLoadingPage(true);
+    setPageError("");
+    try {
+      const result = await apiClient.get<CustomerQuotePage>(`/customers/${customer.id}/quotes/page?page=${page}&page_size=50`);
+      setData(result);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Falha ao carregar orçamentos.");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  useEffect(() => { void loadPage(1); }, [customer.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <div className="customer-panel">
+    <SectionTitle icon={BadgeDollarSign} title="Orçamentos" subtitle="Revisões e valores comerciais vinculados às OS." />
+    {pageError && <p className="customers-error">{pageError}</p>}
+    <div className="relation-table quotes">
+      <header><span>OS</span><span>Revisão</span><span>Status</span><span>Emissão</span><span>Total</span></header>
+      {data.items.map((item) => <div key={item.id}><strong>{item.work_order_number}</strong><span>Rev. {item.revision}</span><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{dateBR(item.emitted_at || item.created_at)}</span><span>{money(item.total)}</span></div>)}
+    </div>
+    {!loadingPage && !data.items.length && <p className="customers-muted">Nenhum orçamento vinculado a este cliente.</p>}
+    <footer className="relation-pagination">
+      <button disabled={loadingPage || data.page <= 1} onClick={() => void loadPage(data.page - 1)}><ChevronLeft size={15}/>Anterior</button>
+      <span>{loadingPage ? "Carregando..." : `Página ${data.page} de ${data.pages} · ${data.total} orçamentos`}</span>
+      <button disabled={loadingPage || data.page >= data.pages} onClick={() => void loadPage(data.page + 1)}>Próxima<ChevronRight size={15}/></button>
+    </footer>
+  </div>;
+}
 
 function Notes({ customer, reload }: { customer: CustomerDetail; reload: () => Promise<void> }) {
   const [category, setCategory] = useState("general"); const [text, setText] = useState("");
