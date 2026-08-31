@@ -3,7 +3,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -16,7 +15,8 @@ from app.auth.models import User
 from app.auth.router import current_user
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.file_validation import InvalidUpload, validate_upload
+from app.core.file_validation import InvalidUpload
+from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.notifications.service import notify_modules
 from app.purchasing.models import PurchaseAuditEvent, PurchaseOrder, Supplier
 from app.purchasing.schemas import (
@@ -300,23 +300,28 @@ async def upload_attachment(
     db: DbSession,
 ):
     purchase = await _purchase_or_404(db, purchase_id)
-    content = await file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="O arquivo excede 10 MB.")
-
+    previous_path = Path(purchase.attachment_path) if purchase.attachment_path else None
     try:
-        detected = validate_upload(content, file.filename, file.content_type)
+        streamed = await persist_streamed_upload(
+            file,
+            directory=UPLOAD_ROOT / purchase.company_code,
+            filename_prefix=f"{purchase.id}-",
+            max_size=MAX_UPLOAD_SIZE,
+        )
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail="O arquivo excede 10 MB.") from exc
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Armazenamento de anexos indisponível. Verifique o volume /app/storage da API.",
+        ) from exc
 
-    suffix = detected.extension
-    directory = UPLOAD_ROOT / purchase.company_code
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{purchase.id}-{uuid4().hex}{suffix}"
-    target.write_bytes(content)
+    target = streamed.path
     purchase.attachment_name = file.filename
     purchase.attachment_path = str(target)
-    purchase.attachment_mime = detected.mime_type
+    purchase.attachment_mime = streamed.mime_type
     db.add(
         _audit(
             purchase,
@@ -325,7 +330,17 @@ async def upload_attachment(
             user.id,
         )
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+
+    if previous_path and previous_path != target:
+        try:
+            previous_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     return {"filename": file.filename or target.name}
 
 

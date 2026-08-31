@@ -1,5 +1,4 @@
 from datetime import date
-from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
 
@@ -23,7 +22,8 @@ from app.auth.models import User
 from app.auth.router import current_user
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.file_validation import InvalidUpload, validate_upload
+from app.core.file_validation import InvalidUpload
+from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.customers.models import (
     CustomerBillingProfile,
     CustomerContact,
@@ -33,7 +33,6 @@ from app.customers.models import (
 from app.customers.storage import (
     commit_customer_document,
     delete_customer_document as delete_customer_document_storage,
-    persist_customer_document,
     resolve_customer_storage_path,
 )
 from app.customers.schemas import (
@@ -394,26 +393,22 @@ async def upload_document(
     notes: DocumentNotes = None,
 ):
     await _customer_or_404(db, customer_id)
-    content = await file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="Arquivo excede o limite de 10 MB.")
     try:
-        detected = validate_upload(content, file.filename, file.content_type)
+        streamed = await persist_streamed_upload(
+            file,
+            directory=UPLOAD_ROOT / str(customer_id),
+            max_size=MAX_UPLOAD_SIZE,
+        )
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail="Arquivo excede o limite de 10 MB.") from exc
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
-    checksum = sha256(content).hexdigest()
-    try:
-        path = persist_customer_document(
-            UPLOAD_ROOT,
-            customer_id=customer_id,
-            extension=detected.extension,
-            content=content,
-        )
     except OSError as exc:
         raise HTTPException(
             status_code=503,
             detail="Armazenamento de documentos indisponível. Verifique o volume /app/storage da API.",
         ) from exc
+    path = streamed.path
     document = CustomerDocument(
         customer_id=customer_id,
         category=category,
@@ -422,9 +417,9 @@ async def upload_document(
         expiration_date=expiration_date,
         original_name=file.filename or path.name,
         storage_path=str(path),
-        mime_type=detected.mime_type,
-        size_bytes=len(content),
-        checksum_sha256=checksum,
+        mime_type=streamed.mime_type,
+        size_bytes=streamed.size_bytes,
+        checksum_sha256=streamed.checksum_sha256,
         notes=notes,
         uploaded_by=user.id,
     )

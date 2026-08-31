@@ -1,6 +1,5 @@
 import secrets
 from datetime import UTC, date, datetime
-from hashlib import sha256
 from pathlib import Path
 from urllib.parse import quote
 
@@ -15,7 +14,8 @@ from app.auth.models import User
 from app.auth.router import current_user
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.file_validation import InvalidUpload, validate_upload
+from app.core.file_validation import InvalidUpload
+from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.finance.models import FinancialEntry
 from app.laboratory.models import (
     LaboratoryCustomer,
@@ -30,7 +30,6 @@ from app.laboratory.quote_pdf import label_pdf, quote_pdf
 from app.laboratory.storage import (
     commit_laboratory_document,
     delete_laboratory_document as delete_laboratory_document_storage,
-    persist_laboratory_document,
     resolve_laboratory_storage_path,
 )
 from app.laboratory.schemas import (
@@ -782,36 +781,35 @@ async def upload_document(
     db: AsyncSession = DB_DEP,
 ):
     work_order = await _work_order_or_404(db, work_order_id)
-    content = await file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="O arquivo excede 15 MB.")
     try:
-        detected = validate_upload(content, file.filename, file.content_type)
+        directory = resolve_laboratory_storage_path(
+            UPLOAD_ROOT,
+            Path(work_order.company_code) / work_order.number,
+        )
+        streamed = await persist_streamed_upload(
+            file,
+            directory=directory,
+            max_size=MAX_UPLOAD_SIZE,
+        )
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail="O arquivo excede 15 MB.") from exc
     except InvalidUpload as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
-
-    try:
-        target = persist_laboratory_document(
-            UPLOAD_ROOT,
-            company_code=work_order.company_code,
-            work_order_number=work_order.number,
-            extension=detected.extension,
-            content=content,
-        )
     except (OSError, ValueError) as exc:
         raise HTTPException(
             status_code=503,
             detail="Armazenamento de documentos indisponível. Verifique o volume /app/storage da API.",
         ) from exc
+    target = streamed.path
 
     document = LaboratoryDocument(
         work_order_id=work_order.id,
         category=category,
         original_name=file.filename or target.name,
         storage_path=str(target),
-        mime_type=detected.mime_type,
-        size_bytes=len(content),
-        checksum_sha256=sha256(content).hexdigest(),
+        mime_type=streamed.mime_type,
+        size_bytes=streamed.size_bytes,
+        checksum_sha256=streamed.checksum_sha256,
         uploaded_by=user.id,
     )
     await commit_laboratory_document(

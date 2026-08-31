@@ -13,7 +13,8 @@ from app.auth.models import User
 from app.auth.router import current_user
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.file_validation import InvalidUpload, validate_upload
+from app.core.file_validation import InvalidUpload
+from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.customers.models import CustomerBillingProfile
 from app.finance.idempotency import finance_request_fingerprint
 from app.finance.models import FinancialAuditEvent, FinancialEntry, FinancialTransfer
@@ -38,7 +39,6 @@ from app.finance.schemas import (
     TransferOutput,
 )
 from app.finance.service import build_finance_summary
-from app.finance.storage import persist_attachment
 
 router = APIRouter(prefix="/finance", dependencies=[Depends(require_module("financeiro"))])
 UPLOAD_ROOT = Path(settings.storage_root) / "finance"
@@ -557,34 +557,30 @@ async def upload_attachment(
     db: AsyncSession = DB_DEP,
 ):
     entry = await _entry_or_404(db, entry_id)
-    content = await file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="O arquivo excede o limite de 10 MB.")
-    try:
-        detected = validate_upload(content, file.filename, file.content_type)
-    except InvalidUpload as exc:
-        raise HTTPException(status_code=415, detail=str(exc)) from exc
-
     previous_path = Path(entry.attachment_path) if entry.attachment_path else None
     try:
-        target = persist_attachment(
-            UPLOAD_ROOT,
-            company_code=entry.company_code,
-            entry_id=entry.id,
-            extension=detected.extension,
-            content=content,
+        streamed = await persist_streamed_upload(
+            file,
+            directory=UPLOAD_ROOT / entry.company_code,
+            filename_prefix=f"{entry.id}-",
+            max_size=MAX_UPLOAD_SIZE,
         )
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail="O arquivo excede o limite de 10 MB.") from exc
+    except InvalidUpload as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=503,
             detail="Armazenamento de anexos indisponível. Verifique o volume /app/storage da API.",
         ) from exc
+    target = streamed.path
 
     before = _snapshot(entry)
     entry.attachment_name, entry.attachment_path, entry.attachment_mime = (
         file.filename or target.name,
         str(target),
-        detected.mime_type,
+        streamed.mime_type,
     )
     db.add(
         _audit(
