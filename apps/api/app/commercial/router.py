@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -82,7 +83,7 @@ async def deactivate_equipment(equipment_id: int, _: CurrentUser, db: DbSession)
 @router.get("/equipment/{equipment_id}/label.pdf")
 async def equipment_label(equipment_id: int, _: CurrentUser, db: DbSession):
     equipment = await _equipment_or_404(db, equipment_id)
-    pdf = commercial_label_pdf(equipment)
+    pdf = await asyncio.to_thread(commercial_label_pdf, equipment)
     return Response(
         content=pdf,
         media_type="application/pdf",

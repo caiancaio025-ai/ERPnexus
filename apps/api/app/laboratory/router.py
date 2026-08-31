@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -591,7 +592,7 @@ async def work_order_label_pdf(
 ):
     work_order = await _work_order_or_404(db, work_order_id)
     tracking_token = work_order.tracking_token or await _issue_tracking_token(db, work_order)
-    pdf_bytes = label_pdf(work_order, work_order.equipment, tracking_token)
+    pdf_bytes = await asyncio.to_thread(label_pdf, work_order, work_order.equipment, tracking_token)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -751,7 +752,7 @@ async def quote_pdf_endpoint(
         await db.refresh(quote)
 
     customer = await db.get(LaboratoryCustomer, work_order.customer_id) if work_order.customer_id else None
-    pdf_bytes = quote_pdf(work_order, work_order.equipment, quote, customer)
+    pdf_bytes = await asyncio.to_thread(quote_pdf, work_order, work_order.equipment, quote, customer)
     disposition = "inline" if preview else "attachment"
     return Response(
         content=pdf_bytes,
