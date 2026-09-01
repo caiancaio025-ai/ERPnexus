@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -27,6 +28,8 @@ async def test_work_order_summary_counts_uses_one_aggregate_query_and_preserves_
         in_testing=7,
         high_priority=8,
         completed_month=9,
+        approved_total=Decimal("12500.50"),
+        awaiting_approval_total=Decimal("8300.25"),
     )
     db = SimpleNamespace(execute=AsyncMock(return_value=_OneRowResult(row)))
 
@@ -48,6 +51,8 @@ async def test_work_order_summary_counts_uses_one_aggregate_query_and_preserves_
         "in_testing": 7,
         "high_priority": 8,
         "completed_month": 9,
+        "approved_total": Decimal("12500.50"),
+        "awaiting_approval_total": Decimal("8300.25"),
     }
     db.execute.assert_awaited_once()
 
@@ -74,6 +79,8 @@ async def test_work_order_summary_counts_converts_null_aggregates_to_zero():
         in_testing=None,
         high_priority=None,
         completed_month=None,
+        approved_total=None,
+        awaiting_approval_total=None,
     )
     db = SimpleNamespace(execute=AsyncMock(return_value=_OneRowResult(row)))
 

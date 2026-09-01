@@ -185,6 +185,8 @@ class WorkOrderSummary(BaseModel):
     in_testing: int
     high_priority: int
     completed_month: int
+    approved_total: Decimal | None = None
+    awaiting_approval_total: Decimal | None = None
 
 
 class StatusHistoryOutput(BaseModel):

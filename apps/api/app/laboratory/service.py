@@ -273,7 +273,26 @@ async def work_order_summary_counts(
             LaboratoryWorkOrder.completed_at >= completed_from,
         )
         .label("completed_month"),
+        func.coalesce(
+            func.sum(LaboratoryWorkOrder.approved_value).filter(
+                LaboratoryWorkOrder.status == "approved"
+            ),
+            0,
+        ).label("approved_total"),
+        func.coalesce(
+            func.sum(LaboratoryWorkOrder.quoted_value).filter(
+                LaboratoryWorkOrder.status == "awaiting_approval"
+            ),
+            0,
+        ).label("awaiting_approval_total"),
     ).where(*filters)
 
     row = (await db.execute(statement)).one()
-    return {field: int(getattr(row, field) or 0) for field in SUMMARY_FIELDS}
+
+    result = {
+        field: int(getattr(row, field) or 0)
+        for field in SUMMARY_FIELDS
+    }
+    result["approved_total"] = row.approved_total or 0
+    result["awaiting_approval_total"] = row.awaiting_approval_total or 0
+    return result

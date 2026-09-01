@@ -45,6 +45,10 @@ ADMIN_ROLES = {"super_admin", "admin", "gestao"}
 # compatibilidade do usuário bootstrap já existente e equivale a GESTAO.
 COLLABORATOR_MANAGER_ROLES = {"super_admin", "gestao"}
 
+# Valores monetarios e o modulo Financeiro sao exclusivos da Gestao.
+# super_admin permanece apenas como compatibilidade do bootstrap legado.
+SENSITIVE_VALUE_ROLES = {"super_admin", "gestao"}
+
 LAB_MODULES = (
     MODULE_DASHBOARD,
     MODULE_PURCHASING,
@@ -80,8 +84,15 @@ def normalize_role(role: str) -> str:
 
 def normalize_modules(role: str, modules: Iterable[str] | None) -> list[str]:
     normalized_role = normalize_role(role)
-    if normalized_role in ADMIN_ROLES:
+    if normalized_role in SENSITIVE_VALUE_ROLES:
         return list(AVAILABLE_MODULES)
+
+    if normalized_role == "admin":
+        return [
+            module
+            for module in AVAILABLE_MODULES
+            if module != MODULE_FINANCE
+        ]
 
     selected = {MODULE_DASHBOARD}
     if not modules:
@@ -97,10 +108,22 @@ def normalize_modules(role: str, modules: Iterable[str] | None) -> list[str]:
     return [module for module in AVAILABLE_MODULES if module in selected]
 
 
+def user_can_view_sensitive_values(role: str) -> bool:
+    """Retorna se o perfil pode acessar valores monetarios sensiveis."""
+    return role.strip().lower() in SENSITIVE_VALUE_ROLES
+
+
 def user_has_module(role: str, modules: Iterable[str] | None, module: str) -> bool:
     normalized = role.strip().lower()
+
+    # Financeiro possui regra mais restritiva do que os demais modulos.
+    # Nem ADM nem o perfil financeiro legado ultrapassam esta barreira.
+    if module == MODULE_FINANCE:
+        return user_can_view_sensitive_values(normalized)
+
     if normalized in ADMIN_ROLES:
         return True
+
     return module in set(modules or ())
 
 

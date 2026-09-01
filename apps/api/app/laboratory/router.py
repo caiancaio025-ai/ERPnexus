@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.access import user_can_create_quote
+from app.auth.access import user_can_create_quote, user_can_view_sensitive_values
 from app.auth.dependencies import require_module
 from app.auth.models import User
 from app.auth.router import current_user
@@ -239,7 +239,7 @@ async def summary(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE,
     month: int | None = QUERY_MONTH,
     year: int | None = QUERY_YEAR,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     today = date.today()
@@ -252,6 +252,11 @@ async def summary(
         opened_before=period_end,
         completed_from=month_start,
     )
+
+    if not user_can_view_sensitive_values(user.role):
+        counts["approved_total"] = None
+        counts["awaiting_approval_total"] = None
+
     return WorkOrderSummary(**counts)
 
 
