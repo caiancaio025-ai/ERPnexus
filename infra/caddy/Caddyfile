@@ -20,7 +20,10 @@
   reverse_proxy site:8080
   log {
     output stdout
-    format json
+    format filter {
+      request>uri regexp "\?.*$" ""
+      wrap json
+    }
   }
 }
 
@@ -45,6 +48,9 @@
 
   log {
     output stdout
-    format json
+    format filter {
+      request>uri regexp "\?.*$" ""
+      wrap json
+    }
   }
 }
