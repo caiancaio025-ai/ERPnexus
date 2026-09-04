@@ -21,7 +21,13 @@ def normalize_serial(serial: str | None) -> str | None:
     return re.sub(r"[^A-Z0-9]", "", serial.upper())
 
 
-def apply_work_order_update(work_order, payload, *, equipment_id: int) -> None:
+def apply_work_order_update(
+    work_order,
+    payload,
+    *,
+    equipment_id: int,
+    include_sensitive_values: bool = True,
+) -> None:
     """Aplica os campos editáveis da O.S., incluindo a empresa emissora.
 
     Mantemos esta atribuição em um único ponto para impedir regressão em que
@@ -40,9 +46,10 @@ def apply_work_order_update(work_order, payload, *, equipment_id: int) -> None:
     work_order.assigned_technician_id = payload.assigned_technician_id
     work_order.entry_invoice = payload.entry_invoice
     work_order.exit_invoice = payload.exit_invoice
-    work_order.parts_cost = payload.parts_cost or None
-    work_order.quoted_value = payload.quoted_value or None
-    work_order.approved_value = payload.approved_value or None
+    if include_sensitive_values:
+        work_order.parts_cost = payload.parts_cost or None
+        work_order.quoted_value = payload.quoted_value or None
+        work_order.approved_value = payload.approved_value or None
     work_order.internal_notes = payload.internal_notes
     work_order.customer_notes = payload.customer_notes
 
@@ -224,6 +231,7 @@ async def work_order_summary_counts(
     opened_from: date | None = None,
     opened_before: date | None = None,
     completed_from: date,
+    completed_before: date | None = None,
 ) -> dict[str, int]:
     """Build every Laboratory summary KPI in one aggregate query.
 
@@ -238,6 +246,10 @@ async def work_order_summary_counts(
         filters.append(LaboratoryWorkOrder.opened_at >= opened_from)
     if opened_before is not None:
         filters.append(LaboratoryWorkOrder.opened_at < opened_before)
+
+    completed_filters = [LaboratoryWorkOrder.completed_at >= completed_from]
+    if completed_before is not None:
+        completed_filters.append(LaboratoryWorkOrder.completed_at < completed_before)
 
     statement = select(
         func.count(LaboratoryWorkOrder.id)
@@ -270,7 +282,7 @@ async def work_order_summary_counts(
         func.count(LaboratoryWorkOrder.id)
         .filter(
             LaboratoryWorkOrder.status.in_(("completed", "delivered")),
-            LaboratoryWorkOrder.completed_at >= completed_from,
+            *completed_filters,
         )
         .label("completed_month"),
         func.coalesce(

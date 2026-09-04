@@ -17,7 +17,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Image as PlatypusImage
-from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import settings
 
@@ -79,34 +79,26 @@ def _section_title(text: str, style: ParagraphStyle) -> Table:
     )
 
 
-def _text_panel(text: object | None, style: ParagraphStyle, min_height: float = 13 * mm) -> Table:
-    """Painel textual com altura dinâmica.
+def _text_panel(text: object | None, style: ParagraphStyle, min_height: float = 13 * mm) -> Paragraph:
+    """Painel textual divisível entre páginas.
 
-    A versão anterior fixava ``rowHeights`` mesmo quando o Paragraph precisava
-    de mais espaço; o ReportLab então desenhava o texto para fora da célula e
-    ele invadia a seção seguinte. Aqui calculamos a altura real do Paragraph e
-    usamos o maior valor entre conteúdo+paddings e a altura mínima visual.
+    Um ``Table`` de célula única não pode se dividir quando o laudo cresce além
+    do espaço restante da página. Usar ``Paragraph`` com borda/fundo preserva
+    a leitura visual e permite que o ReportLab quebre conteúdo longo de forma
+    natural, sem ``LayoutError`` nem páginas quase vazias.
     """
-    content = Paragraph(_safe(text).replace("\n", "<br/>"), style)
-    horizontal_padding = 16
-    vertical_padding = 14
-    content_width = 174 * mm - horizontal_padding
-    _, content_height = content.wrap(content_width, A4[1])
-    row_height = max(min_height, content_height + vertical_padding)
-    return Table(
-        [[content]],
-        colWidths=[174 * mm],
-        rowHeights=[row_height],
-        style=TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
-            ("BOX", (0, 0), (-1, -1), 0.45, GRID),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ]),
+    del min_height  # compatibilidade com chamadas antigas; a altura agora é natural.
+    panel_style = ParagraphStyle(
+        f"{style.name}-panel",
+        parent=style,
+        backColor=LIGHT,
+        borderColor=GRID,
+        borderWidth=0.45,
+        borderPadding=(7, 8, 7, 8),
+        spaceBefore=0,
+        spaceAfter=0,
     )
+    return Paragraph(_safe(text).replace("\n", "<br/>"), panel_style)
 
 
 def _info_card(title: str, rows: list[tuple[str, object | None]], body: ParagraphStyle, title_style: ParagraphStyle) -> Table:
@@ -136,7 +128,7 @@ def quote_pdf(
     quote: LaboratoryQuote,
     customer: LaboratoryCustomer | None = None,
 ) -> bytes:
-    """Gera orçamento no padrão corporativo aprovado: 1ª página comercial/técnica e 2ª página de condições."""
+    """Gera orçamento corporativo com paginação natural e blocos legíveis."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -270,9 +262,9 @@ def quote_pdf(
     ]))
     story += [cards, Spacer(1, 8)]
 
-    story += [KeepTogether([_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body)]), Spacer(1, 7)]
-    story += [KeepTogether([_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body, 21 * mm)]), Spacer(1, 7)]
-    story += [KeepTogether([_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body, 21 * mm)]), Spacer(1, 7)]
+    story += [_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body), Spacer(1, 7)]
+    story += [_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body), Spacer(1, 7)]
+    story += [_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body), Spacer(1, 7)]
 
     story += [_section_title("SERVIÇOS E COMPONENTES", section), Spacer(1, 3)]
     rows: list[list[object]] = [["Descrição", "Qtd.", "Unitário", "Total"]]
@@ -333,11 +325,17 @@ def quote_pdf(
     ]))
     story += [summary]
 
-    # Página 2 - condições e cláusulas preservadas integralmente.
-    story += [PageBreak(), _section_title("CONDIÇÕES COMERCIAIS", section), Spacer(1, 4)]
+    # Condições seguem no fluxo natural. O ReportLab inicia nova página apenas
+    # quando o espaço restante realmente não comporta o próximo bloco.
+    story += [Spacer(1, 8), _section_title("CONDIÇÕES COMERCIAIS", section), Spacer(1, 4)]
     conditions = Table([
         ["Prazo de execução", "Prazo de faturamento", "Garantia", "Validade"],
-        [f"{quote.delivery_days} dias", f"{quote.billing_days} dias", f"{quote.warranty_months} meses", f"{quote.validity_days} dias"],
+        [
+            f"{quote.delivery_days} dias",
+            (quote.billing_terms or f"{quote.billing_days} dias").strip(),
+            (quote.warranty_terms or f"{quote.warranty_months} meses").strip(),
+            f"{quote.validity_days} dias",
+        ],
     ], colWidths=[57 * mm, 60 * mm, 32 * mm, 25 * mm])
     conditions.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f3f6")),

@@ -153,7 +153,7 @@ class CustomerQuoteSummary(BaseModel):
     work_order_number: str
     revision: int
     status: str
-    total: float
+    total: float | None
     emitted_at: datetime | None
     created_at: datetime
 
@@ -222,7 +222,7 @@ class CustomerDetail(BaseModel):
     equipment_count: int
     work_orders_count: int
     quotes_count: int
-    quotes_total: float
+    quotes_total: float | None
     recent_work_orders: list[CustomerWorkOrderSummary]
     contacts: list[ContactOutput]
     billing: BillingOutput | None

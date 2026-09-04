@@ -125,6 +125,7 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
     () => ["admin", "super_admin"].includes(user.role) || user.modules.some((m) => ["laboratorio", "comercial", "financeiro"].includes(m)),
     [user],
   );
+  const canViewValues = ["gestao", "super_admin"].includes(user.role);
 
   async function loadCustomers(term = search, requestedPage = 1) {
     setLoading(true); setError("");
@@ -250,14 +251,14 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
                 {TABS.map(({ key, label, icon: Icon }) => <button key={key} className={tab === key ? "active" : ""} disabled={creating && key !== "data"} onClick={() => setTab(key)}><Icon size={15} /><span>{label}</span></button>)}
               </nav>
               <div className="customer-content">
-                {tab === "overview" && customer && <Overview customer={customer} />}
+                {tab === "overview" && customer && <Overview customer={customer} canViewValues={canViewValues} />}
                 {tab === "data" && <CustomerData form={form} setForm={setForm} onSubmit={saveCustomer} loading={loading} />}
                 {tab === "contacts" && customer && <Contacts customer={customer} reload={() => openCustomer(customer.id, true)} />}
                 {tab === "billing" && customer && <Billing customer={customer} reload={() => openCustomer(customer.id, true)} />}
                 {tab === "documents" && customer && <Documents customer={customer} />}
                 {tab === "equipment" && customer && <Equipment customer={customer} />}
-                {tab === "workorders" && customer && <WorkOrders customer={customer} />}
-                {tab === "quotes" && customer && <Quotes customer={customer} />}
+                {tab === "workorders" && customer && <WorkOrders customer={customer} canViewValues={canViewValues} />}
+                {tab === "quotes" && customer && <Quotes customer={customer} canViewValues={canViewValues} />}
                 {tab === "notes" && customer && <Notes customer={customer} />}
               </div>
             </>}
@@ -268,7 +269,7 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
   );
 }
 
-function Overview({ customer }: { customer: CustomerDetail }) {
+function Overview({ customer, canViewValues }: { customer: CustomerDetail; canViewValues: boolean }) {
   const primary = customer.contacts.find((c) => c.is_primary);
   const latestOrders = customer.recent_work_orders;
   return <div className="customer-panel overview-panel">
@@ -276,7 +277,7 @@ function Overview({ customer }: { customer: CustomerDetail }) {
       <article><span>Contato principal</span><strong>{primary?.name || "Não definido"}</strong><small>{primary?.department || primary?.email || "Cadastre um responsável"}</small></article>
       <article><span>Prazo de faturamento</span><strong>{customer.billing?.payment_term_days == null ? "Não definido" : `${customer.billing.payment_term_days} dias`}</strong><small>{customer.billing?.billing_cutoff_day ? `Corte no dia ${customer.billing.billing_cutoff_day}` : "Dia de corte não configurado"}</small></article>
       <article><span>Operação técnica</span><strong>{customer.work_orders_count} OS</strong><small>{customer.equipment_count} equipamentos vinculados</small></article>
-      <article><span>Orçamentos</span><strong>{customer.quotes_count}</strong><small>{money(customer.quotes_total)} em histórico</small></article>
+      <article><span>Orçamentos</span><strong>{customer.quotes_count}</strong><small>{canViewValues ? `${money(customer.quotes_total)} em histórico` : "Histórico comercial restrito à Gestão"}</small></article>
     </div>
     <section className="overview-wide"><header><div><span>ATIVIDADE RECENTE</span><h3>Últimas ordens de serviço</h3></div><ClipboardList size={19} /></header>
       <div className="overview-table">
@@ -440,7 +441,7 @@ function Equipment({ customer }: { customer: CustomerDetail }) {
   </div>;
 }
 
-function WorkOrders({ customer }: { customer: CustomerDetail }) {
+function WorkOrders({ customer, canViewValues }: { customer: CustomerDetail; canViewValues: boolean }) {
   const [data, setData] = useState<CustomerWorkOrderPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
   const [loadingPage, setLoadingPage] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -464,8 +465,8 @@ function WorkOrders({ customer }: { customer: CustomerDetail }) {
     <SectionTitle icon={ClipboardList} title="Ordens de serviço" subtitle="Histórico operacional do cliente." />
     {pageError && <p className="customers-error">{pageError}</p>}
     <div className="relation-table workorders">
-      <header><span>OS</span><span>Status</span><span>Série</span><span>Abertura</span><span>Valor</span></header>
-      {data.items.map((item) => <div key={item.id}><strong>{item.number}</strong><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{item.equipment_serial || "Sem série"}</span><span>{dateBR(item.opened_at)}</span><span>{money(item.approved_value ?? item.quoted_value)}</span></div>)}
+      <header><span>OS</span><span>Status</span><span>Série</span><span>Abertura</span>{canViewValues && <span>Valor</span>}</header>
+      {data.items.map((item) => <div key={item.id}><strong>{item.number}</strong><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{item.equipment_serial || "Sem série"}</span><span>{dateBR(item.opened_at)}</span>{canViewValues && <span>{money(item.approved_value ?? item.quoted_value)}</span>}</div>)}
     </div>
     {!loadingPage && !data.items.length && <p className="customers-muted">Nenhuma OS vinculada a este cliente.</p>}
     <footer className="relation-pagination">
@@ -476,7 +477,7 @@ function WorkOrders({ customer }: { customer: CustomerDetail }) {
   </div>;
 }
 
-function Quotes({ customer }: { customer: CustomerDetail }) {
+function Quotes({ customer, canViewValues }: { customer: CustomerDetail; canViewValues: boolean }) {
   const [data, setData] = useState<CustomerQuotePage>({ items: [], page: 1, page_size: 50, total: 0, pages: 1 });
   const [loadingPage, setLoadingPage] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -500,8 +501,8 @@ function Quotes({ customer }: { customer: CustomerDetail }) {
     <SectionTitle icon={BadgeDollarSign} title="Orçamentos" subtitle="Revisões e valores comerciais vinculados às OS." />
     {pageError && <p className="customers-error">{pageError}</p>}
     <div className="relation-table quotes">
-      <header><span>OS</span><span>Revisão</span><span>Status</span><span>Emissão</span><span>Total</span></header>
-      {data.items.map((item) => <div key={item.id}><strong>{item.work_order_number}</strong><span>Rev. {item.revision}</span><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{dateBR(item.emitted_at || item.created_at)}</span><span>{money(item.total)}</span></div>)}
+      <header><span>OS</span><span>Revisão</span><span>Status</span><span>Emissão</span>{canViewValues && <span>Total</span>}</header>
+      {data.items.map((item) => <div key={item.id}><strong>{item.work_order_number}</strong><span>Rev. {item.revision}</span><span className={`customers-status-pill customers-status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>{dateBR(item.emitted_at || item.created_at)}</span>{canViewValues && <span>{money(item.total)}</span>}</div>)}
     </div>
     {!loadingPage && !data.items.length && <p className="customers-muted">Nenhum orçamento vinculado a este cliente.</p>}
     <footer className="relation-pagination">

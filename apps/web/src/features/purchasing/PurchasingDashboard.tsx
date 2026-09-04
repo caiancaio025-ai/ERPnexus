@@ -23,11 +23,13 @@ import {
   Truck,
   X,
 } from "lucide-react";
+import { NexusMark } from "../../shared/ui/NexusMark";
 import { AnimatePresence, motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
 import type { AuthUser } from "../auth/AuthCard";
+import { MaterialRequestsPanel } from "./MaterialRequestsPanel";
 import type {
   CompanyCode,
   PurchaseAudit,
@@ -40,7 +42,7 @@ import type {
 import "./purchasing.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
-type View = "dashboard" | "new" | "orders" | "audit";
+type View = "dashboard" | "requests" | "new" | "orders" | "audit";
 
 type FormState = {
   company_code: CompanyCode;
@@ -101,8 +103,8 @@ const emptyForm = (): FormState => ({
   notes: "",
 });
 
-function money(value: number | string) {
-  return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function money(value: number | string | null | undefined) {
+  return Number(value ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function dateLabel(value: string) {
@@ -121,6 +123,7 @@ function statusTone(order: PurchaseOrder) {
 
 export function PurchasingDashboard({ user, onLogout }: Props) {
   const navigate = useNavigate();
+  const canViewValues = ["gestao", "super_admin"].includes(user.role);
   const [view, setView] = useState<View>("dashboard");
   const [company, setCompany] = useState<CompanyCode | "all">("all");
   const [summary, setSummary] = useState<PurchaseSummary | null>(null);
@@ -222,6 +225,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   }, []);
 
   function openNew() {
+    if (!canViewValues) return;
     const next = emptyForm();
     if (suppliers[0]) next.supplier_id = String(suppliers[0].id);
     setEditing(null);
@@ -231,6 +235,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   }
 
   function openEdit(order: PurchaseOrder) {
+    if (!canViewValues) return;
     setEditing(order);
     setAttachment(null);
     setForm({
@@ -241,7 +246,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       client_destination: order.client_destination || "",
       product_name: order.product_name,
       quantity: String(order.quantity),
-      total_amount: String(order.total_amount).replace(".", ","),
+      total_amount: String(order.total_amount ?? "").replace(".", ","),
       origin: order.origin,
       tracking_code: order.tracking_code || "",
       purchase_date: order.purchase_date,
@@ -348,7 +353,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   const nav: { id: View; label: string; icon: typeof ShoppingCart }[] = [
     { id: "dashboard", label: "Dashboard & alertas", icon: Boxes },
-    { id: "new", label: "Lançar nova compra", icon: PackagePlus },
+    { id: "requests", label: "Solicitações de material", icon: FileSearch },
+    ...(canViewValues ? [{ id: "new" as View, label: "Lançar nova compra", icon: PackagePlus }] : []),
     { id: "orders", label: "Gerenciar pedidos", icon: ClipboardList },
     { id: "audit", label: "Auditoria de compras", icon: History },
   ];
@@ -356,7 +362,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   return (
     <main className="purchasing-shell">
       <aside className="purchasing-sidebar">
-        <div className="purchasing-brand"><span>N</span><strong>NEXUS</strong></div>
+        <div className="purchasing-brand"><NexusMark/><strong>NEXUS</strong></div>
         <div className="purchasing-module"><ShoppingCart size={20} /><div><small>MÓDULO</small><strong>Compras</strong></div></div>
         <nav>
           {nav.map((item) => {
@@ -370,8 +376,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
       <section className="purchasing-content">
         <header className="purchasing-header">
-          <div><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "orders" ? "Gerenciar pedidos" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
-          <motion.button className="primary-action" onClick={openNew} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}><Plus size={18} />Nova compra</motion.button>
+          <div><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "requests" ? "Solicitações de material" : view === "orders" ? "Gerenciar pedidos" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
+          {canViewValues && <motion.button className="primary-action" onClick={openNew} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}><Plus size={18} />Nova compra</motion.button>}
         </header>
 
         <div className="company-switcher">
@@ -389,20 +395,22 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             <article className="danger"><AlertTriangle /><span>Entregas atrasadas</span><strong>{summary?.overdue ?? 0}</strong></article>
             <article className="warning"><CalendarClock /><span>Próximos 7 dias</span><strong>{summary?.due_soon ?? 0}</strong></article>
             <article className="success"><PackageCheck /><span>Entregues no mês</span><strong>{summary?.delivered_month ?? 0}</strong></article>
-            <article><Boxes /><span>Valor em aberto</span><strong>{money(summary?.total_value_open ?? 0)}</strong></article>
+            {canViewValues && <article><Boxes /><span>Valor em aberto</span><strong>{money(summary?.total_value_open)}</strong></article>}
           </section>
           <section className="purchase-panel">
             <div className="panel-title"><div><small>RADAR DE COMPRAS</small><h2>Pedidos que exigem atenção</h2></div><button onClick={() => setView("orders")}>Ver todos <ChevronRight size={16} /></button></div>
-            <OrderTable orders={orders.slice(0, 8)} onOpen={openEdit} />
+            <OrderTable orders={orders.slice(0, 8)} onOpen={canViewValues ? openEdit : undefined} canViewValues={canViewValues} />
           </section>
         </>}
 
         {view === "orders" && <section className="purchase-panel">
           <div className="panel-title orders-title"><div><small>ACOMPANHAMENTO</small><h2>Pedidos de compra</h2></div><div className="order-filters"><label><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Série, NF, produto, fornecedor..." /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">Todos os status</option><option value="overdue">Atrasados</option><option value="due_soon">Próximas entregas</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
-          <OrderTable orders={orders} onOpen={openEdit} />
+          <OrderTable orders={orders} onOpen={canViewValues ? openEdit : undefined} canViewValues={canViewValues} />
         </section>}
 
-        {view === "new" && <form className="purchase-form" onSubmit={saveOrder}>
+        {view === "requests" && <MaterialRequestsPanel canViewValues={canViewValues} />}
+
+        {canViewValues && view === "new" && <form className="purchase-form" onSubmit={saveOrder}>
           <div className="form-top"><button type="button" className="supplier-manager" onClick={() => { setSupplierError(""); setSupplierModal(true); }}><Settings size={17} />Cadastrar / selecionar fornecedor</button>{editing && <span className="purchase-code">{editing.code}</span>}</div>
           <div className="form-grid">
             <Field label="Empresa"><select value={form.company_code} onChange={(e) => setForm({ ...form, company_code: e.target.value as CompanyCode })}>{companies.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></Field>
@@ -436,6 +444,6 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
   return <label className={wide ? "field wide" : "field"}><span>{label}</span>{children}</label>;
 }
 
-function OrderTable({ orders, onOpen }: { orders: PurchaseOrder[]; onOpen: (order: PurchaseOrder) => void }) {
-  return <div className="orders-table"><div className="order-row order-head"><span>Pedido / série</span><span>Fornecedor</span><span>Produto / destino</span><span>Compra</span><span>Previsão</span><span>Status</span><span>Valor</span><span /></div>{orders.map((order) => { const tone = statusTone(order); return <motion.button key={order.id} className="order-row" onClick={() => onOpen(order)} whileHover={{ x: 2 }} whileTap={{ scale: 0.995 }}><span><strong>{order.code}</strong><small>{order.equipment_serial || "Sem série vinculada"}</small></span><span><strong>{order.supplier_name}</strong><small>{order.origin === "national" ? "Nacional" : "Internacional"}</small></span><span><strong>{order.product_name}</strong><small>{order.client_destination || "Sem destino informado"}</small></span><span>{dateLabel(order.purchase_date)}</span><span className={tone === "overdue" ? "date-overdue" : ""}>{dateLabel(order.estimated_delivery_date)}</span><span><em className={`status-pill ${tone}`}>{tone === "overdue" ? "Atrasada" : statusLabels[order.status]}</em></span><span className="amount">{money(order.total_amount)}</span><ChevronRight size={18} /></motion.button>; })}{orders.length === 0 && <div className="empty-state">Nenhuma compra encontrada.</div>}</div>;
+function OrderTable({ orders, onOpen, canViewValues }: { orders: PurchaseOrder[]; onOpen?: (order: PurchaseOrder) => void; canViewValues: boolean }) {
+  return <div className="orders-table"><div className="order-row order-head"><span>Pedido / série</span><span>Fornecedor</span><span>Produto / destino</span><span>Compra</span><span>Previsão</span><span>Status</span>{canViewValues && <span>Valor</span>}<span /></div>{orders.map((order) => { const tone = statusTone(order); return <motion.button key={order.id} className="order-row" onClick={() => onOpen?.(order)} whileHover={{ x: 2 }} whileTap={{ scale: 0.995 }}><span><strong>{order.code}</strong><small>{order.equipment_serial || "Sem série vinculada"}</small></span><span><strong>{order.supplier_name}</strong><small>{order.origin === "national" ? "Nacional" : "Internacional"}</small></span><span><strong>{order.product_name}</strong><small>{order.client_destination || "Sem destino informado"}</small></span><span>{dateLabel(order.purchase_date)}</span><span className={tone === "overdue" ? "date-overdue" : ""}>{dateLabel(order.estimated_delivery_date)}</span><span><em className={`status-pill ${tone}`}>{tone === "overdue" ? "Atrasada" : statusLabels[order.status]}</em></span>{canViewValues && <span className="amount">{money(order.total_amount)}</span>}<ChevronRight size={18} /></motion.button>; })}{orders.length === 0 && <div className="empty-state">Nenhuma compra encontrada.</div>}</div>;
 }

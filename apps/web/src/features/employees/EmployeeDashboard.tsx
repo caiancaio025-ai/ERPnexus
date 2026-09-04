@@ -11,6 +11,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { NexusMark } from "../../shared/ui/NexusMark";
 import { useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../auth/AuthCard";
@@ -99,7 +100,7 @@ export function EmployeeDashboard({ user, onLogout }: Props) {
     <div className="employees-shell">
       <aside className="employees-sidebar">
         <button className="employees-brand" onClick={() => navigate("/painel")}>
-          <span>N</span><strong>NEXUS</strong>
+          <NexusMark/><strong>NEXUS</strong>
         </button>
         <button onClick={() => navigate("/painel")}><ArrowLeft size={18}/>Painel</button>
         <button className="active"><UsersRound size={18}/>Colaboradores</button>

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.access import user_can_view_sensitive_values
 from app.auth.models import User
 from app.auth.router import current_user
 from app.core.db import get_db
@@ -14,6 +15,13 @@ from app.notifications.schemas import NotificationOutput, NotificationSummary
 router = APIRouter(prefix="/notifications")
 CurrentUser = Annotated[User, Depends(current_user)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+def _notification_output(item: Notification, *, include_sensitive_values: bool) -> NotificationOutput:
+    output = NotificationOutput.model_validate(item)
+    if not include_sensitive_values:
+        output.amount = None
+    return output
 
 
 @router.get("", response_model=NotificationSummary)
@@ -44,7 +52,11 @@ async def list_notifications(
             )
         ).all()
     )
-    return NotificationSummary(unread_count=unread_count, items=items)
+    include_values = user_can_view_sensitive_values(user.role)
+    return NotificationSummary(
+        unread_count=unread_count,
+        items=[_notification_output(item, include_sensitive_values=include_values) for item in items],
+    )
 
 
 @router.post("/{notification_id}/read", response_model=NotificationOutput)
@@ -60,7 +72,10 @@ async def mark_read(notification_id: int, user: CurrentUser, db: DbSession):
         item.read_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(item)
-    return item
+    return _notification_output(
+        item,
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post("/read-all")

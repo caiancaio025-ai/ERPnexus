@@ -15,6 +15,7 @@ export type FinanceEvent = {
   bank_name?: string | null; counterparty_name?: string | null;
 };
 export type CashFlowPoint = { label: string; income: number; expense: number; balance: number };
+export type ForecastPoint = { date: string; income: number; expense: number; net: number };
 export type FinanceSummary = {
   current_balance: number; period_income: number; period_expense: number; period_result: number;
   settled_income: number; settled_expense: number; pending_income: number; pending_expense: number;
@@ -22,7 +23,7 @@ export type FinanceSummary = {
   period_entry_count: number; period_income_count: number; period_expense_count: number;
   period_start: string; period_end: string; date_basis: DateBasis; projected_balance: number;
   overdue_count: number; due_soon_count: number; kpis: FinanceKpi[]; urgent_events: FinanceEvent[];
-  income_events: FinanceEvent[]; expense_events: FinanceEvent[]; cash_flow: CashFlowPoint[];
+  income_events: FinanceEvent[]; expense_events: FinanceEvent[]; cash_flow: CashFlowPoint[]; forecast_flow: ForecastPoint[];
 };
 export type FinanceDateBounds = { min_date?: string | null; max_date?: string | null; count: number; date_basis: DateBasis };
 export type FinancialEntry = {

@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.access import user_can_view_sensitive_values
 from app.auth.dependencies import require_any_module
 from app.auth.models import User
 from app.auth.router import current_user
@@ -168,7 +169,7 @@ async def _customer_or_404(db: AsyncSession, customer_id: int) -> LaboratoryCust
 
 
 @router.get("/{customer_id}", response_model=CustomerDetail)
-async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
+async def get_customer(customer_id: int, db: DbSession, user: CurrentUser):
     customer = await _customer_or_404(db, customer_id)
     contacts = list(
         (
@@ -189,13 +190,20 @@ async def get_customer(customer_id: int, db: DbSession, _: CurrentUser):
         for column in customer.__table__.columns
         if column.name not in {"created_by", "created_at", "updated_at"}
     }
+    include_values = user_can_view_sensitive_values(user.role)
+    recent_work_orders = overview.recent_work_orders
+    if not include_values:
+        recent_work_orders = [
+            {**item, "quoted_value": None, "approved_value": None}
+            for item in recent_work_orders
+        ]
     return CustomerDetail(
         **values,
         equipment_count=overview.equipment_count,
         work_orders_count=overview.work_orders_count,
         quotes_count=overview.quotes_count,
-        quotes_total=overview.quotes_total,
-        recent_work_orders=overview.recent_work_orders,
+        quotes_total=overview.quotes_total if include_values else None,
+        recent_work_orders=recent_work_orders,
         contacts=contacts,
         billing=billing,
     )
@@ -220,7 +228,7 @@ async def get_customer_equipment_page(
 async def get_customer_work_orders_page(
     customer_id: int,
     db: DbSession,
-    _: CurrentUser,
+    user: CurrentUser,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ):
@@ -228,14 +236,20 @@ async def get_customer_work_orders_page(
     result = await list_customer_work_orders_page(
         db, customer_id=customer_id, page=page, page_size=page_size
     )
-    return CustomerWorkOrderPage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+    items = result.items
+    if not user_can_view_sensitive_values(user.role):
+        items = [
+            {**item, "quoted_value": None, "approved_value": None}
+            for item in items
+        ]
+    return CustomerWorkOrderPage(items=items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
 
 
 @router.get("/{customer_id}/quotes/page", response_model=CustomerQuotePage)
 async def get_customer_quotes_page(
     customer_id: int,
     db: DbSession,
-    _: CurrentUser,
+    user: CurrentUser,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ):
@@ -243,7 +257,10 @@ async def get_customer_quotes_page(
     result = await list_customer_quotes_page(
         db, customer_id=customer_id, page=page, page_size=page_size
     )
-    return CustomerQuotePage(items=result.items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
+    items = result.items
+    if not user_can_view_sensitive_values(user.role):
+        items = [{**item, "total": None} for item in items]
+    return CustomerQuotePage(items=items, page=result.page, page_size=result.page_size, total=result.total, pages=result.pages)
 
 
 @router.get("/{customer_id}/notes/page", response_model=CustomerNotePage)

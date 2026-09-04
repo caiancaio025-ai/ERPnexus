@@ -44,6 +44,7 @@ class FakeDB:
                 due_soon_count=0,
             )]),
             Rows([]),
+            Rows([]),  # forecast_flow por data de vencimento
         ])
         self.scalars = AsyncMock(return_value=Rows([]))
 
@@ -69,6 +70,6 @@ async def test_summary_exposes_overdue_amounts_independent_from_entry_page():
     assert summary.period_income_count == 2
     assert summary.period_expense_count == 1
 
-    # Summary usa 4 round-trips: 2 agregações + eventos + fluxo.
-    assert db.execute.await_count == 3
+    # Summary usa 5 round-trips: 2 agregações + eventos + fluxo semanal + previsão por vencimento.
+    assert db.execute.await_count == 4
     assert db.scalars.await_count == 1

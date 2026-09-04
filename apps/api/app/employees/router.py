@@ -264,7 +264,7 @@ async def update_collaborator_access(
 @router.get("", response_model=PaginatedEmployeeResponse)
 async def list_employees(
     db: DbSession,
-    _: CurrentUser,
+    _: ManagerUser,
     company_code: str = Query("universo_eletronica"),
     department: str | None = Query(None),
     is_active: bool | None = Query(None),
@@ -297,7 +297,7 @@ async def create_employee(payload: EmployeeCreate, db: DbSession, user: CurrentU
 
 
 @router.get("/{employee_id}", response_model=EmployeeDetailResponse)
-async def get_employee(employee_id: int, db: DbSession, _: CurrentUser):
+async def get_employee(employee_id: int, db: DbSession, _: ManagerUser):
     employee = await EmployeeService.get_employee(db, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Colaborador não encontrado.")

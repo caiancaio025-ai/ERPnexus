@@ -105,7 +105,7 @@ export type CustomerQuoteSummary = {
   work_order_number: string;
   revision: number;
   status: string;
-  total: number;
+  total: number | null;
   emitted_at: string | null;
   created_at: string;
 };
@@ -165,7 +165,7 @@ export type CustomerDetail = CustomerListItem & {
   equipment_count: number;
   work_orders_count: number;
   quotes_count: number;
-  quotes_total: number;
+  quotes_total: number | null;
   recent_work_orders: CustomerWorkOrderSummary[];
   contacts: CustomerContact[];
   billing: BillingProfile | null;

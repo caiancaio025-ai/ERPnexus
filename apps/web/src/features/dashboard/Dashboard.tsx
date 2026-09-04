@@ -23,6 +23,7 @@ import {
   WalletCards,
   Wrench,
 } from "lucide-react";
+import { NexusMark } from "../../shared/ui/NexusMark";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -289,11 +290,11 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       <aside className="sidebar">
         <div>
           <button className="brand" onClick={() => navigate("/painel")} aria-label="Abrir painel NEXUS">
-            <span className="brand__mark">N</span><strong>NEXUS</strong>
+            <NexusMark className="brand__mark"/><strong>NEXUS</strong>
           </button>
           <p className="sidebar__section">Geral</p>
           <nav aria-label="Módulos">
-            {modules.filter((item) => item.target !== "/financeiro" || !(["tecnico", "lab"].includes(user.role))).map(({ label, icon: Icon, target, active }) => (
+            {modules.filter((item) => item.target !== "/financeiro" || ["gestao", "super_admin"].includes(user.role)).map(({ label, icon: Icon, target, active }) => (
               <button className={active ? "active" : ""} key={label} onClick={() => navigate(target)}>
                 <Icon size={19} /><span>{label}</span>
               </button>

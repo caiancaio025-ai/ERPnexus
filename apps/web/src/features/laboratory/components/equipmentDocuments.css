@@ -28,6 +28,7 @@
   display: flex; align-items: center; gap: 8px; margin: 0 0 4px;
 }
 .equipment-documents__header p { margin: 0; color: #7fa2b9; font-size: 13px; }
+.equipment-documents__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .equipment-documents__upload {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 10px 13px; border: 1px solid #2a6587; border-radius: 10px;
@@ -61,5 +62,8 @@
 .equipment-document-card__actions button { color: #ff8998; }
 @media (max-width: 760px) {
   .equipment-documents__header { align-items: stretch; flex-direction: column; }
+  .equipment-documents__actions { width: 100%; }
+  .equipment-documents__actions .equipment-documents__upload { flex: 1; justify-content: center; }
   .equipment-documents__grid { grid-template-columns: 1fr 1fr; }
 }
+button.equipment-documents__upload { font: inherit; }

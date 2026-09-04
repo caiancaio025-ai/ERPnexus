@@ -39,6 +39,13 @@ class CashFlowPoint(BaseModel):
     balance: float
 
 
+class ForecastPoint(BaseModel):
+    date: date
+    income: float
+    expense: float
+    net: float
+
+
 class FinanceSummary(BaseModel):
     current_balance: float
     period_income: float
@@ -64,6 +71,7 @@ class FinanceSummary(BaseModel):
     income_events: list[FinanceEvent]
     expense_events: list[FinanceEvent]
     cash_flow: list[CashFlowPoint]
+    forecast_flow: list[ForecastPoint]
 
 
 class FinancialEntryBase(BaseModel):

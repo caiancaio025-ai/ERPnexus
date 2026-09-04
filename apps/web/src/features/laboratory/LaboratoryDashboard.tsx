@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BadgeDollarSign, CheckCircle2, ClipboardList, FileText, FlaskConical,
-  History, Image, LogOut, Pencil, Plus, Printer, RefreshCw, Save, Search, Settings, ShieldCheck,
+  Camera, History, Image, LogOut, Pencil, Plus, Printer, RefreshCw, Save, Search, Settings, ShieldCheck,
   Trash2, UploadCloud, UserRoundCog, Users, Wrench, X,
 } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { ActionButton } from "./components/ActionButton";
 import { QuoteEditor } from "./components/QuoteEditor";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { EquipmentDocumentsPanel } from "./components/EquipmentDocumentsPanel";
+import { CameraCapture } from "./components/CameraCapture";
 import type {
   CompanyCode, Customer, Priority, StatusHistory, Technician, WorkOrder,
   WorkOrderPage, WorkOrderStatus, WorkOrderSummary,
@@ -93,24 +94,24 @@ const operationalStatusOptions: Array<{ value: WorkOrderStatus; label: string }>
 ];
 
 const operationalTransitions: Partial<Record<WorkOrderStatus, WorkOrderStatus[]>> = {
-  received: ["awaiting_analysis"],
-  awaiting_analysis: ["in_analysis"],
-  in_analysis: ["awaiting_quote", "in_repair"],
-  awaiting_quote: ["quote_sent"],
-  quote_sent: ["awaiting_approval"],
-  awaiting_approval: [],
-  approved: ["awaiting_parts", "in_repair"],
-  rejected: [],
-  awaiting_parts: ["in_repair"],
-  in_repair: ["awaiting_parts", "in_testing"],
-  in_testing: ["in_repair"],
-  completed: ["delivered"],
-  awaiting_pickup: ["delivered"],
-  delivered: [],
-  warranty: ["in_analysis", "awaiting_parts", "in_repair", "in_testing"],
-  invoiced: [],
-  cancelled: [],
-  no_repair: ["delivered"],
+  received: ["awaiting_analysis", "in_analysis", "awaiting_approval", "no_repair", "cancelled"],
+  awaiting_analysis: ["in_analysis", "awaiting_approval", "no_repair", "cancelled"],
+  in_analysis: ["awaiting_quote", "quote_sent", "awaiting_approval", "approved", "in_repair", "no_repair", "cancelled"],
+  awaiting_quote: ["quote_sent", "awaiting_approval", "approved", "no_repair", "cancelled"],
+  quote_sent: ["awaiting_approval", "approved", "rejected", "no_repair", "cancelled"],
+  awaiting_approval: ["approved", "rejected", "no_repair", "cancelled"],
+  approved: ["awaiting_parts", "in_repair", "in_testing", "completed", "no_repair", "cancelled"],
+  rejected: ["awaiting_approval", "approved", "no_repair", "cancelled"],
+  awaiting_parts: ["approved", "in_repair", "in_testing", "completed", "no_repair", "cancelled"],
+  in_repair: ["approved", "awaiting_parts", "in_testing", "completed", "no_repair", "cancelled"],
+  in_testing: ["in_repair", "awaiting_parts", "completed", "no_repair", "cancelled"],
+  completed: ["awaiting_pickup", "delivered", "invoiced", "warranty", "in_repair"],
+  awaiting_pickup: ["delivered", "invoiced", "warranty", "in_repair"],
+  delivered: ["invoiced", "warranty"],
+  warranty: ["in_analysis", "approved", "awaiting_parts", "in_repair", "in_testing", "completed", "no_repair"],
+  invoiced: ["warranty"],
+  cancelled: ["received"],
+  no_repair: ["awaiting_pickup", "delivered", "invoiced", "warranty", "in_analysis"],
 };
 
 const emptyForm = (): FormState => ({
@@ -139,6 +140,8 @@ function toDetail(order: WorkOrder): DetailState {
 
 export function LaboratoryDashboard({ user, onLogout }: Props) {
   const navigate = useNavigate();
+  const canViewValues = ["gestao", "super_admin"].includes(user.role);
+  const canManageTechnicians = ["super_admin", "admin", "gestao"].includes(user.role);
   const [summary, setSummary] = useState<WorkOrderSummary | null>(null);
   const [pageData, setPageData] = useState<WorkOrderPage>({ items: [], page: 1, page_size: 25, total: 0, pages: 0 });
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -223,18 +226,20 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("acao") === "nova-os") setShowForm(true);
     const workOrderId = Number(params.get("os"));
-    if (Number.isInteger(workOrderId) && workOrderId > 0) void openOrder(workOrderId);
+    const requestedTab = params.get("aba");
+    const initialTab: DetailTab = requestedTab === "quote" ? "quote" : "general";
+    if (Number.isInteger(workOrderId) && workOrderId > 0) void openOrder(workOrderId, initialTab);
   }, []);
 
   function filterByPriorityStatus(status: WorkOrderStatus) {
     setView("orders"); setStatusFilter(status); setPage(1);
   }
 
-  async function openOrder(orderId: number) {
+  async function openOrder(orderId: number, initialTab: DetailTab = "general") {
     setLoading(true); setError("");
     try {
       const order = await apiClient.get<WorkOrder>(`/laboratory/work-orders/${orderId}`);
-      setDetail(toDetail(order)); setDetailTab("general");
+      setDetail(toDetail(order)); setDetailTab(initialTab);
       const rows = await apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${orderId}/history`);
       setHistory(rows);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao abrir a O.S."); }
@@ -244,7 +249,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   async function createWorkOrder(event: React.FormEvent, entryFiles: File[]) {
     event.preventDefault(); setLoading(true); setError(""); setMessage("");
     try {
-      const created = await apiClient.post<WorkOrder>("/laboratory/work-orders", payloadFromForm(form));
+      const created = await apiClient.post<WorkOrder>("/laboratory/work-orders", payloadFromForm(form, canViewValues));
       let uploaded = 0;
       let failedUploads = 0;
       for (const file of entryFiles) {
@@ -271,7 +276,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     setLoading(true); setSaved(false); setError("");
     try {
       const updated = await apiClient.patch<WorkOrder>(`/laboratory/work-orders/${detail.id}`, {
-        ...payloadFromForm(detail), version: detail.version,
+        ...payloadFromForm(detail, canViewValues), version: detail.version,
       });
       setDetail(toDetail(updated)); setSaved(true); setMessage(`O.S. ${updated.number} atualizada.`); await load();
       window.setTimeout(() => setSaved(false), 1800);
@@ -334,6 +339,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
           <article><span>Em reparo</span><strong>{summary?.in_repair ?? 0}</strong></article>
           <article><span>Em testes</span><strong>{summary?.in_testing ?? 0}</strong></article>
           <article className="danger"><span>Alta/Urgente</span><strong>{summary?.high_priority ?? 0}</strong></article>
+          {canViewValues && <article><span>Total aprovado</span><strong>{currency(summary?.approved_total ?? "")}</strong></article>}
+          {canViewValues && <article><span>Aguardando aprovação</span><strong>{currency(summary?.awaiting_approval_total ?? "")}</strong></article>}
         </section>
 
         <section className="lab-toolbar">
@@ -359,9 +366,9 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         </section>
 
         <section className="lab-table-card">
-          <table><thead><tr><th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>NF entrada</th><th>NF saída</th><th>Status</th><th>Prioridade</th><th>Entrada</th></tr></thead>
+          <table><thead><tr><th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>NF entrada</th><th>NF saída</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
             <tbody>{filteredItems.map((order) => <tr key={order.id} className={`lab-order-row priority-${order.priority}`} onClick={() => void openOrder(order.id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") void openOrder(order.id); }}>
-              <td><button className="lab-order-link">{order.number}</button></td><td>{order.customer_name}</td><td>{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td><td>{order.entry_invoice || "—"}</td><td>{order.exit_invoice || "—"}</td><td><span className={`lab-status ${order.status}`}>{statusLabels[order.status]}</span></td><td><span className={`lab-priority ${order.priority}`}>{priorityLabels[order.priority]}</span></td><td>{new Date(`${order.opened_at}T12:00:00`).toLocaleDateString("pt-BR")}</td>
+              <td><button className="lab-order-link">{order.number}</button></td><td>{order.customer_name}</td><td>{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td><td>{order.entry_invoice || "—"}</td><td>{order.exit_invoice || "—"}</td><td><span className={`lab-status ${order.status}`}>{statusLabels[order.status]}</span></td><td><span className={`lab-priority ${order.priority}`}>{priorityLabels[order.priority]}</span></td><td>{new Date(`${order.opened_at}T12:00:00`).toLocaleDateString("pt-BR")}</td>{canViewValues && <td>{currency(order.approved_value ?? order.quoted_value ?? "")}</td>}
             </tr>)}</tbody></table>
           {!filteredItems.length && <div className="lab-empty">Nenhuma ordem encontrada.</div>}
           <footer className="lab-pagination"><strong>{pageData.total} registro(s)</strong><div><button disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><span>Página {page} de {pageData.pages || 1}</span><button disabled={page >= pageData.pages} onClick={() => setPage(page + 1)}>Próxima</button></div></footer>
@@ -369,23 +376,25 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       </section>
 
       {showForm && <OrderForm form={form} setForm={setForm} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={!(["lab", "tecnico"].includes(user.role))} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
-      {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canViewValues} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
+      {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} canManageTechnicians={canManageTechnicians} />}
     </main>
   );
 }
 
-function payloadFromForm(form: FormState) {
+function payloadFromForm(form: FormState, includeSensitiveValues: boolean) {
+  const { parts_cost, quoted_value, approved_value, ...safeForm } = form;
   return {
-    ...form, customer_id: form.customer_id ? Number(form.customer_id) : null,
+    ...safeForm, customer_id: form.customer_id ? Number(form.customer_id) : null,
     assigned_technician_id: form.assigned_technician_id ? Number(form.assigned_technician_id) : null,
     serial_number: form.serial_number || null, manufacturer: form.manufacturer || null,
     model: form.model || null, equipment_type: form.equipment_type || null, power: form.power || null,
     voltage: form.voltage || null, entry_invoice: form.entry_invoice || null, exit_invoice: form.exit_invoice || null,
     entry_condition: form.entry_condition || null, accessories_received: form.accessories_received || null,
-    parts_cost: form.parts_cost || null, quoted_value: form.quoted_value || null,
-    approved_value: form.approved_value || null, internal_notes: form.internal_notes || null,
-    customer_notes: form.customer_notes || null,
+    internal_notes: form.internal_notes || null, customer_notes: form.customer_notes || null,
+    ...(includeSensitiveValues ? {
+      parts_cost: parts_cost || null, quoted_value: quoted_value || null, approved_value: approved_value || null,
+    } : {}),
   };
 }
 
@@ -395,7 +404,8 @@ function SidebarButton({ active, icon, children, onClick }: { active?: boolean; 
 
 function OrderForm({ form, setForm, customers, technicians, loading, onSubmit, onClose }: { form: FormState; setForm: (value: FormState) => void; customers: Customer[]; technicians: Technician[]; loading: boolean; onSubmit: (event: React.FormEvent, files: File[]) => void; onClose: () => void }) {
   const [entryFiles, setEntryFiles] = useState<File[]>([]);
-  return <div className="lab-modal"><form className="lab-form lab-form-wide" onSubmit={(event) => onSubmit(event, entryFiles)}>
+  const [showCamera, setShowCamera] = useState(false);
+  return <><div className="lab-modal"><form className="lab-form lab-form-wide" onSubmit={(event) => onSubmit(event, entryFiles)}>
     <header><div><p>ABERTURA CONTROLADA</p><h2><Plus size={24} /> Nova Ordem de Serviço</h2><small>O número será gerado automaticamente no formato OS-0001.</small></div><button type="button" onClick={onClose}><X /></button></header>
     <SectionTitle title="Identificação" />
     <div className="lab-grid three"><SelectCompany value={form.company_code} onChange={(value) => setForm({ ...form, company_code: value })} /><label>Cliente *<select required value={form.customer_id} onChange={(e) => { const customer = customers.find((item) => item.id === Number(e.target.value)); setForm({ ...form, customer_id: e.target.value, customer_name: customer?.legal_name ?? "" }); }}><option value="">Selecione...</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.legal_name}</option>)}</select></label><label>Técnico responsável<select value={form.assigned_technician_id} onChange={(e) => setForm({ ...form, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
@@ -405,19 +415,32 @@ function OrderForm({ form, setForm, customers, technicians, loading, onSubmit, o
     <div className="lab-grid three"><Input label="NF de entrada" value={form.entry_invoice} onChange={(value) => setForm({ ...form, entry_invoice: value })} /><Input label="NF de saída" value={form.exit_invoice} onChange={(value) => setForm({ ...form, exit_invoice: value })} /><label>Prioridade<select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
     <label>Defeito informado *<textarea required rows={3} value={form.reported_defect} onChange={(e) => setForm({ ...form, reported_defect: e.target.value })} /></label>
     <div className="lab-grid"><label>Condição de entrada<textarea rows={3} value={form.entry_condition} onChange={(e) => setForm({ ...form, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={3} value={form.accessories_received} onChange={(e) => setForm({ ...form, accessories_received: e.target.value })} /></label></div>
-    <label className="lab-entry-upload">
-      <UploadCloud size={24} />
-      <div><strong>Fotos e PDFs de entrada</strong><span>JPG, PNG, WEBP ou PDF · até 15 MB por arquivo</span></div>
-      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple onChange={(event) => setEntryFiles(Array.from(event.target.files ?? []))} />
-    </label>
-    {entryFiles.length > 0 && <div className="lab-entry-files">{entryFiles.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>}
+    <div className="lab-entry-upload-actions">
+      <label className="lab-entry-upload">
+        <UploadCloud size={24} />
+        <div><strong>Adicionar fotos ou PDFs</strong><span>JPG, PNG, WEBP ou PDF · até 15 MB por arquivo</span></div>
+        <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          setEntryFiles((current) => [...current, ...files]);
+          event.currentTarget.value = "";
+        }} />
+      </label>
+      <button type="button" className="lab-entry-upload lab-entry-camera" onClick={() => setShowCamera(true)}>
+        <Camera size={24} />
+        <div><strong>Tirar foto</strong><span>Abre a câmera do dispositivo e captura a imagem no próprio NEXUS.</span></div>
+      </button>
+    </div>
+    {entryFiles.length > 0 && <div className="lab-entry-files">{entryFiles.map((file, index) => <span key={`${file.name}-${file.size}-${index}`}>{file.name}</span>)}</div>}
     <footer><ActionButton type="button" variant="secondary" icon={<X size={17} />} onClick={onClose}>Cancelar</ActionButton><ActionButton type="submit" loading={loading} icon={<Save size={17} />}>Cadastrar e gerar O.S.</ActionButton></footer>
-  </form></div>;
+  </form></div>
+  {showCamera && <CameraCapture title="Foto de entrada" onClose={() => setShowCamera(false)} onCapture={(file) => { setEntryFiles((current) => [...current, file]); setShowCamera(false); }} />}
+  </>;
 }
 
-function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
+function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, canViewValues, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; canViewValues: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const validOperationalStatuses = new Set(operationalTransitions[detail.status] ?? []);
+  const visibleBusinessStatuses = businessStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
   const visibleOperationalStatuses = operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
 
   useEffect(() => {
@@ -429,7 +452,7 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
     <nav className="lab-detail-tabs">
       <TabButton active={tab === "general"} icon={<Pencil size={16} />} onClick={() => setTab("general")}>Edição completa</TabButton>
       <TabButton active={tab === "technical"} icon={<Wrench size={16} />} onClick={() => setTab("technical")}>Dados técnicos</TabButton>
-      <TabButton active={tab === "financial"} icon={<BadgeDollarSign size={16} />} onClick={() => setTab("financial")}>Valores</TabButton>
+      {canViewValues && <TabButton active={tab === "financial"} icon={<BadgeDollarSign size={16} />} onClick={() => setTab("financial")}>Valores</TabButton>}
       <TabButton active={tab === "materials"} icon={<Wrench size={16} />} onClick={() => setTab("materials")}>Materiais</TabButton>
       <TabButton active={tab === "status"} icon={<ClipboardList size={16} />} onClick={() => setTab("status")}>Status</TabButton>
       <TabButton active={tab === "documents"} icon={<Image size={16} />} onClick={() => setTab("documents")}>Fotos</TabButton>
@@ -439,15 +462,15 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
     <div className="lab-detail-content">
       {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><label>Cliente<select value={detail.customer_id} onChange={(e) => { const customer = customers.find((item) => item.id === Number(e.target.value)); setDetail({ ...detail, customer_id: e.target.value, customer_name: customer?.legal_name ?? detail.customer_name }); }}>{customers.map((item) => <option key={item.id} value={item.id}>{item.legal_name}</option>)}</select></label><SelectCompany value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value })} /></div><div className="lab-grid"><Input label="NF de entrada" value={detail.entry_invoice} onChange={(value) => setDetail({ ...detail, entry_invoice: value })} /><Input label="NF de saída" value={detail.exit_invoice} onChange={(value) => setDetail({ ...detail, exit_invoice: value })} /></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
       {tab === "technical" && <><SectionTitle title="Informações do equipamento" /><div className="lab-grid three"><Input label="Equipamento" value={detail.equipment_type} onChange={(value) => setDetail({ ...detail, equipment_type: value })} /><Input label="Fabricante" value={detail.manufacturer} onChange={(value) => setDetail({ ...detail, manufacturer: value })} /><Input label="Modelo" value={detail.model} onChange={(value) => setDetail({ ...detail, model: value })} /><Input label="Número de série" value={detail.serial_number} onChange={(value) => setDetail({ ...detail, serial_number: value })} /><Input label="Potência" value={detail.power} onChange={(value) => setDetail({ ...detail, power: value })} /><Input label="Tensão" value={detail.voltage} onChange={(value) => setDetail({ ...detail, voltage: value })} /></div><label>Observações internas<textarea rows={6} value={detail.internal_notes} onChange={(e) => setDetail({ ...detail, internal_notes: e.target.value })} /></label></>}
-      {tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div></>}
+      {canViewValues && tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} />}
-      {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabels[detail.status]}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option><optgroup label="Status principais">{businessStatusOptions.filter((item) => item.value !== detail.status).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>{visibleOperationalStatuses.length > 0 && <optgroup label="Próximas etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status principais restaurados conforme o fluxo histórico. Compras e materiais continuam sincronizados pelas etapas operacionais.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus); }}>Aplicar status</ActionButton></div></>}
+      {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabels[detail.status]}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option>{visibleBusinessStatuses.length > 0 && <optgroup label="Status principais">{visibleBusinessStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}{visibleOperationalStatuses.length > 0 && <optgroup label="Próximas etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status principais restaurados conforme o fluxo histórico. Compras e materiais continuam sincronizados pelas etapas operacionais.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus); }}>Aplicar status</ActionButton></div></>}
       {tab === "documents" && <EquipmentDocumentsPanel workOrderId={detail.id} />}
       {tab === "quote" && <QuoteEditor
         workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
         equipmentType={detail.equipment_type} manufacturer={detail.manufacturer} model={detail.model}
         serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
-        defect={detail.reported_defect} quotedValue={detail.quoted_value} readOnly={!canManageQuote}
+        defect={detail.reported_defect} quotedValue={canViewValues ? detail.quoted_value : ""} readOnly={!canManageQuote}
       />}
       {tab === "history" && <div className="lab-timeline">{history.map((item) => <article key={item.id}><span className="lab-timeline-dot" /><div><strong>{statusLabels[item.new_status as WorkOrderStatus] ?? item.new_status}</strong><p>{item.note || "Alteração de status."}</p><small>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div></article>)}{!history.length && <div className="lab-empty">Nenhum evento registrado.</div>}</div>}
     </div>
@@ -455,13 +478,109 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
   </section></div>;
 }
 
-function SettingsModal({ company, customers, technicians, tab, setTab, onClose, onSaved }: { company: CompanyCode; customers: Customer[]; technicians: Technician[]; tab: SettingsTab; setTab: (value: SettingsTab) => void; onClose: () => void; onSaved: () => Promise<void> }) {
-  const [customerName, setCustomerName] = useState(""); const [customerDocument, setCustomerDocument] = useState("");
-  const [technicianName, setTechnicianName] = useState(""); const [specialty, setSpecialty] = useState("");
-  const [busyId, setBusyId] = useState<number | null>(null); const [saving, setSaving] = useState(false);
-  async function create() { setSaving(true); try { if (tab === "customers") { await apiClient.post("/laboratory/customers", { company_code: company, legal_name: customerName, document: customerDocument || null }); setCustomerName(""); setCustomerDocument(""); } else { await apiClient.post("/laboratory/technicians", { company_code: company, name: technicianName, specialty: specialty || null }); setTechnicianName(""); setSpecialty(""); } await onSaved(); } finally { setSaving(false); } }
-  async function deactivate(kind: SettingsTab, id: number) { setBusyId(id); try { await apiClient.delete(`/laboratory/${kind}/${id}`); await onSaved(); } finally { setBusyId(null); } }
-  return <div className="lab-modal"><section className="lab-settings professional"><header><div><p>CONFIGURAÇÕES</p><h2>Central de cadastros</h2><span>Administre clientes e técnicos sem perder o histórico operacional.</span></div><button onClick={onClose}><X /></button></header><div className="lab-settings-layout"><nav><TabButton active={tab === "customers"} icon={<Users size={17} />} onClick={() => setTab("customers")}>Clientes <small>{customers.length}</small></TabButton><TabButton active={tab === "technicians"} icon={<UserRoundCog size={17} />} onClick={() => setTab("technicians")}>Técnicos <small>{technicians.length}</small></TabButton></nav><div className="lab-settings-main"><div className="lab-settings-heading"><div><h3>{tab === "customers" ? "Cadastro de clientes" : "Cadastro de técnicos"}</h3><p>{tab === "customers" ? "Razão social, documento e vínculos com as ordens de serviço." : "Equipe técnica, especialidade e disponibilidade operacional."}</p></div><ActionButton loading={saving} icon={<Plus size={17} />} onClick={() => void create()}>Cadastrar</ActionButton></div>{tab === "customers" ? <div className="lab-settings-form"><Input label="Razão social / cliente" value={customerName} onChange={setCustomerName} /><Input label="CNPJ/CPF" value={customerDocument} onChange={setCustomerDocument} /></div> : <div className="lab-settings-form"><Input label="Nome do técnico" value={technicianName} onChange={setTechnicianName} /><Input label="Especialidade" value={specialty} onChange={setSpecialty} /></div>}<div className="lab-settings-list">{(tab === "customers" ? customers : technicians).map((item) => <article key={item.id}><div className="lab-avatar">{("legal_name" in item ? item.legal_name : item.name).slice(0,2).toUpperCase()}</div><div className="lab-settings-item-copy"><strong>{"legal_name" in item ? item.legal_name : item.name}</strong><span>{"document" in item ? item.document || "Sem documento" : item.specialty || "Sem especialidade"}</span></div><ActionButton variant="danger" loading={busyId === item.id} icon={<Trash2 size={16} />} onClick={() => void deactivate(tab, item.id)}>Inativar</ActionButton></article>)}</div></div></div></section></div>;
+function SettingsModal({ company, customers, technicians, tab, setTab, onClose, onSaved, canManageTechnicians }: { company: CompanyCode; customers: Customer[]; technicians: Technician[]; tab: SettingsTab; setTab: (value: SettingsTab) => void; onClose: () => void; onSaved: () => Promise<void>; canManageTechnicians: boolean }) {
+  const [customerName, setCustomerName] = useState("");
+  const [customerDocument, setCustomerDocument] = useState("");
+  const [technicianName, setTechnicianName] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [editingTechnicianId, setEditingTechnicianId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function clearTechnicianEditor() {
+    setEditingTechnicianId(null);
+    setTechnicianName("");
+    setSpecialty("");
+  }
+
+  function editTechnician(technician: Technician) {
+    setEditingTechnicianId(technician.id);
+    setTechnicianName(technician.name);
+    setSpecialty(technician.specialty ?? "");
+  }
+
+  async function saveCadastro() {
+    setSaving(true);
+    try {
+      if (tab === "customers") {
+        await apiClient.post("/laboratory/customers", {
+          company_code: company,
+          legal_name: customerName,
+          document: customerDocument || null,
+        });
+        setCustomerName("");
+        setCustomerDocument("");
+      } else if (editingTechnicianId) {
+        const current = technicians.find((item) => item.id === editingTechnicianId);
+        await apiClient.put(`/laboratory/technicians/${editingTechnicianId}`, {
+          name: technicianName,
+          specialty: specialty || null,
+          phone: current?.phone ?? null,
+          email: current?.email ?? null,
+          color: current?.color ?? null,
+        });
+        clearTechnicianEditor();
+      } else {
+        await apiClient.post("/laboratory/technicians", {
+          company_code: company,
+          name: technicianName,
+          specialty: specialty || null,
+        });
+        clearTechnicianEditor();
+      }
+      await onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deactivate(kind: SettingsTab, id: number) {
+    setBusyId(id);
+    try {
+      await apiClient.delete(`/laboratory/${kind}/${id}`);
+      if (editingTechnicianId === id) clearTechnicianEditor();
+      await onSaved();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return <div className="lab-modal"><section className="lab-settings professional">
+    <header><div><p>CONFIGURAÇÕES</p><h2>Central de cadastros</h2><span>Administre clientes e técnicos sem perder o histórico operacional.</span></div><button onClick={onClose}><X /></button></header>
+    <div className="lab-settings-layout">
+      <nav>
+        <TabButton active={tab === "customers"} icon={<Users size={17} />} onClick={() => setTab("customers")}>Clientes <small>{customers.length}</small></TabButton>
+        <TabButton active={tab === "technicians"} icon={<UserRoundCog size={17} />} onClick={() => setTab("technicians")}>Técnicos <small>{technicians.length}</small></TabButton>
+      </nav>
+      <div className="lab-settings-main">
+        <div className="lab-settings-heading">
+          <div><h3>{tab === "customers" ? "Cadastro de clientes" : editingTechnicianId ? "Editar técnico" : "Cadastro de técnicos"}</h3><p>{tab === "customers" ? "Razão social, documento e vínculos com as ordens de serviço." : "Equipe técnica, especialidade e disponibilidade operacional."}</p></div>
+          <div className="lab-settings-heading-actions">
+            {tab === "technicians" && editingTechnicianId && canManageTechnicians && <ActionButton variant="secondary" icon={<X size={16} />} onClick={clearTechnicianEditor}>Cancelar edição</ActionButton>}
+            {(tab === "customers" || canManageTechnicians) && <ActionButton loading={saving} icon={editingTechnicianId ? <Save size={17} /> : <Plus size={17} />} onClick={() => void saveCadastro()}>{editingTechnicianId ? "Salvar técnico" : "Cadastrar"}</ActionButton>}
+          </div>
+        </div>
+        {tab === "customers"
+          ? <div className="lab-settings-form"><Input label="Razão social / cliente" value={customerName} onChange={setCustomerName} /><Input label="CNPJ/CPF" value={customerDocument} onChange={setCustomerDocument} /></div>
+          : canManageTechnicians ? <div className="lab-settings-form"><Input label="Nome do técnico" value={technicianName} onChange={setTechnicianName} /><Input label="Especialidade" value={specialty} onChange={setSpecialty} /></div> : <div className="lab-alert">Técnicos podem ser consultados aqui. Cadastro, edição e inativação são restritos a ADM/Gestão.</div>}
+        <div className="lab-settings-list">
+          {tab === "customers" && customers.map((item) => <article key={item.id}>
+            <div className="lab-avatar">{item.legal_name.slice(0,2).toUpperCase()}</div>
+            <div className="lab-settings-item-copy"><strong>{item.legal_name}</strong><span>{item.document || "Sem documento"}</span></div>
+            <ActionButton variant="danger" loading={busyId === item.id} icon={<Trash2 size={16} />} onClick={() => void deactivate("customers", item.id)}>Inativar</ActionButton>
+          </article>)}
+          {tab === "technicians" && technicians.map((item) => <article key={item.id}>
+            <div className="lab-avatar">{item.name.slice(0,2).toUpperCase()}</div>
+            <div className="lab-settings-item-copy"><strong>{item.name}</strong><span>{item.specialty || "Sem especialidade"}</span></div>
+            {canManageTechnicians && <div className="lab-settings-row-actions">
+              <ActionButton variant="secondary" icon={<Pencil size={16} />} onClick={() => editTechnician(item)}>Editar</ActionButton>
+              <ActionButton variant="danger" loading={busyId === item.id} icon={<Trash2 size={16} />} onClick={() => void deactivate("technicians", item.id)}>Inativar</ActionButton>
+            </div>}
+          </article>)}
+        </div>
+      </div>
+    </div>
+  </section></div>;
 }
 
 function TabButton({ active, icon, children, onClick }: { active: boolean; icon: React.ReactNode; children: React.ReactNode; onClick: () => void }) { return <button className={`lab-tab-button ${active ? "active" : ""}`} onClick={onClick}>{icon}<span>{children}</span></button>; }

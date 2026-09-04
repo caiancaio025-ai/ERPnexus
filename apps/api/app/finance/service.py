@@ -15,6 +15,7 @@ from app.finance.schemas import (
     FinanceEvent,
     FinanceKpi,
     FinanceSummary,
+    ForecastPoint,
 )
 
 ZERO = Decimal("0.00")
@@ -240,6 +241,34 @@ async def build_finance_summary(
         ))
         cursor = end + timedelta(days=1)
 
+    forecast_rows = (
+        await db.execute(
+            select(
+                FinancialEntry.due_date,
+                func.coalesce(func.sum(case((FinancialEntry.entry_type == "income", FinancialEntry.amount), else_=0)), 0),
+                func.coalesce(func.sum(case((FinancialEntry.entry_type == "expense", FinancialEntry.amount), else_=0)), 0),
+            )
+            .where(
+                *_entry_scope(company_code, consolidated),
+                FinancialEntry.status == "pending",
+                FinancialEntry.due_date >= period_start,
+                FinancialEntry.due_date <= period_end,
+            )
+            .group_by(FinancialEntry.due_date)
+            .order_by(FinancialEntry.due_date)
+        )
+    ).all()
+    forecast_flow = [
+        ForecastPoint(
+            date=due_date,
+            income=float(_money(income)),
+            expense=float(_money(expense)),
+            net=float(_money(income) - _money(expense)),
+        )
+        for due_date, income, expense in forecast_rows
+        if due_date is not None
+    ]
+
     basis_labels = {
         "posting": "competência / lançamento",
         "issue": "emissão",
@@ -279,4 +308,5 @@ async def build_finance_summary(
         income_events=income_events,
         expense_events=expense_events,
         cash_flow=cash_flow,
+        forecast_flow=forecast_flow,
     )

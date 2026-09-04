@@ -46,6 +46,45 @@ async def notify_modules(
             )
 
 
+async def notify_roles(
+    db: AsyncSession,
+    *,
+    roles: set[str],
+    category: str,
+    title: str,
+    message: str,
+    target: str | None = None,
+    severity: str = "info",
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    work_order_id: int | None = None,
+    amount: Decimal | None = None,
+    exclude_user_id: int | None = None,
+) -> None:
+    """Notify active users by explicit role, without widening module permissions."""
+    normalized_roles = {role.strip().lower() for role in roles}
+    users = list((await db.scalars(select(User).where(User.is_active.is_(True)))).all())
+    for user in users:
+        if exclude_user_id is not None and user.id == exclude_user_id:
+            continue
+        if user.role.strip().lower() not in normalized_roles:
+            continue
+        db.add(
+            Notification(
+                user_id=user.id,
+                category=category,
+                severity=severity,
+                title=title,
+                message=message,
+                target=target,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                work_order_id=work_order_id,
+                amount=amount,
+            )
+        )
+
+
 async def notify_quote_users(
     db: AsyncSession,
     *,

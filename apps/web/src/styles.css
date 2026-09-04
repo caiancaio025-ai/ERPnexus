@@ -63,3 +63,7 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .auth-card { transition: none; }
 }
+
+.nexus-mark{overflow:hidden;flex:0 0 auto}.nexus-mark img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(42,174,224,.22))}.login-brand-row{display:flex;align-items:center;gap:16px;margin-bottom:20px}.login-brand-row .nexus-mark{width:64px;height:64px;display:grid;place-items:center;padding:3px;border:1px solid rgba(80,200,255,.42);border-radius:17px;background:linear-gradient(145deg,rgba(19,58,78,.78),rgba(6,25,39,.86));box-shadow:0 10px 34px rgba(13,159,213,.16);color:#69d4ff;font-weight:900}.login-brand-row strong{display:block;letter-spacing:.18em}.login-brand-row small{display:block;margin-top:3px;color:#88a8bf}.brand-copy .login-benefits{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.login-benefits span{padding:7px 10px;border:1px solid rgba(80,200,255,.16);border-radius:999px;background:rgba(10,37,55,.4);color:#8eb5cf;font-size:.78rem}
+
+@media(max-width:700px){.login-brand-row .nexus-mark{width:54px;height:54px;border-radius:15px}.login-brand-row{gap:12px}}

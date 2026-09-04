@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.access import user_can_view_sensitive_values
 from app.auth.dependencies import require_module
 from app.auth.models import User
 from app.auth.router import current_user
@@ -55,6 +56,42 @@ async def _purchase_or_404(db: AsyncSession, purchase_id: int) -> PurchaseOrder:
     return purchase
 
 
+def _require_sensitive_values(user: User) -> None:
+    if not user_can_view_sensitive_values(user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Somente o perfil Gestão pode registrar ou alterar valores monetários.",
+        )
+
+
+def _purchase_output(purchase: PurchaseOrder, *, include_sensitive_values: bool) -> PurchaseOutput:
+    return PurchaseOutput(
+        id=purchase.id,
+        code=purchase.code,
+        company_code=purchase.company_code,
+        supplier_id=purchase.supplier_id,
+        supplier_name=purchase.supplier_name,
+        equipment_serial=purchase.equipment_serial,
+        invoice_number=purchase.invoice_number,
+        client_destination=purchase.client_destination,
+        product_name=purchase.product_name,
+        quantity=purchase.quantity,
+        total_amount=purchase.total_amount if include_sensitive_values else None,
+        origin=purchase.origin,
+        tracking_code=purchase.tracking_code,
+        purchase_date=purchase.purchase_date,
+        estimated_delivery_date=purchase.estimated_delivery_date,
+        delivered_at=purchase.delivered_at,
+        status=purchase.status,
+        product_link=purchase.product_link,
+        notes=purchase.notes,
+        attachment_name=purchase.attachment_name,
+        attachment_mime=purchase.attachment_mime,
+        created_at=purchase.created_at,
+        updated_at=purchase.updated_at,
+    )
+
+
 def _audit(
     purchase: PurchaseOrder,
     action: str,
@@ -71,11 +108,14 @@ def _audit(
 
 @router.get("/summary", response_model=PurchaseSummary)
 async def summary(
-    _: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
     company_code: CompanyFilter = None,
 ):
-    return await build_purchase_summary(db, company_code)
+    result = await build_purchase_summary(db, company_code)
+    if not user_can_view_sensitive_values(user.role):
+        result.total_value_open = None
+    return result
 
 
 @router.get("/suppliers", response_model=list[SupplierOutput])
@@ -148,7 +188,7 @@ async def create_supplier(
 
 @router.get("/orders", response_model=list[PurchaseOutput])
 async def list_orders(
-    _: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
     company_code: CompanyFilter = None,
     purchase_status: StatusFilter = None,
@@ -205,16 +245,22 @@ async def list_orders(
         )
         .limit(500)
     )
-    return list((await db.scalars(query)).all())
+    rows = list((await db.scalars(query)).all())
+    include_values = user_can_view_sensitive_values(user.role)
+    return [_purchase_output(item, include_sensitive_values=include_values) for item in rows]
 
 
 @router.get("/orders/{purchase_id}", response_model=PurchaseOutput)
 async def get_order(
     purchase_id: int,
-    _: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
 ):
-    return await _purchase_or_404(db, purchase_id)
+    purchase = await _purchase_or_404(db, purchase_id)
+    return _purchase_output(
+        purchase,
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post("/orders", response_model=PurchaseOutput, status_code=status.HTTP_201_CREATED)
@@ -223,6 +269,7 @@ async def create_order(
     user: CurrentUser,
     db: DbSession,
 ):
+    _require_sensitive_values(user)
     supplier = await db.get(Supplier, payload.supplier_id)
     if not supplier or not supplier.is_active:
         raise HTTPException(status_code=400, detail="Fornecedor inválido.")
@@ -237,7 +284,7 @@ async def create_order(
     db.add(_audit(purchase, "created", f"Compra criada: {purchase.code}", user.id))
     await db.commit()
     await db.refresh(purchase)
-    return purchase
+    return _purchase_output(purchase, include_sensitive_values=True)
 
 
 @router.put("/orders/{purchase_id}", response_model=PurchaseOutput)
@@ -247,6 +294,7 @@ async def update_order(
     user: CurrentUser,
     db: DbSession,
 ):
+    _require_sensitive_values(user)
     purchase = await _purchase_or_404(db, purchase_id)
     supplier = await db.get(Supplier, payload.supplier_id)
     if not supplier or not supplier.is_active:
@@ -259,7 +307,7 @@ async def update_order(
     db.add(_audit(purchase, "updated", f"Compra editada: {purchase.code}", user.id))
     await db.commit()
     await db.refresh(purchase)
-    return purchase
+    return _purchase_output(purchase, include_sensitive_values=True)
 
 
 @router.delete("/orders/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -268,6 +316,7 @@ async def delete_order(
     user: CurrentUser,
     db: DbSession,
 ):
+    _require_sensitive_values(user)
     purchase = await _purchase_or_404(db, purchase_id)
     purchase.is_deleted = True
     db.add(_audit(purchase, "deleted", f"Compra excluída: {purchase.code}", user.id))
@@ -278,7 +327,7 @@ async def delete_order(
 @router.get("/equipment/{serial_number}/purchases", response_model=list[PurchaseOutput])
 async def purchases_by_serial(
     serial_number: str,
-    _: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
 ):
     query = (
@@ -289,7 +338,9 @@ async def purchases_by_serial(
         )
         .order_by(PurchaseOrder.created_at.desc())
     )
-    return list((await db.scalars(query)).all())
+    rows = list((await db.scalars(query)).all())
+    include_values = user_can_view_sensitive_values(user.role)
+    return [_purchase_output(item, include_sensitive_values=include_values) for item in rows]
 
 
 @router.post("/orders/{purchase_id}/attachment")
@@ -396,15 +447,16 @@ from app.purchasing.material_schemas import (
 from app.purchasing.material_service import (
     apply_status_timestamps,
     event as material_event,
-    output_rows,
-    validate_transition,
     next_material_request_code,
+    output_rows,
+    recalculate_work_order_parts_cost,
+    validate_transition,
 )
 
 
 @router.get("/material-requests", response_model=list[MaterialRequestOutput])
 async def list_material_requests(
-    _: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
     request_status: MaterialRequestStatus | None = Query(default=None, alias="status"),
     company_code: CompanyCode | None = Query(default=None),
@@ -427,7 +479,11 @@ async def list_material_requests(
             )
         )
     rows = list((await db.scalars(query.order_by(MaterialRequest.created_at.desc()).limit(500))).all())
-    return await output_rows(db, rows)
+    return await output_rows(
+        db,
+        rows,
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post("/material-requests", response_model=MaterialRequestOutput, status_code=status.HTTP_201_CREATED)
@@ -475,7 +531,11 @@ async def create_standalone_material_request(
     )
     await db.commit()
     await db.refresh(request)
-    return (await output_rows(db, [request]))[0]
+    return (await output_rows(
+        db,
+        [request],
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    ))[0]
 
 
 @router.patch("/material-requests/{request_id}", response_model=MaterialRequestOutput)
@@ -491,6 +551,11 @@ async def update_material_request(
 
     previous = request.status
     validate_transition(previous, payload.status)
+    can_view_values = user_can_view_sensitive_values(user.role)
+    if payload.unit_cost is not None and not can_view_values:
+        _require_sensitive_values(user)
+    if payload.status == "purchased" and not can_view_values:
+        _require_sensitive_values(user)
     if payload.status == "purchased" and (payload.unit_cost is None or payload.unit_cost <= 0):
         raise HTTPException(
             status_code=422,
@@ -501,7 +566,8 @@ async def update_material_request(
     request.purchase_reference = payload.purchase_reference
     request.purchase_link = payload.purchase_link
     request.tracking_code = payload.tracking_code
-    request.unit_cost = payload.unit_cost
+    if can_view_values:
+        request.unit_cost = payload.unit_cost
     request.expected_delivery_date = payload.expected_delivery_date
     apply_status_timestamps(request, previous, payload.status, user.id)
     db.add(material_event(
@@ -513,24 +579,26 @@ async def update_material_request(
         note=payload.note,
     ))
     if previous != "purchased" and payload.status == "purchased":
-        total = (request.unit_cost or Decimal("0")) * request.quantity
-        value = f"R$ {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         await notify_modules(
             db,
             modules={"compras", "laboratorio"},
             category="purchase",
             severity="success",
             title=f"Compra realizada · {request.code}",
-            message=f"{request.quantity}x {request.item_name} comprado(s) por {value}. OS vinculada pronta para acompanhamento.",
+            message=f"{request.quantity}x {request.item_name} comprado(s). OS vinculada pronta para acompanhamento.",
             target=(f"/laboratorio?os={request.work_order_id}&aba=materials" if request.work_order_id else "/compras?view=requests"),
             entity_type="material_request",
             entity_id=request.id,
             work_order_id=request.work_order_id,
-            amount=total,
         )
+    await recalculate_work_order_parts_cost(db, request.work_order_id)
     await db.commit()
     await db.refresh(request)
-    return (await output_rows(db, [request]))[0]
+    return (await output_rows(
+        db,
+        [request],
+        include_sensitive_values=can_view_values,
+    ))[0]
 
 
 @router.get("/material-requests/{request_id}/events", response_model=list[MaterialRequestEventOutput])

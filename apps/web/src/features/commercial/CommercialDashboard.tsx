@@ -1,136 +1,82 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileText, LogOut, PackagePlus, Printer, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, FilePlus2, FileText, LogOut, PackagePlus, Pencil, Plus, Printer, Search, ShoppingBag, Trash2, Wrench } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
+import { NexusMark } from "../../shared/ui/NexusMark";
 import type { AuthUser } from "../auth/AuthCard";
-import type { CommercialEquipment, CommercialPurpose, CompanyCode } from "./types";
+import { CommercialQuoteEditor } from "./CommercialQuoteEditor";
+import type { CommercialCompany, CommercialEquipment, CommercialPurpose, CommercialQuote, CompanyCode, CustomerLite, PreventiveOrder, QuoteType } from "./types";
 import "./commercial.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
 type Tab = "cadastros" | "ativos" | "orcamento" | "preventiva" | "relatorios";
 
-type FormState = {
-  company_code: CompanyCode;
-  purpose: CommercialPurpose;
-  equipment_type: string;
-  manufacturer: string;
-  model: string;
-  power: string;
-  voltage: string;
-  notes: string;
+const companyLabels: Record<CompanyCode,string> = { universo_eletronica:"Universo Eletrônica", universo_automacao:"Universo Automação", solucoes_eletronica:"Soluções Eletrônicas" };
+const tabLabels: Array<[Tab,string]> = [["cadastros","Cadastros"],["ativos","Estoque & Ativos"],["orcamento","Orçamento Aluguel/Venda"],["preventiva","Orçamento Preventiva"],["relatorios","Relatórios e O.S."]];
+const canSeeMoney = (role:string) => ["gestao","super_admin"].includes(role);
+const statusLabels: Record<string,string> = {
+  draft:"Rascunho", issued:"Emitido", approved:"Aprovado", rejected:"Reprovado", cancelled:"Cancelado",
+  scheduled:"Programada", in_progress:"Em execução", completed:"Concluída", delivered:"Entregue",
+  available:"Disponível", reserved:"Reservado", rented:"Locado", sold:"Vendido", maintenance:"Manutenção",
 };
+const statusLabel = (value:string) => statusLabels[value] ?? value;
 
-const emptyForm = (): FormState => ({
-  company_code: "universo_eletronica",
-  purpose: "rental_sale",
-  equipment_type: "",
-  manufacturer: "",
-  model: "",
-  power: "",
-  voltage: "",
-  notes: "",
-});
 
-const tabLabels: Array<[Tab, string]> = [
-  ["cadastros", "Cadastros"],
-  ["ativos", "Estoque & Ativos"],
-  ["orcamento", "Orçamento Aluguel/Venda"],
-  ["preventiva", "Orçamento Preventiva"],
-  ["relatorios", "Relatórios e O.S."],
-];
+function money(value:number|null|undefined){ return value == null ? "—" : value.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
+function formatDate(value:string|null|undefined){ if(!value) return "—"; return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)); }
+
+const blankEquipment = () => ({ company_code:"universo_eletronica" as CompanyCode, purpose:"rental_sale" as CommercialPurpose, equipment_type:"", manufacturer:"", model:"", power:"", voltage:"", quantity:1, unit_cost:"", sale_price:"", rental_daily_price:"", rental_monthly_price:"", condition:"Bom", stock_status:"available", location:"", acquisition_date:"", notes:"" });
+const blankCustomer = () => ({ company_code:"universo_eletronica" as CompanyCode, legal_name:"", trade_name:"", document:"", phone:"", email:"", city:"", state:"" });
+const blankCompany = () => ({ company_code:"universo_eletronica" as CompanyCode, legal_name:"", trade_name:"", document:"", state_registration:"", email:"", phone:"", address:"", city:"", state:"" });
 
 export function CommercialDashboard({ user, onLogout }: Props) {
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("cadastros");
-  const [equipment, setEquipment] = useState<CommercialEquipment[]>([]);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const navigate=useNavigate(); const [tab,setTab]=useState<Tab>("cadastros");
+  const [equipment,setEquipment]=useState<CommercialEquipment[]>([]); const [customers,setCustomers]=useState<CustomerLite[]>([]); const [companies,setCompanies]=useState<CommercialCompany[]>([]); const [quotes,setQuotes]=useState<CommercialQuote[]>([]); const [preventiveOrders,setPreventiveOrders]=useState<PreventiveOrder[]>([]);
+  const [search,setSearch]=useState(""); const [message,setMessage]=useState(""); const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
+  const [equipmentModal,setEquipmentModal]=useState(false); const [equipmentForm,setEquipmentForm]=useState(blankEquipment); const [editingEquipment,setEditingEquipment]=useState<number|null>(null);
+  const [customerForm,setCustomerForm]=useState(blankCustomer); const [companyForm,setCompanyForm]=useState(blankCompany);
+  const [quoteEditor,setQuoteEditor]=useState<{type:QuoteType;quote:CommercialQuote|null}|null>(null);
 
-  const endpoint = useMemo(() => `/api/commercial/equipment${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`, [search]);
+  async function loadAll(){ setError(""); try { const [eq,cu,co,qu,po]=await Promise.all([
+    apiClient.get<CommercialEquipment[]>(`/commercial/equipment${search.trim()?`?search=${encodeURIComponent(search.trim())}`:""}`),
+    apiClient.get<CustomerLite[]>("/customers"), apiClient.get<CommercialCompany[]>("/commercial/companies"), apiClient.get<CommercialQuote[]>("/commercial/quotes"), apiClient.get<PreventiveOrder[]>("/commercial/preventive-orders")
+  ]); setEquipment(eq); setCustomers(cu); setCompanies(co); setQuotes(qu); setPreventiveOrders(po); } catch(reason){ setError(reason instanceof Error?reason.message:"Falha ao carregar o Comercial."); } }
+  useEffect(()=>{ void loadAll(); },[search]);
 
-  async function load() {
-    setError("");
-    try {
-      setEquipment(await apiClient.request<CommercialEquipment[]>(endpoint));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Falha ao carregar o Comercial.");
-    }
-  }
+  async function saveCustomer(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/customers",{...customerForm, trade_name:customerForm.trade_name||null,document:customerForm.document||null,phone:customerForm.phone||null,email:customerForm.email||null,city:customerForm.city||null,state:customerForm.state||null,state_registration:null,municipal_registration:null,whatsapp:null,website:null,postal_code:null,address:null,address_number:null,complement:null,district:null,notes:null}); setCustomerForm(blankCustomer()); setMessage("Cliente cadastrado e disponível para os orçamentos."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao cadastrar cliente.");} finally{setBusy(false);} }
+  async function saveCompany(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/commercial/companies",{...companyForm,trade_name:companyForm.trade_name||null,document:companyForm.document||null,state_registration:companyForm.state_registration||null,email:companyForm.email||null,phone:companyForm.phone||null,address:companyForm.address||null,city:companyForm.city||null,state:companyForm.state||null}); setCompanyForm(blankCompany()); setMessage("Empresa emitente salva."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar empresa.");} finally{setBusy(false);} }
 
-  useEffect(() => { void load(); }, [endpoint]);
+  function editEquipment(item:CommercialEquipment){ setEditingEquipment(item.id); setEquipmentForm({ company_code:item.company_code,purpose:item.purpose,equipment_type:item.equipment_type,manufacturer:item.manufacturer??"",model:item.model??"",power:item.power??"",voltage:item.voltage??"",quantity:item.quantity,unit_cost:item.unit_cost==null?"":String(item.unit_cost),sale_price:item.sale_price==null?"":String(item.sale_price),rental_daily_price:item.rental_daily_price==null?"":String(item.rental_daily_price),rental_monthly_price:item.rental_monthly_price==null?"":String(item.rental_monthly_price),condition:item.condition??"",stock_status:item.stock_status,location:item.location??"",acquisition_date:item.acquisition_date??"",notes:item.notes??"" }); setEquipmentModal(true); }
+  async function saveEquipment(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); const payload={...equipmentForm,unit_cost:equipmentForm.unit_cost===""?null:Number(equipmentForm.unit_cost),sale_price:equipmentForm.sale_price===""?null:Number(equipmentForm.sale_price),rental_daily_price:equipmentForm.rental_daily_price===""?null:Number(equipmentForm.rental_daily_price),rental_monthly_price:equipmentForm.rental_monthly_price===""?null:Number(equipmentForm.rental_monthly_price),acquisition_date:equipmentForm.acquisition_date||null,manufacturer:equipmentForm.manufacturer||null,model:equipmentForm.model||null,power:equipmentForm.power||null,voltage:equipmentForm.voltage||null,condition:equipmentForm.condition||null,location:equipmentForm.location||null,notes:equipmentForm.notes||null}; try { if(editingEquipment) await apiClient.put(`/commercial/equipment/${editingEquipment}`,payload); else await apiClient.post("/commercial/equipment",payload); setMessage(editingEquipment?"Equipamento atualizado.":"Equipamento adicionado ao estoque."); setEquipmentModal(false); setEditingEquipment(null); setEquipmentForm(blankEquipment()); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar equipamento.");} finally{setBusy(false);} }
+  async function deactivate(id:number){ if(!confirm("Inativar este equipamento do estoque comercial?")) return; await apiClient.delete(`/commercial/equipment/${id}`); await loadAll(); }
 
-  async function create(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true); setError(""); setMessage("");
-    try {
-      const created = await apiClient.post<CommercialEquipment>("/commercial/equipment", {
-        ...form,
-        manufacturer: form.manufacturer || null,
-        model: form.model || null,
-        power: form.power || null,
-        voltage: form.voltage || null,
-        notes: form.notes || null,
-      });
-      setMessage(`Equipamento cadastrado com a série comercial ${created.serial_code}.`);
-      setForm(emptyForm());
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível cadastrar o equipamento.");
-    } finally { setSaving(false); }
-  }
-
-  async function deactivate(id: number) {
-    if (!window.confirm("Inativar este equipamento comercial?")) return;
-    await apiClient.delete(`/commercial/equipment/${id}`);
-    await load();
-  }
-
-  function openLabel(item: CommercialEquipment) {
-    window.open(`/api/commercial/equipment/${item.id}/label.pdf`, "_blank", "noopener,noreferrer");
-  }
+  const saleRentalQuotes=useMemo(()=>quotes.filter(q=>q.quote_type!=="preventive"),[quotes]); const preventiveQuotes=useMemo(()=>quotes.filter(q=>q.quote_type==="preventive"),[quotes]);
+  async function createPreventiveOS(quote:CommercialQuote){ const date=prompt("Data programada (AAAA-MM-DD), ou deixe em branco:",""); if(date===null) return; try { await apiClient.post("/commercial/preventive-orders",{quote_id:quote.id,scheduled_date:date||null,technical_notes:null}); setMessage("O.S. preventiva gerada com sucesso."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao gerar O.S. preventiva.");} }
 
   return <div className="com-layout">
-    <aside className="com-sidebar">
-      <div className="com-brand">NEXUS · Comercial</div>
-      <nav className="com-nav">{tabLabels.map(([value,label]) => <button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</nav>
-      <div className="com-spacer"/>
-      <button className="com-btn" onClick={()=>navigate("/painel")}><ArrowLeft size={16}/> Menu principal</button>
-      <button className="com-btn" onClick={onLogout}><LogOut size={16}/> Sair</button>
-    </aside>
+    <aside className="com-sidebar"><button className="com-brand" onClick={()=>navigate("/painel")}><NexusMark className="com-brand-mark"/><strong>NEXUS</strong><small>Comercial</small></button><nav className="com-nav">{tabLabels.map(([value,label])=><button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</nav><div className="com-spacer"/><button className="com-btn" onClick={()=>navigate("/painel")}><ArrowLeft size={16}/> Menu principal</button><button className="com-btn" onClick={onLogout}><LogOut size={16}/> Sair</button></aside>
+    <main className="com-main"><header className="com-header"><div><p>NEXUS ENTERPRISE</p><h1>Operação comercial</h1><span>Clientes, patrimônio, venda, locação e preventiva em um fluxo separado do Laboratório.</span></div></header>
+      <div className="com-tabs">{tabLabels.map(([value,label])=><button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</div>{message&&<div className="com-notice">{message}</div>}{error&&<div className="com-notice danger">{error}</div>}
 
-    <main className="com-main">
-      <header className="com-header"><div><p>NEXUS ENTERPRISE</p><h1>Patrimônio e operação comercial</h1><p>Usuário: {user.name} · séries próprias, aluguel, venda e preventiva.</p></div></header>
-      <div className="com-tabs">{tabLabels.map(([value,label]) => <button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</div>
-      {message && <div className="com-notice">{message}</div>}
-      {error && <div className="com-notice">{error}</div>}
-
-      {(tab === "cadastros" || tab === "ativos") && <div className="com-grid">
-        <section className="com-card">
-          <h2><PackagePlus size={19}/> Novo equipamento</h2>
-          <form className="com-form" onSubmit={create}>
-            <label>Finalidade<select value={form.purpose} onChange={(e)=>setForm({...form,purpose:e.target.value as CommercialPurpose})}><option value="rental_sale">Aluguel / Venda</option><option value="preventive">Preventiva</option></select></label>
-            <label>Equipamento<input required value={form.equipment_type} onChange={(e)=>setForm({...form,equipment_type:e.target.value})}/></label>
-            <div className="com-form-row"><label>Fabricante<input value={form.manufacturer} onChange={(e)=>setForm({...form,manufacturer:e.target.value})}/></label><label>Modelo<input value={form.model} onChange={(e)=>setForm({...form,model:e.target.value})}/></label></div>
-            <div className="com-form-row"><label>Potência/Corrente<input value={form.power} onChange={(e)=>setForm({...form,power:e.target.value})}/></label><label>Tensão<input value={form.voltage} onChange={(e)=>setForm({...form,voltage:e.target.value})}/></label></div>
-            <label>Observações<textarea rows={3} value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})}/></label>
-            <footer><button className="com-btn primary" disabled={saving}>{saving?"Salvando...":"Cadastrar equipamento"}</button></footer>
-          </form>
-        </section>
-
-        <section className="com-card">
-          <h2>Registros salvos</h2>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}><Search size={17}/><input className="com-search" placeholder="Buscar série, equipamento, fabricante ou modelo" value={search} onChange={(e)=>setSearch(e.target.value)}/></div>
-          <div className="com-table-wrap"><table className="com-table"><thead><tr><th>Série</th><th>Equipamento</th><th>Finalidade</th><th>Especificação</th><th>Ações</th></tr></thead><tbody>{equipment.map((item)=><tr key={item.id}><td className="com-serial">{item.serial_code}</td><td><strong>{item.equipment_type}</strong><br/><small>{[item.manufacturer,item.model].filter(Boolean).join(" · ") || "—"}</small></td><td><span className={`com-tag ${item.purpose}`}>{item.purpose === "preventive" ? "Preventiva" : "Aluguel / Venda"}</span></td><td>{[item.power,item.voltage].filter(Boolean).join(" · ") || "—"}</td><td><div className="com-row-actions">{item.purpose === "preventive" && <button className="com-btn" title="Emitir etiqueta" onClick={()=>openLabel(item)}><Printer size={16}/></button>}<button className="com-btn danger" title="Inativar" onClick={()=>void deactivate(item.id)}><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div>
-        </section>
+      {tab==="cadastros"&&<div className="com-register-grid">
+        <section className="com-card"><div className="com-section-title"><div><h2><Building2 size={19}/> Empresas emitentes</h2><p>Dados usados no cabeçalho dos orçamentos.</p></div></div><div className="com-company-list">{companies.map(c=><article key={c.id}><strong>{c.trade_name||c.legal_name}</strong><span>{c.document||"Documento não informado"}</span><small>{c.email||"—"} · {c.phone||"—"}</small></article>)}</div><form className="com-form" onSubmit={saveCompany}><label>Empresa<select value={companyForm.company_code} onChange={e=>setCompanyForm({...companyForm,company_code:e.target.value as CompanyCode})}>{Object.entries(companyLabels).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>Razão social<input required value={companyForm.legal_name} onChange={e=>setCompanyForm({...companyForm,legal_name:e.target.value})}/></label><div className="com-form-row"><label>Nome fantasia<input value={companyForm.trade_name} onChange={e=>setCompanyForm({...companyForm,trade_name:e.target.value})}/></label><label>CNPJ/CPF<input value={companyForm.document} onChange={e=>setCompanyForm({...companyForm,document:e.target.value})}/></label></div><div className="com-form-row"><label>E-mail<input value={companyForm.email} onChange={e=>setCompanyForm({...companyForm,email:e.target.value})}/></label><label>Telefone<input value={companyForm.phone} onChange={e=>setCompanyForm({...companyForm,phone:e.target.value})}/></label></div><button disabled={busy} className="com-btn primary">Salvar empresa</button></form></section>
+        <section className="com-card"><h2>Clientes comerciais</h2><p className="com-muted">O cliente fica no cadastro central do NEXUS e pode ser usado no Comercial sem duplicar dados.</p><div className="com-customer-scroll">{customers.slice(0,8).map(c=><article key={c.id}><strong>{c.trade_name||c.legal_name}</strong><span>{c.document||"Sem documento"}</span></article>)}</div><form className="com-form" onSubmit={saveCustomer}><label>Empresa vinculada<select value={customerForm.company_code} onChange={e=>setCustomerForm({...customerForm,company_code:e.target.value as CompanyCode})}>{Object.entries(companyLabels).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>Razão social / Nome<input required value={customerForm.legal_name} onChange={e=>setCustomerForm({...customerForm,legal_name:e.target.value})}/></label><div className="com-form-row"><label>Fantasia<input value={customerForm.trade_name} onChange={e=>setCustomerForm({...customerForm,trade_name:e.target.value})}/></label><label>CNPJ/CPF<input value={customerForm.document} onChange={e=>setCustomerForm({...customerForm,document:e.target.value})}/></label></div><div className="com-form-row"><label>E-mail<input value={customerForm.email} onChange={e=>setCustomerForm({...customerForm,email:e.target.value})}/></label><label>Telefone<input value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm,phone:e.target.value})}/></label></div><button disabled={busy} className="com-btn primary">Cadastrar cliente</button></form></section>
       </div>}
 
-      {tab === "orcamento" && <section className="com-card com-placeholder"><FileText size={28}/><h2>Orçamento de aluguel e venda</h2><p>A base de equipamentos e séries já está ativa. O fluxo de proposta comercial será ligado a estes registros no próximo incremento.</p></section>}
-      {tab === "preventiva" && <section className="com-card com-placeholder"><Printer size={28}/><h2>Preventiva</h2><p>Cadastre o equipamento com finalidade Preventiva e emita a etiqueta diretamente na listagem. O orçamento de preventiva será a próxima camada deste módulo.</p></section>}
-      {tab === "relatorios" && <section className="com-card com-placeholder"><FileText size={28}/><h2>Relatórios e O.S.</h2><p>Estrutura preparada para consolidar aluguel, venda e preventiva sem duplicar dados do Laboratório.</p></section>}
+      {tab==="ativos"&&<section className="com-card"><div className="com-section-title"><div><h2>Estoque & ativos</h2><p>Cadastro técnico e comercial dos equipamentos próprios.</p></div><button className="com-btn primary" onClick={()=>{setEditingEquipment(null);setEquipmentForm(blankEquipment());setEquipmentModal(true)}}><PackagePlus size={16}/> Novo equipamento</button></div><div className="com-search-row"><Search size={17}/><input className="com-search" placeholder="Buscar série, equipamento, fabricante ou modelo" value={search} onChange={e=>setSearch(e.target.value)}/></div><div className="com-table-wrap"><table className="com-table"><thead><tr><th>Série</th><th>Equipamento</th><th>Qtd.</th><th>Status</th><th>Local</th>{canSeeMoney(user.role)&&<><th>Venda</th><th>Locação/mês</th></>}<th>Ações</th></tr></thead><tbody>{equipment.map(item=><tr key={item.id}><td className="com-serial">{item.serial_code}</td><td><strong>{item.equipment_type}</strong><br/><small>{[item.manufacturer,item.model,item.power,item.voltage].filter(Boolean).join(" · ")||"—"}</small></td><td>{item.quantity}</td><td><span className={`com-tag ${item.stock_status}`}>{statusLabel(item.stock_status)}</span></td><td>{item.location||"—"}</td>{canSeeMoney(user.role)&&<><td>{money(item.sale_price)}</td><td>{money(item.rental_monthly_price)}</td></>}<td><div className="com-row-actions"><button className="com-btn" onClick={()=>editEquipment(item)}><Pencil size={15}/></button>{item.purpose==="preventive"&&<button className="com-btn" onClick={()=>window.open(`/api/commercial/equipment/${item.id}/label.pdf`,"_blank","noopener,noreferrer")}><Printer size={15}/></button>}<button className="com-btn danger" onClick={()=>void deactivate(item.id)}><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div></section>}
+
+      {tab==="orcamento"&&<><section className="com-summary-grid"><article><ShoppingBag size={20}/><span>Venda / locação</span><strong>{saleRentalQuotes.length}</strong></article><article><FileText size={20}/><span>Emitidos</span><strong>{saleRentalQuotes.filter(q=>q.status==="issued").length}</strong></article><article><FilePlus2 size={20}/><span>Em rascunho</span><strong>{saleRentalQuotes.filter(q=>q.status==="draft").length}</strong></article></section><section className="com-card"><div className="com-section-title"><div><h2>Orçamentos de venda e locação</h2><p>Itens, quantidades, condições e PDF comercial.</p></div><div className="com-actions"><button className="com-btn primary" onClick={()=>setQuoteEditor({type:"sale",quote:null})}><Plus size={16}/> Venda</button><button className="com-btn primary" onClick={()=>setQuoteEditor({type:"rental",quote:null})}><Plus size={16}/> Locação</button></div></div><QuoteTable quotes={saleRentalQuotes} onOpen={q=>setQuoteEditor({type:q.quote_type,quote:q})}/></section></>}
+
+      {tab==="preventiva"&&<><section className="com-card"><div className="com-section-title"><div><h2><Wrench size={19}/> Orçamento preventiva</h2><p>Fluxo próprio do Comercial, sem vínculo com O.S. do Laboratório.</p></div><button className="com-btn primary" onClick={()=>setQuoteEditor({type:"preventive",quote:null})}><Plus size={16}/> Nova preventiva</button></div><QuoteTable quotes={preventiveQuotes} onOpen={q=>setQuoteEditor({type:"preventive",quote:q})} preventive onCreateOS={q=>void createPreventiveOS(q)}/></section><section className="com-card"><h2>O.S. de preventiva</h2><div className="com-table-wrap"><table className="com-table"><thead><tr><th>O.S.</th><th>Cliente</th><th>Status</th><th>Programada</th><th>Atualização</th></tr></thead><tbody>{preventiveOrders.map(o=><tr key={o.id}><td className="com-serial">{o.order_number}</td><td>{o.customer_name}</td><td><span className="com-tag">{statusLabel(o.status)}</span></td><td>{formatDate(o.scheduled_date)}</td><td>{new Date(o.updated_at).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div></section></>}
+
+      {tab==="relatorios"&&<section className="com-card"><div className="com-section-title"><div><h2>Relatórios e O.S.</h2><p>Histórico consolidado de venda, locação e preventiva.</p></div></div><div className="com-table-wrap"><table className="com-table"><thead><tr><th>Número</th><th>Tipo</th><th>Cliente</th><th>Status</th><th>Emissão</th>{canSeeMoney(user.role)&&<th>Total</th>}<th>PDF</th></tr></thead><tbody>{quotes.map(q=><tr key={q.id}><td className="com-serial">{q.quote_number}</td><td>{q.quote_type==="sale"?"Venda":q.quote_type==="rental"?"Locação":"Preventiva"}</td><td>{q.customer_name}</td><td><span className="com-tag">{statusLabel(q.status)}</span></td><td>{formatDate(q.issue_date)}</td>{canSeeMoney(user.role)&&<td>{money(q.total)}</td>}<td><button className="com-btn" onClick={()=>window.open(`/api/commercial/quotes/${q.id}/pdf`,"_blank","noopener,noreferrer")}><Printer size={15}/></button></td></tr>)}</tbody></table></div></section>}
     </main>
+    {equipmentModal&&<div className="com-modal"><form className="com-equipment-modal" onSubmit={saveEquipment}><header><div><span>ESTOQUE COMERCIAL</span><h2>{editingEquipment?"Editar equipamento":"Novo equipamento"}</h2></div><button type="button" className="com-icon-btn" onClick={()=>setEquipmentModal(false)}>×</button></header><div className="com-form-grid three"><label>Empresa<select value={equipmentForm.company_code} onChange={e=>setEquipmentForm({...equipmentForm,company_code:e.target.value as CompanyCode})}>{Object.entries(companyLabels).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>Finalidade<select value={equipmentForm.purpose} onChange={e=>setEquipmentForm({...equipmentForm,purpose:e.target.value as CommercialPurpose})}><option value="rental_sale">Venda / Locação</option><option value="preventive">Preventiva</option></select></label><label>Quantidade<input type="number" min="0" value={equipmentForm.quantity} onChange={e=>setEquipmentForm({...equipmentForm,quantity:Number(e.target.value)})}/></label></div><label>Equipamento<input required value={equipmentForm.equipment_type} onChange={e=>setEquipmentForm({...equipmentForm,equipment_type:e.target.value})}/></label><div className="com-form-grid two"><label>Fabricante<input value={equipmentForm.manufacturer} onChange={e=>setEquipmentForm({...equipmentForm,manufacturer:e.target.value})}/></label><label>Modelo<input value={equipmentForm.model} onChange={e=>setEquipmentForm({...equipmentForm,model:e.target.value})}/></label><label>Potência / Corrente<input value={equipmentForm.power} onChange={e=>setEquipmentForm({...equipmentForm,power:e.target.value})}/></label><label>Tensão<input value={equipmentForm.voltage} onChange={e=>setEquipmentForm({...equipmentForm,voltage:e.target.value})}/></label><label>Condição<input value={equipmentForm.condition} onChange={e=>setEquipmentForm({...equipmentForm,condition:e.target.value})}/></label><label>Status<select value={equipmentForm.stock_status} onChange={e=>setEquipmentForm({...equipmentForm,stock_status:e.target.value})}><option value="available">Disponível</option><option value="reserved">Reservado</option><option value="rented">Locado</option><option value="sold">Vendido</option><option value="maintenance">Manutenção</option></select></label><label>Localização<input value={equipmentForm.location} onChange={e=>setEquipmentForm({...equipmentForm,location:e.target.value})}/></label><label>Aquisição<input type="date" value={equipmentForm.acquisition_date} onChange={e=>setEquipmentForm({...equipmentForm,acquisition_date:e.target.value})}/></label></div>{canSeeMoney(user.role)&&<div className="com-form-grid four com-money-block"><label>Custo<input type="number" step="0.01" min="0" value={equipmentForm.unit_cost} onChange={e=>setEquipmentForm({...equipmentForm,unit_cost:e.target.value})}/></label><label>Venda<input type="number" step="0.01" min="0" value={equipmentForm.sale_price} onChange={e=>setEquipmentForm({...equipmentForm,sale_price:e.target.value})}/></label><label>Locação/dia<input type="number" step="0.01" min="0" value={equipmentForm.rental_daily_price} onChange={e=>setEquipmentForm({...equipmentForm,rental_daily_price:e.target.value})}/></label><label>Locação/mês<input type="number" step="0.01" min="0" value={equipmentForm.rental_monthly_price} onChange={e=>setEquipmentForm({...equipmentForm,rental_monthly_price:e.target.value})}/></label></div>}<label>Observações<textarea rows={4} value={equipmentForm.notes} onChange={e=>setEquipmentForm({...equipmentForm,notes:e.target.value})}/></label><footer><button type="button" className="com-btn" onClick={()=>setEquipmentModal(false)}>Cancelar</button><button disabled={busy} className="com-btn primary">Salvar equipamento</button></footer></form></div>}
+    {quoteEditor&&<CommercialQuoteEditor quoteType={quoteEditor.type} companies={companies} customers={customers} equipment={equipment} selected={quoteEditor.quote} onClose={()=>setQuoteEditor(null)} onSaved={async()=>{setQuoteEditor(null);setMessage("Orçamento atualizado.");await loadAll();}}/>}
   </div>;
+}
+
+function QuoteTable({quotes,onOpen,preventive=false,onCreateOS}:{quotes:CommercialQuote[];onOpen:(q:CommercialQuote)=>void;preventive?:boolean;onCreateOS?:(q:CommercialQuote)=>void}){
+ return <div className="com-table-wrap"><table className="com-table"><thead><tr><th>Número</th><th>Cliente</th><th>Status</th><th>Validade</th><th>Total</th><th>Ações</th></tr></thead><tbody>{quotes.map(q=><tr key={q.id}><td className="com-serial">{q.quote_number}</td><td>{q.customer_name}</td><td><span className={`com-tag ${q.status}`}>{statusLabel(q.status)}</span></td><td>{formatDate(q.valid_until)}</td><td>{money(q.total)}</td><td><div className="com-row-actions"><button className="com-btn" onClick={()=>onOpen(q)}><Pencil size={15}/> Abrir</button><button className="com-btn" onClick={()=>window.open(`/api/commercial/quotes/${q.id}/pdf`,"_blank","noopener,noreferrer")}><Printer size={15}/></button>{preventive&&q.status!=="draft"&&onCreateOS&&<button className="com-btn success" onClick={()=>onCreateOS(q)}><Wrench size={15}/> Gerar O.S.</button>}</div></td></tr>)}</tbody></table></div>;
 }

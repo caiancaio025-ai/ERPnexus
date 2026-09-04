@@ -102,8 +102,4 @@ def can_transition(current: str, target: str) -> bool:
         return False
     if current == target:
         return True
-    if current == "cancelled":
-        return target == "received"
-    if target in BUSINESS_STATUS_TARGETS:
-        return True
     return target in ALLOWED_TRANSITIONS.get(current, set())

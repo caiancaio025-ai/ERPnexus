@@ -20,7 +20,7 @@ const nextActions: Partial<Record<MaterialRequestStatus, { status: MaterialReque
   received: [{ status: "delivered_to_lab", label: "Entregar ao lab" }],
 };
 
-export function MaterialRequestsPanel() {
+export function MaterialRequestsPanel({ canViewValues }: { canViewValues: boolean }) {
   const navigate = useNavigate();
   const [items, setItems] = useState<MaterialRequest[]>([]);
   const [search, setSearch] = useState("");
@@ -61,7 +61,7 @@ export function MaterialRequestsPanel() {
       </div>
     </section>
     {creating && <StandaloneRequestModal onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); await load(); }} />}
-    {editing && <MaterialRequestEditor item={editing} onOpenLab={(workOrderId) => navigate(`/laboratorio?os=${workOrderId}`)} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+    {editing && <MaterialRequestEditor item={editing} canViewValues={canViewValues} onOpenLab={(workOrderId) => navigate(`/laboratorio?os=${workOrderId}`)} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
   </>;
 }
 
@@ -89,7 +89,7 @@ function StandaloneRequestModal({ onClose, onSaved }: { onClose: () => void; onS
   </section></div>;
 }
 
-function MaterialRequestEditor({ item, onOpenLab, onClose, onSaved }: { item: MaterialRequest; onOpenLab: (workOrderId: number) => void; onClose: () => void; onSaved: () => Promise<void> }) {
+function MaterialRequestEditor({ item, canViewValues, onOpenLab, onClose, onSaved }: { item: MaterialRequest; canViewValues: boolean; onOpenLab: (workOrderId: number) => void; onClose: () => void; onSaved: () => Promise<void> }) {
   const [form, setForm] = useState({ supplier_name: item.supplier_name || "", purchase_reference: item.purchase_reference || "", purchase_link: item.purchase_link || "", tracking_code: item.tracking_code || "", unit_cost: item.unit_cost ? String(item.unit_cost) : "", expected_delivery_date: item.expected_delivery_date || "", note: "" });
   const [saving, setSaving] = useState(false); const [error, setError] = useState("");
   const parsedUnitCost = Number(form.unit_cost.replace(",", ".")) || 0;
@@ -97,7 +97,7 @@ function MaterialRequestEditor({ item, onOpenLab, onClose, onSaved }: { item: Ma
   async function update(nextStatus: MaterialRequestStatus) {
     setSaving(true); setError("");
     try {
-      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, unit_cost: form.unit_cost ? Number(form.unit_cost.replace(",", ".")) : null, expected_delivery_date: form.expected_delivery_date || null, note: form.note || null });
+      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, ...(canViewValues ? { unit_cost: form.unit_cost ? Number(form.unit_cost.replace(",", ".")) : null } : {}), expected_delivery_date: form.expected_delivery_date || null, note: form.note || null });
       await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível atualizar."); }
     finally { setSaving(false); }
@@ -106,8 +106,8 @@ function MaterialRequestEditor({ item, onOpenLab, onClose, onSaved }: { item: Ma
     <div className="material-request-context"><span><strong>Origem</strong>{item.source_type === "standalone" ? "Compra avulsa" : "Laboratório / O.S."}</span><span><strong>Equipamento</strong>{item.equipment_serial || "Não vinculado"}</span><span><strong>Quantidade</strong>{item.quantity}</span><span><strong>Status</strong>{labels[item.status]}</span><span><strong>Solicitante</strong>{item.requester_name}</span></div>
     {item.technical_note && <div className="material-note"><strong>Observação técnica</strong><p>{item.technical_note}</p></div>}
     {item.suggested_link && <a className="material-suggested-link" href={item.suggested_link} target="_blank" rel="noreferrer"><ExternalLink size={15} />Abrir link sugerido pelo técnico</a>}
-    <div className="material-purchase-total"><span>Valor desta compra</span><strong>{money(totalCost)}</strong><small>{item.quantity} × {money(parsedUnitCost)}</small></div><div className="material-editor-grid"><label>Fornecedor<input value={form.supplier_name} onChange={(e) => setForm({ ...form, supplier_name: e.target.value })} /></label><label>Referência / pedido<input value={form.purchase_reference} onChange={(e) => setForm({ ...form, purchase_reference: e.target.value })} /></label><label>Valor unitário<input value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} placeholder="0,00" /></label><label>Previsão de chegada<input type="date" value={form.expected_delivery_date} onChange={(e) => setForm({ ...form, expected_delivery_date: e.target.value })} /></label><label className="wide">Link da compra<input value={form.purchase_link} onChange={(e) => setForm({ ...form, purchase_link: e.target.value })} /></label><label>Rastreio<input value={form.tracking_code} onChange={(e) => setForm({ ...form, tracking_code: e.target.value })} /></label><label className="wide">Observação da movimentação<textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label></div>
+    {canViewValues && <div className="material-purchase-total"><span>Valor desta compra</span><strong>{money(totalCost)}</strong><small>{item.quantity} × {money(parsedUnitCost)}</small></div>}<div className="material-editor-grid"><label>Fornecedor<input value={form.supplier_name} onChange={(e) => setForm({ ...form, supplier_name: e.target.value })} /></label><label>Referência / pedido<input value={form.purchase_reference} onChange={(e) => setForm({ ...form, purchase_reference: e.target.value })} /></label>{canViewValues && <label>Valor unitário<input value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} placeholder="0,00" /></label>}<label>Previsão de chegada<input type="date" value={form.expected_delivery_date} onChange={(e) => setForm({ ...form, expected_delivery_date: e.target.value })} /></label><label className="wide">Link da compra<input value={form.purchase_link} onChange={(e) => setForm({ ...form, purchase_link: e.target.value })} /></label><label>Rastreio<input value={form.tracking_code} onChange={(e) => setForm({ ...form, tracking_code: e.target.value })} /></label><label className="wide">Observação da movimentação<textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label></div>
     {error && <div className="purchase-alert error">{error}</div>}
-    <footer>{nextActions[item.status]?.map((action) => <button key={action.status} disabled={saving} className={action.status === "rejected" ? "danger" : "primary-action"} onClick={() => void update(action.status)}>{action.status === "received" || action.status === "delivered_to_lab" ? <PackageCheck size={16} /> : action.status === "rejected" ? <XCircle size={16} /> : <CheckCircle2 size={16} />}{action.status === "purchased" && totalCost > 0 ? `${action.label} · ${money(totalCost)}` : action.label}</button>)}<button onClick={onClose}>Fechar</button></footer>
+    <footer>{nextActions[item.status]?.filter((action) => canViewValues || action.status !== "purchased").map((action) => <button key={action.status} disabled={saving} className={action.status === "rejected" ? "danger" : "primary-action"} onClick={() => void update(action.status)}>{action.status === "received" || action.status === "delivered_to_lab" ? <PackageCheck size={16} /> : action.status === "rejected" ? <XCircle size={16} /> : <CheckCircle2 size={16} />}{canViewValues && action.status === "purchased" && totalCost > 0 ? `${action.label} · ${money(totalCost)}` : action.label}</button>)}<button onClick={onClose}>Fechar</button></footer>
   </section></div>;
 }

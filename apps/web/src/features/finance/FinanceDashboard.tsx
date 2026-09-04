@@ -1,10 +1,11 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownRight, ArrowLeftRight, ArrowUpRight, Bell, Building2, CalendarRange,
   CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Download, Eye, FileSearch,
   Landmark, LayoutDashboard, LogOut, Menu, Paperclip, Pencil, Plus, ReceiptText,
   RotateCcw, Search, ShieldCheck, Trash2, TriangleAlert, UploadCloud, WalletCards, X,
 } from "lucide-react";
+import { NexusMark } from "../../shared/ui/NexusMark";
 import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
@@ -34,27 +35,27 @@ const currentMonth = () => new Date().getMonth() + 1;
 const firstDayOfMonth = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-01`;
 const lastDayOfMonth = (year: number, month: number) => dateKey(new Date(year, month, 0));
 const companies = [
-  { code: "universo_eletronica" as const, name: "Universo EletrÃ´nica", short: "UE", banks: ["ItaÃº", "Bradesco"] },
-  { code: "universo_automacao" as const, name: "Universo AutomaÃ§Ã£o", short: "UA", banks: ["Banco do Brasil", "Bradesco"] },
-  { code: "solucoes_eletronica" as const, name: "SoluÃ§Ãµes EletrÃ´nica", short: "SE", banks: ["Bradesco"] },
+  { code: "universo_eletronica" as const, name: "Universo Eletrônica", short: "UE", banks: ["Itaú", "Bradesco"] },
+  { code: "universo_automacao" as const, name: "Universo Automação", short: "UA", banks: ["Banco do Brasil", "Bradesco"] },
+  { code: "solucoes_eletronica" as const, name: "Soluções Eletrônica", short: "SE", banks: ["Bradesco"] },
 ];
-const months = ["Janeiro", "Fevereiro", "MarÃ§o", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const views = [
-  ["operations", "Painel de operaÃ§Ãµes", LayoutDashboard], ["income", "Receitas", ArrowUpRight],
-  ["expense", "SaÃ­das", ArrowDownRight], ["forecast", "PrevisÃ£o de fluxo", CalendarRange],
-  ["transfers", "Remanejamentos", ArrowLeftRight], ["balance", "BalanÃ§o financeiro", CircleDollarSign],
+  ["operations", "Painel de operações", LayoutDashboard], ["income", "Receitas", ArrowUpRight],
+  ["expense", "Saídas", ArrowDownRight], ["forecast", "Previsão de fluxo", CalendarRange],
+  ["transfers", "Remanejamentos", ArrowLeftRight], ["balance", "Balanço financeiro", CircleDollarSign],
   ["audit", "Auditoria", FileSearch],
 ] as const;
 const statusMeta: Record<FinanceStatus, { label: string; icon: typeof Clock3 }> = {
-  overdue: { label: "Atrasado", icon: Clock3 }, due_soon: { label: "PrÃ³ximo vencimento", icon: Bell },
+  overdue: { label: "Atrasado", icon: Clock3 }, due_soon: { label: "Próximo vencimento", icon: Bell },
   on_time: { label: "Dentro do prazo", icon: CalendarRange }, settled: { label: "Baixado", icon: CheckCircle2 },
 };
 const expenseLabels: Record<ExpenseKind, string> = {
-  fixed: "Despesa fixa", tax: "Imposto", salary: "SalÃ¡rio", supplier: "Fornecedor", variable: "Despesa variÃ¡vel",
+  fixed: "Despesa fixa", tax: "Imposto", salary: "Salário", supplier: "Fornecedor", variable: "Despesa variável",
 };
 const actionLabels: Record<string, string> = {
-  created: "CriaÃ§Ã£o", updated: "EdiÃ§Ã£o", deleted: "ExclusÃ£o", settled: "Baixa",
-  settlement_reversed: "Baixa desfeita", attachment_added: "Anexo incluÃ­do",
+  created: "Criação", updated: "Edição", deleted: "Exclusão", settled: "Baixa",
+  settlement_reversed: "Baixa desfeita", attachment_added: "Anexo incluído",
 };
 
 function initialForm(company: CompanyCode, type: EntryType): EntryForm {
@@ -73,14 +74,14 @@ const emptyBillingConfirmation = (): BillingConfirmation => ({
 });
 function money(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function companyName(code: CompanyCode) { return companies.find((item) => item.code === code)?.name ?? code; }
-function dateBR(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "â€”"; }
+function dateBR(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "—"; }
 function parseAmount(value: string) { return Number(value.replace(/\./g, "").replace(",", ".")); }
 function queryScope(company: CompanyFilter, startDate: string, endDate: string, dateBasis: DateBasis) {
   const scope = company === "consolidated" ? "consolidated=true" : `company_code=${company}`;
   return `${scope}&start_date=${startDate}&end_date=${endDate}&date_basis=${dateBasis}`;
 }
 const dateBasisLabels: Record<DateBasis, string> = {
-  posting: "CompetÃªncia / lanÃ§amento", issue: "EmissÃ£o", due: "Vencimento", settlement: "Baixa",
+  posting: "Competência / lançamento", issue: "Emissão", due: "Vencimento", settlement: "Baixa",
 };
 
 
@@ -90,36 +91,36 @@ function FinancePeriodSummary({ view, summary, periodLabel }: { view: FinanceVie
 
   if (view === "income") return <>
     <section className="finance-kpis finance-kpis--classic">
-      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(summary.period_income)}</strong><small>{summary.period_income_count} receitas Â· {periodLabel}</small></article>
-      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_income)}</strong><small>Receitas jÃ¡ baixadas</small></article>
-      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_income)}</strong><small>A receber no perÃ­odo</small></article>
+      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(summary.period_income)}</strong><small>{summary.period_income_count} receitas · {periodLabel}</small></article>
+      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_income)}</strong><small>Receitas já baixadas</small></article>
+      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_income)}</strong><small>A receber no período</small></article>
       <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(overdueIncome)}</strong><small>Receitas vencidas e pendentes</small></article>
     </section>
   </>;
 
   if (view === "expense") return <>
     <section className="finance-kpis finance-kpis--classic">
-      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(summary.period_expense)}</strong><small>{summary.period_expense_count} saÃ­das Â· {periodLabel}</small></article>
-      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_expense)}</strong><small>SaÃ­das jÃ¡ pagas</small></article>
-      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_expense)}</strong><small>A pagar no perÃ­odo</small></article>
-      <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(overdueExpense)}</strong><small>SaÃ­das vencidas e pendentes</small></article>
+      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(summary.period_expense)}</strong><small>{summary.period_expense_count} saídas · {periodLabel}</small></article>
+      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_expense)}</strong><small>Saídas já pagas</small></article>
+      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_expense)}</strong><small>A pagar no período</small></article>
+      <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(overdueExpense)}</strong><small>Saídas vencidas e pendentes</small></article>
     </section>
   </>;
 
-  if (view !== "operations") return <div className="finance-reconciliation-strip finance-reconciliation-strip--compact"><span><b>{summary.period_entry_count}</b> lanÃ§amentos</span><span>Receitas: <b>{money(summary.period_income)}</b></span><span>SaÃ­das: <b>{money(summary.period_expense)}</b></span><span>Resultado: <b>{money(summary.period_result)}</b></span></div>;
+  if (view !== "operations") return <div className="finance-reconciliation-strip finance-reconciliation-strip--compact"><span><b>{summary.period_entry_count}</b> lançamentos</span><span>Receitas: <b>{money(summary.period_income)}</b></span><span>Saídas: <b>{money(summary.period_expense)}</b></span><span>Resultado: <b>{money(summary.period_result)}</b></span></div>;
 
   return <>
     <section className="finance-kpis finance-kpis--classic">
-      <article className="finance-kpi finance-kpi--neutral"><span>Total faturado</span><strong>{money(summary.period_income)}</strong><small>{summary.period_income_count} receitas Â· {periodLabel}</small></article>
-      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_income)}</strong><small>Receitas jÃ¡ baixadas</small></article>
+      <article className="finance-kpi finance-kpi--neutral"><span>Total faturado</span><strong>{money(summary.period_income)}</strong><small>{summary.period_income_count} receitas · {periodLabel}</small></article>
+      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_income)}</strong><small>Receitas já baixadas</small></article>
       <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_income)}</strong><small>Contas a receber</small></article>
       <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(overdueIncome)}</strong><small>Receitas vencidas</small></article>
     </section>
     <section className="finance-secondary-metrics">
-      <article><span>SaÃ­das filtradas</span><strong>{money(summary.period_expense)}</strong><small>{summary.period_expense_count} lanÃ§amentos</small></article>
-      <article><span>Pago no perÃ­odo</span><strong>{money(summary.settled_expense)}</strong><small>SaÃ­das efetivadas</small></article>
-      <article><span>A pagar</span><strong>{money(summary.pending_expense)}</strong><small>{overdueExpense > 0 ? `${money(overdueExpense)} atrasado` : "Sem atraso no perÃ­odo"}</small></article>
-      <article className={summary.period_result >= 0 ? "is-positive" : "is-negative"}><span>Resultado do perÃ­odo</span><strong>{money(summary.period_result)}</strong><small>Receitas menos saÃ­das</small></article>
+      <article><span>Saídas filtradas</span><strong>{money(summary.period_expense)}</strong><small>{summary.period_expense_count} lançamentos</small></article>
+      <article><span>Pago no período</span><strong>{money(summary.settled_expense)}</strong><small>Saídas efetivadas</small></article>
+      <article><span>A pagar</span><strong>{money(summary.pending_expense)}</strong><small>{overdueExpense > 0 ? `${money(overdueExpense)} atrasado` : "Sem atraso no período"}</small></article>
+      <article className={summary.period_result >= 0 ? "is-positive" : "is-negative"}><span>Resultado do período</span><strong>{money(summary.period_result)}</strong><small>Receitas menos saídas</small></article>
     </section>
   </>;
 }
@@ -129,7 +130,7 @@ function EventCard({ event, onOpen }: { event: FinanceEvent; onOpen: (id: number
   return <button className={`finance-event finance-event--${event.status}`} onClick={() => onOpen(event.id)}>
     <span className="finance-event__rail" /><span className="finance-event__body">
       <span className="finance-event__top"><span className="finance-event__status"><Icon size={14} />{meta.label}</span>
-        <strong className={event.entry_type === "income" ? "amount-positive" : "amount-negative"}>{event.entry_type === "income" ? "+" : "âˆ’"}{money(event.amount)}</strong></span>
+        <strong className={event.entry_type === "income" ? "amount-positive" : "amount-negative"}>{event.entry_type === "income" ? "+" : "−"}{money(event.amount)}</strong></span>
       <strong className="finance-event__title">{event.description}</strong><span className="finance-event__counterparty">{event.counterparty_name}</span>
       <span className="finance-event__footer"><span>{event.due_label}</span><span>{event.bank_name}</span></span>
     </span>
@@ -180,7 +181,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     const requestId = ++requestSequence.current;
     if (!startDate || !endDate) return;
     if (endDate < startDate) {
-      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 }); setError("A data final nÃ£o pode ser anterior Ã  data inicial.");
+      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 }); setError("A data final não pode ser anterior à data inicial.");
       return;
     }
     setLoading(true); setError("");
@@ -203,7 +204,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     } catch (reason) {
       if (requestId !== requestSequence.current) return;
       setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 });
-      setError(reason instanceof Error ? reason.message : "NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o.");
+      setError(reason instanceof Error ? reason.message : "Não foi possível concluir a operação.");
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
@@ -213,7 +214,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   useEffect(() => {
     const term = search.trim();
     // Ao apagar a pesquisa, remove o filtro do servidor imediatamente. Isso
-    // evita manter em memÃ³ria somente o subconjunto retornado pela busca anterior.
+    // evita manter em memória somente o subconjunto retornado pela busca anterior.
     if (term.length < 2) { setServerSearch(""); setEntryPage(1); return; }
     const timer = window.setTimeout(() => { setServerSearch(term); setEntryPage(1); }, 250);
     return () => window.clearTimeout(timer);
@@ -249,7 +250,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         if (order) setForm((current) => ({
           ...current,
           counterparty_name: current.counterparty_name || order.customer_name,
-          description: current.description || `ServiÃ§o de laboratÃ³rio â€” ${order.number}`,
+          description: current.description || `Serviço de laboratório — ${order.number}`,
           amount: current.amount || (order.approved_value ? String(order.approved_value).replace(".", ",") : ""),
         }));
       })
@@ -281,9 +282,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           : null;
       const body = JSON.stringify({
         ...form,
-        // O Financeiro usa a emissÃ£o como competÃªncia operacional.
-        // posting_date permanece no contrato da API por compatibilidade histÃ³rica,
-        // mas nÃ£o Ã© mais um campo manual na interface.
+        // O Financeiro usa a emissão como competência operacional.
+        // posting_date permanece no contrato da API por compatibilidade histórica,
+        // mas não é mais um campo manual na interface.
         posting_date: form.issue_date,
         amount: parseAmount(form.amount),
         invoice_type: form.entry_type === "income" ? invoiceType : null,
@@ -311,13 +312,13 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         try {
           await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}/attachment`, { method: "POST", body: upload });
         } catch (uploadReason) {
-          // O lanÃ§amento jÃ¡ foi persistido antes do envio do arquivo. Mantemos o
-          // usuÃ¡rio fora do risco de clicar em Salvar novamente e duplicar a receita/despesa.
+          // O lançamento já foi persistido antes do envio do arquivo. Mantemos o
+          // usuário fora do risco de clicar em Salvar novamente e duplicar a receita/despesa.
           setSelected(await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}`));
           setAttachment(null);
           setError(uploadReason instanceof Error
-            ? `LanÃ§amento salvo, mas o anexo nÃ£o foi enviado: ${uploadReason.message}`
-            : "LanÃ§amento salvo, mas o anexo nÃ£o foi enviado.");
+            ? `Lançamento salvo, mas o anexo não foi enviado: ${uploadReason.message}`
+            : "Lançamento salvo, mas o anexo não foi enviado.");
           await loadData();
           return;
         }
@@ -327,7 +328,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     finally { setSaving(false); }
   }
   async function removeEntry() {
-    if (!selected || !confirm("Excluir este lanÃ§amento? A aÃ§Ã£o ficarÃ¡ registrada na auditoria.")) return;
+    if (!selected || !confirm("Excluir este lançamento? A ação ficará registrada na auditoria.")) return;
     await apiClient.request(`/api/finance/entries/${selected.id}`, { method: "DELETE" }); setModalOpen(false); await loadData();
   }
   async function toggleSettlement() {
@@ -359,21 +360,21 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   function manualStart(value: string) { setStartDate(value); setShortcut("custom"); }
   function manualEnd(value: string) { setEndDate(value); setShortcut("custom"); }
 
-  const periodLabel = summary ? `${dateBR(summary.period_start)} atÃ© ${dateBR(summary.period_end)}` : `${dateBR(startDate)} atÃ© ${dateBR(endDate)}`;
+  const periodLabel = summary ? `${dateBR(summary.period_start)} até ${dateBR(summary.period_end)}` : `${dateBR(startDate)} até ${dateBR(endDate)}`;
   const title = views.find(([key]) => key === view)?.[1] ?? "Financeiro";
   return <div className={`finance-shell ${sidebarCollapsed ? "finance-shell--collapsed" : ""}`}>
     <aside className={`finance-sidebar ${mobileMenu ? "is-open" : ""} ${sidebarCollapsed ? "is-collapsed" : ""}`}>
       <button className="finance-sidebar-toggle" type="button" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}>{sidebarCollapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}</button>
-      <div><button className="finance-brand" onClick={() => navigate("/painel")}><span>N</span><strong>NEXUS</strong></button>
-        <div className="finance-module-title"><WalletCards size={19}/><div><small>MÃ“DULO</small><strong>Financeiro</strong></div></div>
+      <div><button className="finance-brand" onClick={() => navigate("/painel")}><NexusMark/><strong>NEXUS</strong></button>
+        <div className="finance-module-title"><WalletCards size={19}/><div><small>MÓDULO</small><strong>Financeiro</strong></div></div>
         <nav>{views.map(([key, label, Icon]) => <button key={key} className={view === key ? "active" : ""} onClick={() => { setView(key); setMobileMenu(false); }}><Icon size={18}/><span>{label}</span></button>)}</nav>
         <button className="finance-back" onClick={() => navigate("/painel")}><LayoutDashboard size={18}/>Voltar ao painel geral</button></div>
       <div className="finance-user"><span>{user.name.slice(0, 2).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout}><LogOut size={18}/></button></div>
     </aside>
     <main className="finance-main">
       <header className="finance-header"><button className="mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)}><Menu/></button>
-        <div className="finance-heading"><span>GESTÃƒO FINANCEIRA PREMIUM</span><h1>{title}</h1><p>Receitas e saÃ­das separadas, visÃ£o por competÃªncia, baixas e auditoria completa.</p></div>
-        <div className="finance-header__tools"><button className="finance-primary income" onClick={() => openNew("income")}><ArrowUpRight size={18}/>Nova receita</button><button className="finance-primary expense" onClick={() => openNew("expense")}><ArrowDownRight size={18}/>Nova saÃ­da</button></div>
+        <div className="finance-heading"><span>GESTÃO FINANCEIRA PREMIUM</span><h1>{title}</h1><p>Receitas e saídas separadas, visão por competência, baixas e auditoria completa.</p></div>
+        <div className="finance-header__tools"><button className="finance-primary income" onClick={() => openNew("income")}><ArrowUpRight size={18}/>Nova receita</button><button className="finance-primary expense" onClick={() => openNew("expense")}><ArrowDownRight size={18}/>Nova saída</button></div>
       </header>
 
       <section className="finance-toolbar">
@@ -383,78 +384,91 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <label className="filter-year"><small>Ano</small><select value={year} onChange={(e) => changeYear(Number(e.target.value))}>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="filter-start"><small>Data inicial</small><input type="date" value={startDate} onChange={(e) => manualStart(e.target.value)} /></label>
           <label className="filter-end"><small>Data final</small><input type="date" value={endDate} min={startDate || undefined} onChange={(e) => manualEnd(e.target.value)} /></label>
-          <label className="filter-basis"><small>Base da data</small><select value={dateBasis} onChange={(e) => setDateBasis(e.target.value as DateBasis)}><option value="posting">CompetÃªncia / lanÃ§amento</option><option value="issue">EmissÃ£o</option><option value="due">Vencimento</option><option value="settlement">Baixa</option></select></label>
+          <label className="filter-basis"><small>Base da data</small><select value={dateBasis} onChange={(e) => setDateBasis(e.target.value as DateBasis)}><option value="posting">Competência / lançamento</option><option value="issue">Emissão</option><option value="due">Vencimento</option><option value="settlement">Baixa</option></select></label>
         </div>
       </section>
       <section className="finance-period-audit">
-        <div><strong>{periodLabel}</strong><span>â€¢</span>{dateBasisLabels[dateBasis]}</div>
-        <div>{dateBounds?.min_date && dateBounds?.max_date ? <>Base: <b>{dateBR(dateBounds.min_date)}</b>â€“<b>{dateBR(dateBounds.max_date)}</b> Â· {dateBounds.count} lanÃ§amentos</> : "Consultando base..."}</div>
+        <div><strong>{periodLabel}</strong><span>•</span>{dateBasisLabels[dateBasis]}</div>
+        <div>{dateBounds?.min_date && dateBounds?.max_date ? <>Base: <b>{dateBR(dateBounds.min_date)}</b>–<b>{dateBR(dateBounds.max_date)}</b> · {dateBounds.count} lançamentos</> : "Consultando base..."}</div>
       </section>
       {error && <div className="finance-toast" role="alert"><TriangleAlert size={18}/><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar"><X size={16}/></button></div>}
-      {loading && <div className="finance-filter-loading">Atualizando perÃ­odoâ€¦</div>}
+      {loading && <div className="finance-filter-loading">Atualizando período…</div>}
 
       {summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
 
       {view === "operations" && summary && <>
         <CashFlowChart points={summary.cash_flow} />
-        <section className="finance-section-head"><div><span>RADAR FINANCEIRO</span><h2>MovimentaÃ§Ãµes de {periodLabel}</h2><p>Filtro aplicado pela data de {dateBasisLabels[dateBasis].toLowerCase()}.</p></div>
+        <section className="finance-section-head"><div><span>RADAR FINANCEIRO</span><h2>Movimentações de {periodLabel}</h2><p>Filtro aplicado pela data de {dateBasisLabels[dateBasis].toLowerCase()}.</p></div>
           <div className="status-filter">{(["all", "overdue", "due_soon", "settled"] as const).map((item) => <button key={item} className={eventFilter === item ? "active" : ""} onClick={() => setEventFilter(item)}>{item === "all" ? "Todos" : statusMeta[item].label}</button>)}</div></section>
-        <section className="event-columns"><div className="event-column income-column"><header><div><ArrowUpRight/><span>Receitas</span></div><strong>{money(summary.period_income)}</strong></header><div className="finance-events">{filteredEvents(summary.income_events).map((event) => <EventCard key={event.id} event={event} onOpen={openEntry}/>) || null}{!filteredEvents(summary.income_events).length && <p className="finance-empty">Nenhuma receita no perÃ­odo.</p>}</div></div>
-          <div className="event-column expense-column"><header><div><ArrowDownRight/><span>SaÃ­das</span></div><strong>{money(summary.period_expense)}</strong></header><div className="finance-events">{filteredEvents(summary.expense_events).map((event) => <EventCard key={event.id} event={event} onOpen={openEntry}/>) || null}{!filteredEvents(summary.expense_events).length && <p className="finance-empty">Nenhuma saÃ­da no perÃ­odo.</p>}</div></div></section>
+        <section className="event-columns"><div className="event-column income-column"><header><div><ArrowUpRight/><span>Receitas</span></div><strong>{money(summary.period_income)}</strong></header><div className="finance-events">{filteredEvents(summary.income_events).map((event) => <EventCard key={event.id} event={event} onOpen={openEntry}/>) || null}{!filteredEvents(summary.income_events).length && <p className="finance-empty">Nenhuma receita no período.</p>}</div></div>
+          <div className="event-column expense-column"><header><div><ArrowDownRight/><span>Saídas</span></div><strong>{money(summary.period_expense)}</strong></header><div className="finance-events">{filteredEvents(summary.expense_events).map((event) => <EventCard key={event.id} event={event} onOpen={openEntry}/>) || null}{!filteredEvents(summary.expense_events).length && <p className="finance-empty">Nenhuma saída no período.</p>}</div></div></section>
       </>}
 
-      {(view === "income" || view === "expense") && <section className="ledger-panel"><header><div><span>{view === "income" ? "CONTAS A RECEBER" : "CONTAS A PAGAR"}</span><h2>{view === "income" ? "Receitas" : "SaÃ­das"} do perÃ­odo</h2></div><div className="ledger-tools"><label><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente, OS, sÃ©rie, NFS-e ou NF-e"/></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as EntryStatus | "overdue" | "all")}><option value="all">Todos os status</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option><option value={view === "income" ? "received" : "paid"}>Baixado</option></select></div></header>
-        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>SÃ©rie</span><span>NFS-e</span><span>NF-e</span><span>EmissÃ£o</span><span>Vencimento</span><span>Valor</span><span>Status</span><span/></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <button className="ledger-row ledger-row--detailed" key={entry.id} onClick={() => openEntry(entry.id)}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}</small></span><span>{entry.series || "â€”"}</span><span>{entry.nfse_number || "â€”"}</span><span>{entry.nfe_number || "â€”"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><ChevronRight size={17}/></button>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lanÃ§amento encontrado.</p>}</div><footer className="finance-pagination"><span>{entryPagination.total ? `${(entryPage - 1) * entryPagination.pageSize + 1}â€“${Math.min(entryPage * entryPagination.pageSize, entryPagination.total)} de ${entryPagination.total} lanÃ§amentos` : "0 lanÃ§amentos"}</span><div><button type="button" disabled={entryPage <= 1 || loading} onClick={() => setEntryPage((current) => Math.max(1, current - 1))}><ChevronLeft size={16}/>Anterior</button><strong>PÃ¡gina {entryPagination.pages ? entryPage : 0} de {entryPagination.pages}</strong><button type="button" disabled={entryPagination.pages === 0 || entryPage >= entryPagination.pages || loading} onClick={() => setEntryPage((current) => current + 1)}>PrÃ³xima<ChevronRight size={16}/></button></div></footer></section>}
+      {(view === "income" || view === "expense") && <section className="ledger-panel"><header><div><span>{view === "income" ? "CONTAS A RECEBER" : "CONTAS A PAGAR"}</span><h2>{view === "income" ? "Receitas" : "Saídas"} do período</h2></div><div className="ledger-tools"><label><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente, OS, série, NFS-e ou NF-e"/></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as EntryStatus | "overdue" | "all")}><option value="all">Todos os status</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option><option value={view === "income" ? "received" : "paid"}>Baixado</option></select></div></header>
+        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>Série</span><span>NFS-e</span><span>NF-e</span><span>Emissão</span><span>Vencimento</span><span>Valor</span><span>Status</span><span/></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <button className="ledger-row ledger-row--detailed" key={entry.id} onClick={() => openEntry(entry.id)}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}</small></span><span>{entry.series || "—"}</span><span>{entry.nfse_number || "—"}</span><span>{entry.nfe_number || "—"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><ChevronRight size={17}/></button>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lançamento encontrado.</p>}</div><footer className="finance-pagination"><span>{entryPagination.total ? `${(entryPage - 1) * entryPagination.pageSize + 1}–${Math.min(entryPage * entryPagination.pageSize, entryPagination.total)} de ${entryPagination.total} lançamentos` : "0 lançamentos"}</span><div><button type="button" disabled={entryPage <= 1 || loading} onClick={() => setEntryPage((current) => Math.max(1, current - 1))}><ChevronLeft size={16}/>Anterior</button><strong>Página {entryPagination.pages ? entryPage : 0} de {entryPagination.pages}</strong><button type="button" disabled={entryPagination.pages === 0 || entryPage >= entryPagination.pages || loading} onClick={() => setEntryPage((current) => current + 1)}>Próxima<ChevronRight size={16}/></button></div></footer></section>}
 
       {view === "forecast" && summary && <>
+        <section className="ledger-panel finance-forecast-direct">
+          <header><div><span>PREVISÃO POR VENCIMENTO</span><h2>Datas previstas de entrada e saída</h2><p>Valores pendentes agrupados exatamente pelo dia de vencimento.</p></div></header>
+          <div className="forecast-direct-list">
+            {summary.forecast_flow.map((point) => <article key={point.date} className="forecast-direct-day">
+              <strong>{dateBR(point.date)}</strong>
+              <div>
+                {point.income > 0 && <span className="forecast-direct-income">{dateBR(point.date)} — <b>{money(point.income)}</b> a receber</span>}
+                {point.expense > 0 && <span className="forecast-direct-expense">{dateBR(point.date)} — <b>{money(point.expense)}</b> a pagar</span>}
+              </div>
+              <small>Saldo do dia: <b className={point.net >= 0 ? "amount-positive" : "amount-negative"}>{money(point.net)}</b></small>
+            </article>)}
+            {!summary.forecast_flow.length && <p className="finance-empty">Nenhum valor pendente com vencimento no período selecionado.</p>}
+          </div>
+        </section>
         <CashFlowChart
           points={summary.cash_flow}
-          title="ProjeÃ§Ã£o do fluxo de caixa"
-          subtitle="Leitura visual das receitas, saÃ­das e do saldo projetado por semana."
+          title="Visão consolidada do fluxo"
+          subtitle="Resumo gráfico do período selecionado."
         />
-        <section className="ledger-panel"><header><div><span>PREVISÃƒO</span><h2>Fluxo por semana</h2></div></header><div className="flow-table"><div className="flow-row flow-head"><span>PerÃ­odo</span><span>Receitas</span><span>SaÃ­das</span><span>Saldo projetado</span></div>{summary.cash_flow.map((point) => <div className="flow-row" key={point.label}><span>{point.label}</span><strong className="amount-positive">{money(point.income)}</strong><strong className="amount-negative">{money(point.expense)}</strong><strong>{money(point.balance)}</strong></div>)}</div></section>
       </>}
-      {view === "transfers" && <section className="finance-placeholder"><ArrowLeftRight size={42}/><h2>Remanejamentos</h2><p>Estrutura preservada para transferÃªncias entre contas. A prÃ³xima etapa liga contas bancÃ¡rias por empresa e conciliaÃ§Ã£o.</p></section>}
-      {view === "balance" && summary && <section className="balance-lab"><article className="balance-hero"><div><span>RESULTADO EXECUTIVO</span><h2>{company === "consolidated" ? "Grupo consolidado" : companyName(company)}</h2><p>{periodLabel}</p></div><CircleDollarSign size={54}/></article><div className="balance-cards"><article><span>Receitas</span><strong className="amount-positive">{money(summary.period_income)}</strong><small>Faturamento lanÃ§ado</small></article><article><span>SaÃ­das</span><strong className="amount-negative">{money(summary.period_expense)}</strong><small>Despesas lanÃ§adas</small></article><article><span>Resultado</span><strong>{money(summary.period_income - summary.period_expense)}</strong><small>Receitas menos saÃ­das</small></article></div><article className="balance-visual"><h3>ComposiÃ§Ã£o do perÃ­odo</h3><CompositionDonut income={summary.period_income} expense={summary.period_expense}/><div className="balance-bars"><div><span>Receitas</span><i style={{ width: `${Math.min(100, summary.period_income / Math.max(summary.period_income, summary.period_expense, 1) * 100)}%` }}/><strong>{money(summary.period_income)}</strong></div><div className="expense-bar"><span>SaÃ­das</span><i style={{ width: `${Math.min(100, summary.period_expense / Math.max(summary.period_income, summary.period_expense, 1) * 100)}%` }}/><strong>{money(summary.period_expense)}</strong></div></div></article></section>}
-      {view === "audit" && <section className="ledger-panel"><header><div><span>RASTREABILIDADE</span><h2>Auditoria financeira</h2><p>UsuÃ¡rio, data, hora e alteraÃ§Ã£o executada.</p></div></header><div className="audit-list">{audit.map((item) => <article key={item.id}><span className={`audit-action ${item.action}`}>{actionLabels[item.action] ?? item.action}</span><div><strong>{item.description}</strong><small>{item.user_name} Â· {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(item.created_at))}</small></div><span>#{item.entity_id}</span></article>)}{!audit.length && <p className="finance-empty">Nenhum evento de auditoria no perÃ­odo.</p>}</div></section>}
+      {view === "transfers" && <section className="finance-placeholder"><ArrowLeftRight size={42}/><h2>Remanejamentos</h2><p>Estrutura preservada para transferências entre contas. A próxima etapa liga contas bancárias por empresa e conciliação.</p></section>}
+      {view === "balance" && summary && <section className="balance-lab"><article className="balance-hero"><div><span>RESULTADO EXECUTIVO</span><h2>{company === "consolidated" ? "Grupo consolidado" : companyName(company)}</h2><p>{periodLabel}</p></div><CircleDollarSign size={54}/></article><div className="balance-cards"><article><span>Receitas</span><strong className="amount-positive">{money(summary.period_income)}</strong><small>Faturamento lançado</small></article><article><span>Saídas</span><strong className="amount-negative">{money(summary.period_expense)}</strong><small>Despesas lançadas</small></article><article><span>Resultado</span><strong>{money(summary.period_income - summary.period_expense)}</strong><small>Receitas menos saídas</small></article></div><article className="balance-visual"><h3>Composição do período</h3><CompositionDonut income={summary.period_income} expense={summary.period_expense}/><div className="balance-bars"><div><span>Receitas</span><i style={{ width: `${Math.min(100, summary.period_income / Math.max(summary.period_income, summary.period_expense, 1) * 100)}%` }}/><strong>{money(summary.period_income)}</strong></div><div className="expense-bar"><span>Saídas</span><i style={{ width: `${Math.min(100, summary.period_expense / Math.max(summary.period_income, summary.period_expense, 1) * 100)}%` }}/><strong>{money(summary.period_expense)}</strong></div></div></article></section>}
+      {view === "audit" && <section className="ledger-panel"><header><div><span>RASTREABILIDADE</span><h2>Auditoria financeira</h2><p>Usuário, data, hora e alteração executada.</p></div></header><div className="audit-list">{audit.map((item) => <article key={item.id}><span className={`audit-action ${item.action}`}>{actionLabels[item.action] ?? item.action}</span><div><strong>{item.description}</strong><small>{item.user_name} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(item.created_at))}</small></div><span>#{item.entity_id}</span></article>)}{!audit.length && <p className="finance-empty">Nenhum evento de auditoria no período.</p>}</div></section>}
     </main>
 
-    {modalOpen && <div className="finance-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setModalOpen(false)}><section className="finance-modal"><header><div><span>{selected ? "DETALHES DO LANÃ‡AMENTO" : "NOVO REGISTRO"}</span><h2>{form.entry_type === "income" ? "Receita financeira" : "SaÃ­da financeira"}</h2></div><button onClick={() => setModalOpen(false)}><X/></button></header>
+    {modalOpen && <div className="finance-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setModalOpen(false)}><section className="finance-modal"><header><div><span>{selected ? "DETALHES DO LANÇAMENTO" : "NOVO REGISTRO"}</span><h2>{form.entry_type === "income" ? "Receita financeira" : "Saída financeira"}</h2></div><button onClick={() => setModalOpen(false)}><X/></button></header>
       {selected && <div className="entry-actions"><button className={selected.status === "pending" ? "settle" : "reverse"} onClick={toggleSettlement}>{selected.status === "pending" ? <><CheckCircle2 size={17}/>Dar baixa</> : <><RotateCcw size={17}/>Desfazer baixa</>}</button>{selected.attachment_name && <button type="button" onClick={() => setPreviewOpen(true)}><Eye size={17}/>Visualizar anexo</button>}<button className="delete" onClick={removeEntry}><Trash2 size={17}/>Excluir</button></div>}
-      <form onSubmit={saveEntry}><div className="entry-type-toggle"><button type="button" className={form.entry_type === "income" ? "income active" : "income"} onClick={() => !selected && setForm(initialForm(form.company_code, "income"))}>Entrada Â· Receita</button><button type="button" className={form.entry_type === "expense" ? "expense active" : "expense"} onClick={() => !selected && setForm(initialForm(form.company_code, "expense"))}>SaÃ­da Â· Despesa</button></div>
+      <form onSubmit={saveEntry}><div className="entry-type-toggle"><button type="button" className={form.entry_type === "income" ? "income active" : "income"} onClick={() => !selected && setForm(initialForm(form.company_code, "income"))}>Entrada · Receita</button><button type="button" className={form.entry_type === "expense" ? "expense active" : "expense"} onClick={() => !selected && setForm(initialForm(form.company_code, "expense"))}>Saída · Despesa</button></div>
         <div className="form-row"><label>Empresa<select value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
         {form.entry_type === "income" && <section className="billing-workflow-card">
-          <header><div><span>INTEGRAÃ‡ÃƒO COM A OS</span><strong>Conformidade de faturamento</strong></div><ShieldCheck size={22}/></header>
-          <div className="finance-os-search"><label>Buscar Ordem de ServiÃ§o<div className="finance-os-searchbox"><Search size={17}/><input value={workOrderSearch} onChange={(e) => setWorkOrderSearch(e.target.value)} placeholder="Digite OS, cliente ou sÃ©rie..." /></div></label>
-            {form.work_order_id && billingReadiness && <div className="finance-os-selected"><div><small>OS SELECIONADA</small><strong>{billingReadiness.work_order_number} Â· {billingReadiness.customer_name}</strong></div><button type="button" onClick={() => { setForm({ ...form, work_order_id: "" }); setBillingReadiness(null); setBillingConfirmation(emptyBillingConfirmation()); setWorkOrderSearch(""); setWorkOrders([]); }}>Trocar OS</button></div>}
-            {!form.work_order_id && workOrderSearch.trim().length >= 2 && <div className="finance-os-results">{workOrders.map((order) => <button type="button" key={order.id} onClick={() => { setForm({ ...form, work_order_id: String(order.id) }); setWorkOrderSearch(`${order.number} Â· ${order.customer_name}`); setBillingConfirmation(emptyBillingConfirmation()); }}><strong>{order.number}</strong><span>{order.customer_name} Â· {order.equipment_label}</span>{order.approved_value != null && <small>{money(Number(order.approved_value))}</small>}</button>)}{!workOrders.length && <div>Nenhuma OS encontrada.</div>}</div>}
-            {!form.work_order_id && workOrderSearch.trim().length < 2 && <small className="finance-os-hint">Digite pelo menos 2 caracteres para localizar a OS. Deixe em branco para receita sem vÃ­nculo.</small>}
+          <header><div><span>INTEGRAÇÃO COM A OS</span><strong>Conformidade de faturamento</strong></div><ShieldCheck size={22}/></header>
+          <div className="finance-os-search"><label>Buscar Ordem de Serviço<div className="finance-os-searchbox"><Search size={17}/><input value={workOrderSearch} onChange={(e) => setWorkOrderSearch(e.target.value)} placeholder="Digite OS, cliente ou série..." /></div></label>
+            {form.work_order_id && billingReadiness && <div className="finance-os-selected"><div><small>OS SELECIONADA</small><strong>{billingReadiness.work_order_number} · {billingReadiness.customer_name}</strong></div><button type="button" onClick={() => { setForm({ ...form, work_order_id: "" }); setBillingReadiness(null); setBillingConfirmation(emptyBillingConfirmation()); setWorkOrderSearch(""); setWorkOrders([]); }}>Trocar OS</button></div>}
+            {!form.work_order_id && workOrderSearch.trim().length >= 2 && <div className="finance-os-results">{workOrders.map((order) => <button type="button" key={order.id} onClick={() => { setForm({ ...form, work_order_id: String(order.id) }); setWorkOrderSearch(`${order.number} · ${order.customer_name}`); setBillingConfirmation(emptyBillingConfirmation()); }}><strong>{order.number}</strong><span>{order.customer_name} · {order.equipment_label}</span>{order.approved_value != null && <small>{money(Number(order.approved_value))}</small>}</button>)}{!workOrders.length && <div>Nenhuma OS encontrada.</div>}</div>}
+            {!form.work_order_id && workOrderSearch.trim().length < 2 && <small className="finance-os-hint">Digite pelo menos 2 caracteres para localizar a OS. Deixe em branco para receita sem vínculo.</small>}
           </div>
           {billingReadiness && <div className="billing-readiness">
             <div className="billing-readiness__summary"><span><b>{billingReadiness.work_order_number}</b><small>{billingReadiness.customer_name}</small></span>{billingReadiness.approved_value != null && <strong>{money(Number(billingReadiness.approved_value))}</strong>}</div>
             {(billingReadiness.billing_instructions || billingReadiness.financial_notes) && <div className="billing-guidance"><TriangleAlert size={16}/><span>{billingReadiness.billing_instructions || billingReadiness.financial_notes}</span></div>}
             <div className="billing-checklist">
-              {billingReadiness.items.some((item) => item.key === "purchase_order") && <label><span>PO / pedido de compra {billingReadiness.items.find((item) => item.key === "purchase_order")?.required ? "*" : ""}</span><input value={billingConfirmation.purchase_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, purchase_order_number: e.target.value })} placeholder="NÃºmero da PO"/></label>}
-              {billingReadiness.items.some((item) => item.key === "customer_order") && <label><span>OS / pedido do cliente {billingReadiness.items.find((item) => item.key === "customer_order")?.required ? "*" : ""}</span><input value={billingConfirmation.customer_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, customer_order_number: e.target.value })} placeholder="ReferÃªncia do cliente"/></label>}
-              {billingReadiness.items.some((item) => item.key === "measurement") && <label><span>MediÃ§Ã£o {billingReadiness.items.find((item) => item.key === "measurement")?.required ? "*" : ""}</span><input value={billingConfirmation.measurement_reference} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, measurement_reference: e.target.value })} placeholder="NÃºmero / referÃªncia"/></label>}
+              {billingReadiness.items.some((item) => item.key === "purchase_order") && <label><span>PO / pedido de compra {billingReadiness.items.find((item) => item.key === "purchase_order")?.required ? "*" : ""}</span><input value={billingConfirmation.purchase_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, purchase_order_number: e.target.value })} placeholder="Número da PO"/></label>}
+              {billingReadiness.items.some((item) => item.key === "customer_order") && <label><span>OS / pedido do cliente {billingReadiness.items.find((item) => item.key === "customer_order")?.required ? "*" : ""}</span><input value={billingConfirmation.customer_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, customer_order_number: e.target.value })} placeholder="Referência do cliente"/></label>}
+              {billingReadiness.items.some((item) => item.key === "measurement") && <label><span>Medição {billingReadiness.items.find((item) => item.key === "measurement")?.required ? "*" : ""}</span><input value={billingConfirmation.measurement_reference} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, measurement_reference: e.target.value })} placeholder="Número / referência"/></label>}
               {billingReadiness.items.filter((item) => ["service_report","portal","invoice_email","xml_email"].includes(item.key)).map((item) => { const field = item.key === "service_report" ? "service_report_confirmed" : item.key === "portal" ? "portal_submitted" : item.key === "invoice_email" ? "invoice_email_confirmed" : "xml_email_confirmed"; return <label className="billing-check" key={item.key}><input type="checkbox" checked={Boolean(billingConfirmation[field as keyof BillingConfirmation])} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, [field]: e.target.checked })}/><span><strong>{item.label}{item.required ? " *" : ""}</strong>{item.configured_value && <small>{item.configured_value}</small>}</span></label>; })}
             </div>
-            {billingReadiness.portal_url && <label>Protocolo / comprovante do portal<input value={billingConfirmation.portal_protocol} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, portal_protocol: e.target.value })} placeholder="Opcional: protocolo, chamado ou referÃªncia"/></label>}
-            <label>ObservaÃ§Ã£o do checklist<textarea rows={2} value={billingConfirmation.notes} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, notes: e.target.value })} placeholder="ExceÃ§Ãµes, observaÃ§Ãµes e evidÃªncias do faturamento"/></label>
+            {billingReadiness.portal_url && <label>Protocolo / comprovante do portal<input value={billingConfirmation.portal_protocol} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, portal_protocol: e.target.value })} placeholder="Opcional: protocolo, chamado ou referência"/></label>}
+            <label>Observação do checklist<textarea rows={2} value={billingConfirmation.notes} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, notes: e.target.value })} placeholder="Exceções, observações e evidências do faturamento"/></label>
           </div>}
         </section>}
-        <div className="form-row"><label>{form.entry_type === "income" ? "Cliente" : "Cliente / fornecedor"}<input required value={form.counterparty_name} onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}/></label>{form.entry_type === "expense" && <label>ClassificaÃ§Ã£o<select value={form.expense_kind} onChange={(e) => setForm({ ...form, expense_kind: e.target.value as ExpenseKind })}>{Object.entries(expenseLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>}</div>
-        <div className="form-row"><label>DescriÃ§Ã£o<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>Valor<input required inputMode="decimal" placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
-        {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="NÃºmero da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="NÃºmero da NF-e"/></label></div><label>SÃ©rie<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">{selected && !form.nfse_number && !form.nfe_number ? "Registro histÃ³rico sem NF: pode ser editado e salvo normalmente." : "Preencha pelo menos uma das caixas: NFS-e ou NF-e."}</small></>}
-        {form.entry_type === "expense" && <label>Documento / referÃªncia<input value={form.document_number} onChange={(e) => setForm({ ...form, document_number: e.target.value })}/></label>}
-        <div className="form-row"><label>Data de emissÃ£o<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label><label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label></div>
-        {form.entry_type === "expense" && <label>Chave PIX ou cÃ³digo do boleto<textarea rows={2} value={form.payment_code} onChange={(e) => setForm({ ...form, payment_code: e.target.value })}/></label>}
-        <label>ObservaÃ§Ãµes<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/></label>
-        <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP Â· atÃ© 10 MB</small></span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>
+        <div className="form-row"><label>{form.entry_type === "income" ? "Cliente" : "Cliente / fornecedor"}<input required value={form.counterparty_name} onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}/></label>{form.entry_type === "expense" && <label>Classificação<select value={form.expense_kind} onChange={(e) => setForm({ ...form, expense_kind: e.target.value as ExpenseKind })}>{Object.entries(expenseLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>}</div>
+        <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>Valor<input required inputMode="decimal" placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
+        {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="Número da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="Número da NF-e"/></label></div><label>Série<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">{selected && !form.nfse_number && !form.nfe_number ? "Registro histórico sem NF: pode ser editado e salvo normalmente." : "Preencha pelo menos uma das caixas: NFS-e ou NF-e."}</small></>}
+        {form.entry_type === "expense" && <label>Documento / referência<input value={form.document_number} onChange={(e) => setForm({ ...form, document_number: e.target.value })}/></label>}
+        <div className="form-row"><label>Data de emissão<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label><label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label></div>
+        {form.entry_type === "expense" && <label>Chave PIX ou código do boleto<textarea rows={2} value={form.payment_code} onChange={(e) => setForm({ ...form, payment_code: e.target.value })}/></label>}
+        <label>Observações<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/></label>
+        <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>
         {selected && <div className="entry-meta"><span>Status: <b>{selected.status === "pending" ? "Pendente" : "Baixado"}</b></span><span>Baixa: <b>{dateBR(selected.settlement_date)}</b></span><span>Atualizado: <b>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(selected.updated_at))}</b></span></div>}
-        <footer><button type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alteraÃ§Ãµes" : "Salvar lanÃ§amento"}</button></footer>
+        <footer><button type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alterações" : "Salvar lançamento"}</button></footer>
       </form></section></div>}
-    {previewOpen && selected?.attachment_name && <div className="attachment-preview-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPreviewOpen(false)}><section className="attachment-preview"><header><div><span>ANEXO DO LANÃ‡AMENTO</span><strong>{selected.attachment_name}</strong></div><button type="button" onClick={() => setPreviewOpen(false)}><X/></button></header>{selected.attachment_mime?.startsWith("image/") ? <img src={`/api/finance/entries/${selected.id}/attachment/preview`} alt={selected.attachment_name}/> : <iframe src={`/api/finance/entries/${selected.id}/attachment/preview`} title={selected.attachment_name}/>}</section></div>}
+    {previewOpen && selected?.attachment_name && <div className="attachment-preview-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPreviewOpen(false)}><section className="attachment-preview"><header><div><span>ANEXO DO LANÇAMENTO</span><strong>{selected.attachment_name}</strong></div><button type="button" onClick={() => setPreviewOpen(false)}><X/></button></header>{selected.attachment_mime?.startsWith("image/") ? <img src={`/api/finance/entries/${selected.id}/attachment/preview`} alt={selected.attachment_name}/> : <iframe src={`/api/finance/entries/${selected.id}/attachment/preview`} title={selected.attachment_name}/>}</section></div>}
   </div>;
 }
 

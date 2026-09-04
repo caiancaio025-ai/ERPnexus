@@ -30,7 +30,7 @@ export type PurchaseOrder = {
   client_destination?: string | null;
   product_name: string;
   quantity: number;
-  total_amount: number;
+  total_amount: number | null;
   origin: PurchaseOrigin;
   tracking_code?: string | null;
   purchase_date: string;
@@ -50,7 +50,7 @@ export type PurchaseSummary = {
   overdue: number;
   due_soon: number;
   delivered_month: number;
-  total_value_open: number;
+  total_value_open: number | null;
 };
 
 export type PurchaseAudit = {

@@ -132,10 +132,11 @@ def user_can_manage_collaborators(role: str) -> bool:
 
 
 def user_can_create_quote(role: str, modules: Iterable[str] | None) -> bool:
-    """Retorna se o usuário pode criar, editar ou emitir orçamento comercial."""
-    normalized = role.strip().lower()
-    if normalized in {"super_admin", "admin", "gestao", "management", "comercial"}:
-        return True
-    if normalized in {"lab", "tecnico", "technician"}:
-        return False
-    return False
+    """Orçamentos contêm valores monetários e são exclusivos da Gestão.
+
+    ``super_admin`` permanece somente como compatibilidade do bootstrap legado.
+    O parâmetro ``modules`` é mantido para compatibilidade da API existente, mas
+    não amplia a permissão monetária.
+    """
+    del modules
+    return user_can_view_sensitive_values(role)

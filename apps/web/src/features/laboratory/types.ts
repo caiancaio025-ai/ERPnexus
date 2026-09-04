@@ -42,15 +42,17 @@ export type WorkOrderSummary = {
   total_open: number; analyzed: number; awaiting_approval: number; approved: number;
   awaiting_analysis: number; in_repair: number; in_testing: number;
   high_priority: number; completed_month: number;
+  approved_total: string | null; awaiting_approval_total: string | null;
 };
 
-export type QuoteItem = { id?: number; position?: number; description: string; quantity: string; unit_value: string };
+export type QuoteItem = { id?: number; position?: number; description: string; quantity: string; unit_value: string | null };
 export type Quote = {
   id: number; work_order_id: number; revision: number; status: string; service_code: string;
   technical_report: string; services_description: string | null; delivery_days: number;
-  billing_days: number; warranty_months: number; payment_terms: string; validity_days: number;
+  billing_days: number; billing_terms: string | null;
+  warranty_months: number; warranty_terms: string | null; payment_terms: string; validity_days: number;
   return_condition: string; consumer_clause: string; supply_clause: string; estimate_clause: string;
-  discount_type: "none" | "amount" | "percent"; discount_value: string; subtotal: string; total: string;
+  discount_type: "none" | "amount" | "percent"; discount_value: string | null; subtotal: string | null; total: string | null;
   emitted_at: string | null; created_at: string; updated_at: string; items: QuoteItem[];
 };
 

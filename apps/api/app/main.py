@@ -7,6 +7,7 @@ from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.core.observability import request_observability_middleware
 from app.customers.router import router as customers_router
+from app.commercial.router import router as commercial_router
 from app.dashboard.router import router as dashboard_router
 from app.finance.router import router as finance_router
 from app.employees.router import router as employees_router
@@ -39,6 +40,7 @@ app.include_router(auth_router, tags=["auth"])
 app.include_router(admin_users_router, tags=["admin-users"])
 app.include_router(dashboard_router, tags=["dashboard"])
 app.include_router(customers_router, tags=["customers"])
+app.include_router(commercial_router, tags=["commercial"])
 app.include_router(finance_router, tags=["finance"])
 app.include_router(employees_router, tags=["employees"])
 app.include_router(purchasing_router, tags=["purchasing"])

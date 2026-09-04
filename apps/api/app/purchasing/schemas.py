@@ -66,7 +66,7 @@ class PurchaseOutput(BaseModel):
     client_destination: str | None
     product_name: str
     quantity: int
-    total_amount: Decimal
+    total_amount: Decimal | None
     origin: PurchaseOrigin
     tracking_code: str | None
     purchase_date: date
@@ -98,7 +98,7 @@ class PurchaseSummary(BaseModel):
     overdue: int
     due_soon: int
     delivered_month: int
-    total_value_open: Decimal
+    total_value_open: Decimal | None
 
 
 class PurchaseAuditOutput(BaseModel):

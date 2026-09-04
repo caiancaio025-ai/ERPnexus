@@ -53,7 +53,7 @@ from app.laboratory.schemas import (
     WorkOrderSummary,
     WorkOrderUpdate,
 )
-from app.notifications.service import notify_quote_users
+from app.notifications.service import notify_quote_users, notify_roles
 from app.laboratory.service import (
     TERMINAL_STATUSES,
     apply_work_order_update,
@@ -95,7 +95,11 @@ async def _work_order_or_404(db: AsyncSession, work_order_id: int) -> Laboratory
     return work_order
 
 
-def _to_work_order_output(work_order: LaboratoryWorkOrder) -> WorkOrderOutput:
+def _to_work_order_output(
+    work_order: LaboratoryWorkOrder,
+    *,
+    include_sensitive_values: bool,
+) -> WorkOrderOutput:
     equipment = work_order.equipment
     return WorkOrderOutput(
         id=work_order.id,
@@ -122,14 +126,54 @@ def _to_work_order_output(work_order: LaboratoryWorkOrder) -> WorkOrderOutput:
         opened_at=work_order.opened_at,
         completed_at=work_order.completed_at,
         delivered_at=work_order.delivered_at,
-        parts_cost=work_order.parts_cost,
-        quoted_value=work_order.quoted_value,
-        approved_value=work_order.approved_value,
+        parts_cost=work_order.parts_cost if include_sensitive_values else None,
+        quoted_value=work_order.quoted_value if include_sensitive_values else None,
+        approved_value=work_order.approved_value if include_sensitive_values else None,
         internal_notes=work_order.internal_notes,
         customer_notes=work_order.customer_notes,
         version=work_order.version,
         created_at=work_order.created_at,
         updated_at=work_order.updated_at,
+    )
+
+
+def _to_quote_output(quote: LaboratoryQuote, *, include_sensitive_values: bool) -> QuoteOutput:
+    return QuoteOutput(
+        id=quote.id,
+        work_order_id=quote.work_order_id,
+        revision=quote.revision,
+        status=quote.status,
+        service_code=quote.service_code,
+        technical_report=quote.technical_report,
+        services_description=quote.services_description,
+        delivery_days=quote.delivery_days,
+        billing_days=quote.billing_days,
+        billing_terms=quote.billing_terms,
+        warranty_months=quote.warranty_months,
+        warranty_terms=quote.warranty_terms,
+        payment_terms=quote.payment_terms,
+        validity_days=quote.validity_days,
+        return_condition=quote.return_condition,
+        consumer_clause=quote.consumer_clause,
+        supply_clause=quote.supply_clause,
+        estimate_clause=quote.estimate_clause,
+        discount_type=quote.discount_type,
+        discount_value=quote.discount_value if include_sensitive_values else None,
+        subtotal=quote.subtotal if include_sensitive_values else None,
+        total=quote.total if include_sensitive_values else None,
+        emitted_at=quote.emitted_at,
+        created_at=quote.created_at,
+        updated_at=quote.updated_at,
+        items=[
+            {
+                "id": item.id,
+                "position": item.position,
+                "description": item.description,
+                "quantity": item.quantity,
+                "unit_value": item.unit_value if include_sensitive_values else None,
+            }
+            for item in quote.items
+        ],
     )
 
 
@@ -243,14 +287,20 @@ async def summary(
     db: AsyncSession = DB_DEP,
 ):
     today = date.today()
-    month_start = today.replace(day=1)
+    current_month_start = today.replace(day=1)
+    current_month_end = (
+        date(today.year + 1, 1, 1)
+        if today.month == 12
+        else date(today.year, today.month + 1, 1)
+    )
     period_start, period_end = _period_bounds(year, month)
     counts = await work_order_summary_counts(
         db,
         company_code=company_code,
         opened_from=period_start,
         opened_before=period_end,
-        completed_from=month_start,
+        completed_from=period_start or current_month_start,
+        completed_before=period_end or current_month_end,
     )
 
     if not user_can_view_sensitive_values(user.role):
@@ -308,6 +358,37 @@ async def deactivate_customer(
 # ------------------------------------------------------------ technicians --
 
 
+def _require_technician_management(user: User) -> None:
+    if user.role.strip().lower() not in {"super_admin", "admin", "gestao"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Somente ADM ou Gestão pode cadastrar, editar ou inativar técnicos.",
+        )
+
+
+def _normalized_technician_name(name: str) -> str:
+    return " ".join(name.casefold().split())
+
+
+async def _active_technician_with_name(
+    db: AsyncSession,
+    name: str,
+    *,
+    exclude_id: int | None = None,
+) -> LaboratoryTechnician | None:
+    normalized = _normalized_technician_name(name)
+    rows = list((await db.scalars(
+        select(LaboratoryTechnician).where(LaboratoryTechnician.is_active.is_(True))
+    )).all())
+    for row in rows:
+        if exclude_id is not None and row.id == exclude_id:
+            continue
+        if _normalized_technician_name(row.name) == normalized:
+            return row
+    return None
+
+
+
 @router.get("/technicians", response_model=list[TechnicianOutput])
 async def list_technicians(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE,
@@ -320,7 +401,13 @@ async def list_technicians(
         query = query.where(LaboratoryTechnician.company_code == company_code)
     if not include_inactive:
         query = query.where(LaboratoryTechnician.is_active.is_(True))
-    return list((await db.scalars(query.order_by(LaboratoryTechnician.name))).all())
+    rows = list((await db.scalars(query.order_by(LaboratoryTechnician.name, LaboratoryTechnician.id))).all())
+    if include_inactive:
+        return rows
+    unique: dict[str, LaboratoryTechnician] = {}
+    for technician in rows:
+        unique.setdefault(_normalized_technician_name(technician.name), technician)
+    return list(unique.values())
 
 
 @router.post("/technicians", response_model=TechnicianOutput, status_code=status.HTTP_201_CREATED)
@@ -329,6 +416,13 @@ async def create_technician(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_technician_management(user)
+    duplicate = await _active_technician_with_name(db, payload.name)
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe um técnico ativo com este nome: {duplicate.name}. Edite o cadastro existente.",
+        )
     technician = LaboratoryTechnician(**payload.model_dump(), created_by=user.id)
     db.add(technician)
     await db.commit()
@@ -340,12 +434,19 @@ async def create_technician(
 async def update_technician(
     technician_id: int,
     payload: TechnicianUpdate,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_technician_management(user)
     technician = await db.get(LaboratoryTechnician, technician_id)
     if not technician:
         raise HTTPException(status_code=404, detail="Técnico não encontrado.")
+    duplicate = await _active_technician_with_name(db, payload.name, exclude_id=technician_id)
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe outro técnico ativo com este nome: {duplicate.name}.",
+        )
     for field, value in payload.model_dump().items():
         setattr(technician, field, value)
     await db.commit()
@@ -356,9 +457,10 @@ async def update_technician(
 @router.delete("/technicians/{technician_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deactivate_technician(
     technician_id: int,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
+    _require_technician_management(user)
     technician = await db.get(LaboratoryTechnician, technician_id)
     if not technician:
         raise HTTPException(status_code=404, detail="Técnico não encontrado.")
@@ -379,7 +481,7 @@ async def list_work_orders(
     search: str | None = QUERY_SEARCH,
     month: int | None = QUERY_MONTH,
     year: int | None = QUERY_YEAR,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     period_start, period_end = _period_bounds(year, month)
@@ -394,7 +496,13 @@ async def list_work_orders(
         opened_before=period_end,
     )
     return WorkOrderPage(
-        items=[_to_work_order_output(wo) for wo in work_orders],
+        items=[
+            _to_work_order_output(
+                wo,
+                include_sensitive_values=user_can_view_sensitive_values(user.role),
+            )
+            for wo in work_orders
+        ],
         page=page,
         page_size=page_size,
         total=total,
@@ -405,10 +513,13 @@ async def list_work_orders(
 @router.get("/work-orders/{work_order_id}", response_model=WorkOrderOutput)
 async def get_work_order(
     work_order_id: int,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    return _to_work_order_output(await _work_order_or_404(db, work_order_id))
+    return _to_work_order_output(
+        await _work_order_or_404(db, work_order_id),
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post("/work-orders", response_model=WorkOrderOutput, status_code=status.HTTP_201_CREATED)
@@ -446,9 +557,9 @@ async def create_work_order(
         opened_at=date.today(),
         entry_invoice=payload.entry_invoice,
         exit_invoice=payload.exit_invoice,
-        parts_cost=payload.parts_cost or None,
-        quoted_value=payload.quoted_value or None,
-        approved_value=payload.approved_value or None,
+        parts_cost=(payload.parts_cost or None) if user_can_view_sensitive_values(user.role) else None,
+        quoted_value=(payload.quoted_value or None) if user_can_view_sensitive_values(user.role) else None,
+        approved_value=(payload.approved_value or None) if user_can_view_sensitive_values(user.role) else None,
         internal_notes=payload.internal_notes,
         customer_notes=payload.customer_notes,
         created_by=user.id,
@@ -466,7 +577,10 @@ async def create_work_order(
     )
     await db.commit()
     await db.refresh(work_order)
-    return _to_work_order_output(await _work_order_or_404(db, work_order.id))
+    return _to_work_order_output(
+        await _work_order_or_404(db, work_order.id),
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.patch("/work-orders/{work_order_id}", response_model=WorkOrderOutput)
@@ -497,11 +611,19 @@ async def update_work_order(
         user_id=user.id,
     )
 
-    apply_work_order_update(work_order, payload, equipment_id=equipment.id)
+    apply_work_order_update(
+        work_order,
+        payload,
+        equipment_id=equipment.id,
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
     work_order.version += 1
 
     await db.commit()
-    return _to_work_order_output(await _work_order_or_404(db, work_order.id))
+    return _to_work_order_output(
+        await _work_order_or_404(db, work_order.id),
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post("/work-orders/{work_order_id}/status", response_model=WorkOrderOutput)
@@ -542,8 +664,9 @@ async def change_status(
         )
         await _sync_finance_on_status_change(db, work_order, previous, payload.status, user.id)
         if payload.status == "in_analysis" and previous != "in_analysis":
-            await notify_quote_users(
+            await notify_roles(
                 db,
+                roles={"super_admin", "admin", "gestao"},
                 category="quote",
                 severity="warning",
                 title=f"OS {work_order.number} analisada · orçamento pendente",
@@ -555,7 +678,10 @@ async def change_status(
                 exclude_user_id=user.id,
             )
         await db.commit()
-    return _to_work_order_output(await _work_order_or_404(db, work_order.id))
+    return _to_work_order_output(
+        await _work_order_or_404(db, work_order.id),
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.get("/work-orders/{work_order_id}/history", response_model=list[StatusHistoryOutput])
@@ -619,7 +745,7 @@ def _require_quote_permission(user: User) -> None:
 @router.get("/work-orders/{work_order_id}/quotes", response_model=list[QuoteOutput])
 async def list_quotes(
     work_order_id: int,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     await _work_order_or_404(db, work_order_id)
@@ -628,7 +754,9 @@ async def list_quotes(
         .where(LaboratoryQuote.work_order_id == work_order_id)
         .order_by(LaboratoryQuote.revision.desc())
     )
-    return list((await db.scalars(query)).all())
+    rows = list((await db.scalars(query)).all())
+    include_values = user_can_view_sensitive_values(user.role)
+    return [_to_quote_output(item, include_sensitive_values=include_values) for item in rows]
 
 
 @router.post(
@@ -644,6 +772,25 @@ async def create_quote(
 ):
     _require_quote_permission(user)
     await _work_order_or_404(db, work_order_id)
+    existing_draft = await db.scalar(
+        select(LaboratoryQuote)
+        .where(
+            LaboratoryQuote.work_order_id == work_order_id,
+            LaboratoryQuote.status == "draft",
+            LaboratoryQuote.emitted_at.is_(None),
+        )
+        .order_by(LaboratoryQuote.revision.desc())
+        .limit(1)
+    )
+    if existing_draft is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Já existe um rascunho editável para esta O.S. "
+                "Abra o rascunho existente em vez de criar outra revisão."
+            ),
+        )
+
     last_revision = await db.scalar(
         select(func.max(LaboratoryQuote.revision)).where(
             LaboratoryQuote.work_order_id == work_order_id
@@ -658,7 +805,9 @@ async def create_quote(
         services_description=payload.services_description,
         delivery_days=payload.delivery_days,
         billing_days=payload.billing_days,
+        billing_terms=payload.billing_terms,
         warranty_months=payload.warranty_months,
+        warranty_terms=payload.warranty_terms,
         payment_terms=payload.payment_terms,
         validity_days=payload.validity_days,
         return_condition=payload.return_condition,
@@ -678,7 +827,7 @@ async def create_quote(
     db.add(quote)
     await db.commit()
     await db.refresh(quote)
-    return quote
+    return _to_quote_output(quote, include_sensitive_values=True)
 
 
 @router.put("/quotes/{quote_id}", response_model=QuoteOutput)
@@ -699,8 +848,8 @@ async def update_quote(
         )
     subtotal, total = _quote_totals(payload)
     for field in (
-        "service_code", "technical_report", "services_description", "delivery_days", "billing_days",
-        "warranty_months", "payment_terms", "validity_days", "return_condition", "consumer_clause",
+        "service_code", "technical_report", "services_description", "delivery_days", "billing_days", "billing_terms",
+        "warranty_months", "warranty_terms", "payment_terms", "validity_days", "return_condition", "consumer_clause",
         "supply_clause", "estimate_clause", "discount_type", "discount_value",
     ):
         setattr(quote, field, getattr(payload, field))
@@ -712,7 +861,7 @@ async def update_quote(
     ]
     await db.commit()
     await db.refresh(quote)
-    return quote
+    return _to_quote_output(quote, include_sensitive_values=True)
 
 
 @router.delete("/quotes/{quote_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -746,9 +895,7 @@ async def quote_pdf_endpoint(
     if not quote:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
     work_order = await _work_order_or_404(db, quote.work_order_id)
-
-    if not preview:
-        _require_quote_permission(user)
+    _require_quote_permission(user)
 
     if not preview and quote.emitted_at is None:
         quote.emitted_at = datetime.now(UTC)
@@ -772,6 +919,24 @@ async def quote_pdf_endpoint(
 
 
 # -------------------------------------------------------------- documents --
+
+
+@router.get(
+    "/work-orders/{work_order_id}/documents",
+    response_model=list[DocumentOutput],
+)
+async def list_documents(
+    work_order_id: int,
+    _: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    await _work_order_or_404(db, work_order_id)
+    query = (
+        select(LaboratoryDocument)
+        .where(LaboratoryDocument.work_order_id == work_order_id)
+        .order_by(LaboratoryDocument.created_at.desc(), LaboratoryDocument.id.desc())
+    )
+    return list((await db.scalars(query)).all())
 
 
 @router.post(
@@ -879,7 +1044,7 @@ from app.purchasing.material_service import event as material_event, next_materi
 @router.get("/work-orders/{work_order_id}/materials", response_model=list[MaterialRequestOutput])
 async def list_material_requests_for_work_order(
     work_order_id: int,
-    _: User = CURRENT_USER_DEP,
+    user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
     await _work_order_or_404(db, work_order_id)
@@ -888,7 +1053,11 @@ async def list_material_requests_for_work_order(
         .where(MaterialRequest.work_order_id == work_order_id)
         .order_by(MaterialRequest.created_at.desc())
     )).all())
-    return await output_rows(db, rows)
+    return await output_rows(
+        db,
+        rows,
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
 
 
 @router.post(
@@ -930,4 +1099,8 @@ async def create_material_request_for_work_order(
     ))
     await db.commit()
     await db.refresh(request)
-    return (await output_rows(db, [request]))[0]
+    return (await output_rows(
+        db,
+        [request],
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    ))[0]

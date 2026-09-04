@@ -224,7 +224,7 @@ class QuoteItemOutput(BaseModel):
     position: int | None = None
     description: str
     quantity: Decimal
-    unit_value: Decimal
+    unit_value: Decimal | None
 
 
 class QuoteInput(BaseModel):
@@ -233,7 +233,9 @@ class QuoteInput(BaseModel):
     services_description: str | None = None
     delivery_days: int = 20
     billing_days: int = 21
+    billing_terms: str | None = Field(default=None, max_length=200)
     warranty_months: int = 3
+    warranty_terms: str | None = Field(default=None, max_length=200)
     payment_terms: str
     validity_days: int = 0
     return_condition: str
@@ -257,7 +259,9 @@ class QuoteOutput(BaseModel):
     services_description: str | None
     delivery_days: int
     billing_days: int
+    billing_terms: str | None
     warranty_months: int
+    warranty_terms: str | None
     payment_terms: str
     validity_days: int
     return_condition: str
@@ -265,9 +269,9 @@ class QuoteOutput(BaseModel):
     supply_clause: str
     estimate_clause: str
     discount_type: str
-    discount_value: Decimal
-    subtotal: Decimal
-    total: Decimal
+    discount_value: Decimal | None
+    subtotal: Decimal | None
+    total: Decimal | None
     emitted_at: datetime | None
     created_at: datetime
     updated_at: datetime

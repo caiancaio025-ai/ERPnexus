@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, FileText, Image, Trash2, UploadCloud } from "lucide-react";
+import { Camera, ExternalLink, FileText, Image, Trash2, UploadCloud } from "lucide-react";
 
 import { apiClient } from "../../../shared/api/apiClient";
+import { CameraCapture } from "./CameraCapture";
 import "./equipmentDocuments.css";
 
 type LaboratoryDocument = {
   id: number;
   work_order_id: number;
-  item_id: number | null;
   category: "entrada" | "analise" | "reparo" | "testes" | "saida" | "general";
   original_name: string;
   mime_type: string;
   size_bytes: number;
-  uploaded_by: number;
   created_at: string;
 };
 
@@ -20,6 +19,7 @@ export function EquipmentDocumentsPanel({ workOrderId }: { workOrderId: number }
   const [documents, setDocuments] = useState<LaboratoryDocument[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
 
   async function load() {
     setError("");
@@ -32,7 +32,7 @@ export function EquipmentDocumentsPanel({ workOrderId }: { workOrderId: number }
 
   useEffect(() => { void load(); }, [workOrderId]);
 
-  async function upload(files: FileList | null) {
+  async function upload(files: FileList | File[] | null) {
     if (!files?.length) return;
     setBusy(true); setError("");
     try {
@@ -70,16 +70,27 @@ export function EquipmentDocumentsPanel({ workOrderId }: { workOrderId: number }
         <h3><Image size={20} /> Fotos do equipamento</h3>
         <p>Fotos e documentos vinculados somente a esta O.S.</p>
       </div>
-      <label className={`equipment-documents__upload ${busy ? "disabled" : ""}`}>
-        <UploadCloud size={17} />
-        <span>{busy ? "Enviando..." : "Adicionar fotos"}</span>
-        <input disabled={busy} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={(event) => { void upload(event.target.files); event.currentTarget.value = ""; }} />
-      </label>
+      <div className="equipment-documents__actions">
+        <label className={`equipment-documents__upload ${busy ? "disabled" : ""}`}>
+          <UploadCloud size={17} />
+          <span>{busy ? "Enviando..." : "Adicionar arquivo"}</span>
+          <input disabled={busy} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={(event) => { void upload(event.target.files); event.currentTarget.value = ""; }} />
+        </label>
+        <button type="button" className={`equipment-documents__upload ${busy ? "disabled" : ""}`} disabled={busy} onClick={() => setShowCamera(true)}>
+          <Camera size={17} />
+          <span>Tirar foto</span>
+        </button>
+      </div>
     </header>
 
     {error && <div className="equipment-documents__error">{error}</div>}
     {!documents.length && <div className="equipment-documents__empty">Nenhuma foto ou documento anexado nesta O.S.</div>}
+
+    {showCamera && <CameraCapture title="Foto do equipamento" onClose={() => setShowCamera(false)} onCapture={(file) => {
+      setShowCamera(false);
+      void upload([file]);
+    }} />}
 
     {!!documents.length && <div className="equipment-documents__grid">
       {documents.map((document) => {
