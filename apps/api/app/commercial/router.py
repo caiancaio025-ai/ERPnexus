@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.access import user_can_view_sensitive_values
+from app.auth.access import user_can_create_quote, user_can_view_sensitive_values
 from app.auth.dependencies import require_general_admin, require_module
 from app.auth.models import User
 from app.auth.router import current_user
@@ -34,9 +34,21 @@ def _money_allowed(user: User) -> bool:
     return user_can_view_sensitive_values(user.role)
 
 
+def _quote_allowed(user: User) -> bool:
+    return user_can_create_quote(user.role, user.modules)
+
+
 def _require_money(user: User) -> None:
     if not _money_allowed(user):
         raise HTTPException(status_code=403, detail="Somente Gestão pode visualizar ou alterar valores monetários.")
+
+
+def _require_quote(user: User) -> None:
+    if not _quote_allowed(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Seu perfil não possui permissão para criar, alterar ou emitir orçamentos.",
+        )
 
 
 async def _equipment_or_404(db: AsyncSession, equipment_id: int) -> CommercialEquipment:
@@ -56,7 +68,7 @@ async def _quote_or_404(db: AsyncSession, quote_id: int) -> CommercialQuote:
 async def _quote_output(db: AsyncSession, quote: CommercialQuote, user: User) -> CommercialQuoteOutput:
     customer = await db.get(LaboratoryCustomer, quote.customer_id)
     items = list((await db.scalars(select(CommercialQuoteItem).where(CommercialQuoteItem.quote_id == quote.id).order_by(CommercialQuoteItem.sort_order, CommercialQuoteItem.id))).all())
-    show_values = _money_allowed(user)
+    show_values = _quote_allowed(user)
     return CommercialQuoteOutput(
         id=quote.id, quote_number=quote.quote_number or f"COM-{quote.id:06d}", quote_type=quote.quote_type,
         company_code=quote.company_code, customer_id=quote.customer_id, customer_name=customer.legal_name if customer else "Cliente removido",
@@ -168,7 +180,7 @@ async def list_quotes(user:CurrentUser,db:DbSession,quote_type:str|None=Query(de
     for item in item_rows:
         items_by_quote.setdefault(item.quote_id, []).append(item)
 
-    show_values=_money_allowed(user)
+    show_values=_quote_allowed(user)
     result=[]
     for quote in rows:
         customer=customer_map.get(quote.customer_id)
@@ -185,7 +197,7 @@ async def list_quotes(user:CurrentUser,db:DbSession,quote_type:str|None=Query(de
 
 @router.post("/quotes", response_model=CommercialQuoteOutput, status_code=201)
 async def create_quote(payload:CommercialQuoteInput,user:CurrentUser,db:DbSession):
-    _require_money(user)
+    _require_quote(user)
     customer=await db.get(LaboratoryCustomer,payload.customer_id)
     if not customer or not customer.is_active: raise HTTPException(404,"Cliente não encontrado.")
     data=payload.model_dump(exclude={"items"}); quote=CommercialQuote(**data,created_by=user.id,status="draft",revision=0,total=0); db.add(quote); await db.flush(); quote.quote_number=f"COM-{quote.id:06d}"; await _replace_items(db,quote,payload); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
@@ -193,7 +205,7 @@ async def create_quote(payload:CommercialQuoteInput,user:CurrentUser,db:DbSessio
 
 @router.put("/quotes/{quote_id}", response_model=CommercialQuoteOutput)
 async def update_quote(quote_id:int,payload:CommercialQuoteInput,user:CurrentUser,db:DbSession):
-    _require_money(user); quote=await _quote_or_404(db,quote_id)
+    _require_quote(user); quote=await _quote_or_404(db,quote_id)
     if quote.status!="draft": raise HTTPException(409,"Somente rascunhos podem ser editados. Crie uma revisão formal para alterar um orçamento emitido.")
     for k,v in payload.model_dump(exclude={"items"}).items(): setattr(quote,k,v)
     await _replace_items(db,quote,payload); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
@@ -201,7 +213,7 @@ async def update_quote(quote_id:int,payload:CommercialQuoteInput,user:CurrentUse
 
 @router.post("/quotes/{quote_id}/issue", response_model=CommercialQuoteOutput)
 async def issue_quote(quote_id:int,user:CurrentUser,db:DbSession):
-    _require_money(user); quote=await _quote_or_404(db,quote_id)
+    _require_quote(user); quote=await _quote_or_404(db,quote_id)
     if quote.status!="draft": raise HTTPException(409,"Apenas rascunhos podem ser emitidos.")
     from datetime import datetime, timezone
     quote.status="issued"; quote.revision=max(1,quote.revision or 0); quote.issued_at=datetime.now(timezone.utc); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
@@ -209,7 +221,7 @@ async def issue_quote(quote_id:int,user:CurrentUser,db:DbSession):
 
 @router.post("/quotes/{quote_id}/revision", response_model=CommercialQuoteOutput, status_code=201)
 async def revise_quote(quote_id:int,user:CurrentUser,db:DbSession):
-    _require_money(user); source=await _quote_or_404(db,quote_id)
+    _require_quote(user); source=await _quote_or_404(db,quote_id)
     if source.status=="draft": raise HTTPException(409,"Já existe um rascunho editável; não é necessário criar revisão.")
     source_items=list((await db.scalars(select(CommercialQuoteItem).where(CommercialQuoteItem.quote_id==source.id).order_by(CommercialQuoteItem.sort_order))).all())
     data={c.name:getattr(source,c.name) for c in CommercialQuote.__table__.columns if c.name not in {"id","quote_number","revision","status","issued_at","created_at","updated_at","created_by"}}
@@ -235,7 +247,7 @@ async def set_quote_status(quote_id:int,payload:QuoteStatusInput,user:CurrentUse
 async def quote_pdf(quote_id:int,user:CurrentUser,db:DbSession):
     quote=await _quote_or_404(db,quote_id); customer=await db.get(LaboratoryCustomer,quote.customer_id); company=await db.scalar(select(CommercialCompanyProfile).where(CommercialCompanyProfile.company_code==quote.company_code,CommercialCompanyProfile.is_active.is_(True)))
     items=list((await db.scalars(select(CommercialQuoteItem).where(CommercialQuoteItem.quote_id==quote.id).order_by(CommercialQuoteItem.sort_order))).all())
-    pdf=await asyncio.to_thread(commercial_quote_pdf,quote=quote,company=company,customer=customer,items=items,show_values=_money_allowed(user))
+    pdf=await asyncio.to_thread(commercial_quote_pdf,quote=quote,company=company,customer=customer,items=items,show_values=_quote_allowed(user))
     return Response(content=pdf,media_type="application/pdf",headers={"Content-Disposition":f'inline; filename="{quote.quote_number}.pdf"'})
 
 

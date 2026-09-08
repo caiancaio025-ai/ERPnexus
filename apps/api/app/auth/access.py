@@ -48,6 +48,7 @@ COLLABORATOR_MANAGER_ROLES = {"super_admin", "gestao"}
 # Valores monetarios e o modulo Financeiro sao exclusivos da Gestao.
 # super_admin permanece apenas como compatibilidade do bootstrap legado.
 SENSITIVE_VALUE_ROLES = {"super_admin", "gestao"}
+QUOTE_MANAGER_ROLES = {"super_admin", "admin", "gestao"}
 
 LAB_MODULES = (
     MODULE_DASHBOARD,
@@ -139,4 +140,4 @@ def user_can_create_quote(role: str, modules: Iterable[str] | None) -> bool:
     não amplia a permissão monetária.
     """
     del modules
-    return user_can_view_sensitive_values(role)
+    return role.strip().lower() in QUOTE_MANAGER_ROLES

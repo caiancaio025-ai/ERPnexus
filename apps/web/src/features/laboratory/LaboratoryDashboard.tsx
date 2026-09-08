@@ -141,6 +141,7 @@ function toDetail(order: WorkOrder): DetailState {
 export function LaboratoryDashboard({ user, onLogout }: Props) {
   const navigate = useNavigate();
   const canViewValues = ["gestao", "super_admin"].includes(user.role);
+  const canManageQuote = ["admin", "gestao", "super_admin"].includes(user.role);
   const canManageTechnicians = ["super_admin", "admin", "gestao"].includes(user.role);
   const [summary, setSummary] = useState<WorkOrderSummary | null>(null);
   const [pageData, setPageData] = useState<WorkOrderPage>({ items: [], page: 1, page_size: 25, total: 0, pages: 0 });
@@ -376,7 +377,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       </section>
 
       {showForm && <OrderForm form={form} setForm={setForm} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canViewValues} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
       {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} canManageTechnicians={canManageTechnicians} />}
     </main>
   );

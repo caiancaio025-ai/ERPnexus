@@ -755,7 +755,7 @@ async def list_quotes(
         .order_by(LaboratoryQuote.revision.desc())
     )
     rows = list((await db.scalars(query)).all())
-    include_values = user_can_view_sensitive_values(user.role)
+    include_values = user_can_create_quote(user.role, user.modules)
     return [_to_quote_output(item, include_sensitive_values=include_values) for item in rows]
 
 
