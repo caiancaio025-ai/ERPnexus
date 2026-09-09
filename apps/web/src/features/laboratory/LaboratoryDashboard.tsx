@@ -142,6 +142,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const navigate = useNavigate();
   const canViewValues = ["gestao", "super_admin"].includes(user.role);
   const canManageQuote = ["admin", "gestao", "super_admin"].includes(user.role);
+  const canManageStatus = ["admin", "gestao", "super_admin"].includes(user.role);
   const canManageTechnicians = ["super_admin", "admin", "gestao"].includes(user.role);
   const [summary, setSummary] = useState<WorkOrderSummary | null>(null);
   const [pageData, setPageData] = useState<WorkOrderPage>({ items: [], page: 1, page_size: 25, total: 0, pages: 0 });
@@ -377,7 +378,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       </section>
 
       {showForm && <OrderForm form={form} setForm={setForm} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canManageQuote} canManageStatus={canManageStatus} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
       {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} canManageTechnicians={canManageTechnicians} />}
     </main>
   );
@@ -438,11 +439,15 @@ function OrderForm({ form, setForm, customers, technicians, loading, onSubmit, o
   </>;
 }
 
-function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, canViewValues, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; canViewValues: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
+function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, canManageStatus, canViewValues, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; canManageStatus: boolean; canViewValues: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const validOperationalStatuses = new Set(operationalTransitions[detail.status] ?? []);
-  const visibleBusinessStatuses = businessStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
-  const visibleOperationalStatuses = operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
+  const visibleBusinessStatuses = canManageStatus
+    ? businessStatusOptions
+    : businessStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
+  const visibleOperationalStatuses = canManageStatus
+    ? operationalStatusOptions
+    : operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
 
   useEffect(() => {
     setTargetStatus("");

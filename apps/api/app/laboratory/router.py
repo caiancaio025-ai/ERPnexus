@@ -88,6 +88,10 @@ REQUIRED_FILE = File(...)
 # ---------------------------------------------------------------- helpers --
 
 
+def _can_override_work_order_status(user: User) -> bool:
+    return user.role.strip().lower() in {"super_admin", "admin", "gestao"}
+
+
 async def _work_order_or_404(db: AsyncSession, work_order_id: int) -> LaboratoryWorkOrder:
     work_order = await db.get(LaboratoryWorkOrder, work_order_id)
     if not work_order:
@@ -205,7 +209,7 @@ async def _sync_finance_on_status_change(
     Aprovação comercial NÃO cria receita. Receita/faturamento nasce no Financeiro,
     após o checklist de conformidade do cliente, e então sincroniza a OS como Faturado.
     """
-    if new_status == "delivered":
+    if new_status == "delivered" and work_order.delivered_at is None:
         work_order.delivered_at = datetime.now(UTC)
 
     if new_status == "invoiced" and work_order.invoiced_at is None:
@@ -639,7 +643,10 @@ async def change_status(
             status_code=409,
             detail="Esta OS foi alterada por outra pessoa. Recarregue antes de aplicar o status.",
         )
-    if not can_transition_status(work_order.status, payload.status):
+    if (
+        not _can_override_work_order_status(user)
+        and not can_transition_status(work_order.status, payload.status)
+    ):
         raise HTTPException(
             status_code=409,
             detail=f"Transição de {work_order.status} para {payload.status} não permitida.",
@@ -649,10 +656,9 @@ async def change_status(
     if previous != payload.status:
         work_order.status = payload.status
         work_order.version += 1
-        if payload.status in ("completed",):
+        if payload.status == "completed" and work_order.completed_at is None:
             work_order.completed_at = datetime.now(UTC)
-        if payload.status == "cancelled":
-            work_order.is_cancelled = True
+        work_order.is_cancelled = payload.status == "cancelled"
         db.add(
             LaboratoryStatusHistory(
                 work_order_id=work_order.id,
