@@ -1,12 +1,20 @@
+# cspell:ignore substatuses
+
 import asyncio
+from collections.abc import Callable
 from datetime import date
 from types import SimpleNamespace
+from typing import cast
 
+from fastapi.responses import HTMLResponse
+from pytest import MonkeyPatch
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 import app.tracking.router as tracking_router
 from app.tracking.rate_limit import TrackingRateLimitState
-from app.tracking.router import _page, public_work_order_tracking
+
+PageFactory = Callable[[str, str], HTMLResponse]
 
 
 def _request() -> Request:
@@ -24,6 +32,17 @@ def _request() -> Request:
     )
 
 
+def _response_text(response: HTMLResponse) -> str:
+    body: object = response.body
+    if isinstance(body, str):
+        return body
+    if isinstance(body, memoryview):
+        return body.tobytes().decode("utf-8")
+    if isinstance(body, (bytes, bytearray)):
+        return bytes(body).decode("utf-8")
+    raise TypeError(f"Unsupported response body type: {type(body)!r}")
+
+
 async def _allow_tracking(_db: object, _request: Request) -> TrackingRateLimitState:
     return TrackingRateLimitState(blocked=False)
 
@@ -36,25 +55,48 @@ class FakeDb:
         return next(self.results)
 
 
+def _db(*results: object) -> AsyncSession:
+    return cast(AsyncSession, FakeDb(*results))
+
+
 def test_tracking_page_escapes_untrusted_content() -> None:
-    response = _page("OS <script>", '<section class="card">ok</section>')
-    body = response.body.decode("utf-8")
+    page = cast(PageFactory, getattr(tracking_router, "_page"))
+    response = page("OS <script>", '<section class="card">ok</section>')
+    body = _response_text(response)
 
     assert "OS &lt;script&gt; · NEXUS" in body
     assert "<title>OS <script>" not in body
     assert response.headers["cache-control"] == "no-store"
 
 
-def test_tracking_route_rejects_invalid_token_without_database_lookup(monkeypatch) -> None:
-    monkeypatch.setattr(tracking_router, "tracking_rate_limit_state", _allow_tracking)
-    response = asyncio.run(public_work_order_tracking("short", _request(), FakeDb()))
+def test_tracking_route_rejects_invalid_token_without_database_lookup(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        tracking_router,
+        "tracking_rate_limit_state",
+        _allow_tracking,
+    )
+
+    response = asyncio.run(
+        tracking_router.public_work_order_tracking(
+            "short",
+            _request(),
+            _db(),
+        )
+    )
 
     assert response.status_code == 404
-    assert "Consulta não encontrada" in response.body.decode("utf-8")
+    assert "Consulta não encontrada" in _response_text(response)
 
 
-def test_tracking_route_renders_public_work_order_data(monkeypatch) -> None:
-    monkeypatch.setattr(tracking_router, "tracking_rate_limit_state", _allow_tracking)
+def test_tracking_route_renders_public_work_order_data(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        tracking_router,
+        "tracking_rate_limit_state",
+        _allow_tracking,
+    )
+
     work_order = SimpleNamespace(
         id=7,
         number="OS-0007",
@@ -68,31 +110,59 @@ def test_tracking_route_renders_public_work_order_data(monkeypatch) -> None:
             model="CFW11",
         ),
         technician=SimpleNamespace(name="Técnico Reserva"),
+        substatuses=[
+            SimpleNamespace(
+                code="quote_sent",
+                is_active=True,
+            ),
+        ],
     )
-    db = FakeDb(work_order, "Técnico Atual")
 
     response = asyncio.run(
-        public_work_order_tracking("0123456789abcdef0123456789abcdef", _request(), db)
+        tracking_router.public_work_order_tracking(
+            "0123456789abcdef0123456789abcdef",
+            _request(),
+            _db(work_order, "Técnico Atual"),
+        )
     )
-    body = response.body.decode("utf-8")
+
+    body = _response_text(response)
 
     assert response.status_code == 200
     assert "OS-0007" in body
     assert "Cliente Exemplo" not in body
     assert "Em reparo" in body
+    assert "Orçamento enviado" in body
     assert "13/08/2026" in body
     assert "SN-123" not in body
     assert "Técnico Atual" not in body
     assert "Cache-Control" not in body
 
 
-def test_tracking_route_returns_429_when_ip_is_limited(monkeypatch) -> None:
-    async def blocked(_db: object, _request: Request) -> TrackingRateLimitState:
-        return TrackingRateLimitState(blocked=True, retry_after=17)
+def test_tracking_route_returns_429_when_ip_is_limited(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def blocked(
+        _db: object,
+        _request: Request,
+    ) -> TrackingRateLimitState:
+        return TrackingRateLimitState(
+            blocked=True,
+            retry_after=17,
+        )
 
-    monkeypatch.setattr(tracking_router, "tracking_rate_limit_state", blocked)
+    monkeypatch.setattr(
+        tracking_router,
+        "tracking_rate_limit_state",
+        blocked,
+    )
+
     response = asyncio.run(
-        public_work_order_tracking("0123456789abcdef0123456789abcdef", _request(), FakeDb())
+        tracking_router.public_work_order_tracking(
+            "0123456789abcdef0123456789abcdef",
+            _request(),
+            _db(),
+        )
     )
 
     assert response.status_code == 429

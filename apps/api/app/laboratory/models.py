@@ -70,6 +70,26 @@ class LaboratoryTechnician(Base):
     )
 
 
+class LaboratoryWorkflowOption(Base):
+    __tablename__ = "laboratory_workflow_options"
+    __table_args__ = (
+        UniqueConstraint("kind", "code", name="uq_lab_workflow_option_kind_code"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    code: Mapped[str] = mapped_column(String(40), index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class LaboratoryEquipment(Base):
     __tablename__ = "laboratory_equipment"
     __table_args__ = (
@@ -151,6 +171,9 @@ class LaboratoryWorkOrder(Base):
     documents: Mapped[list["LaboratoryDocument"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
     )
+    substatuses: Mapped[list["LaboratoryWorkOrderSubstatus"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class LaboratoryStatusHistory(Base):
@@ -178,6 +201,25 @@ class LaboratoryAuditEvent(Base):
     description: Mapped[str] = mapped_column(String(500))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LaboratoryWorkOrderSubstatus(Base):
+    __tablename__ = "laboratory_work_order_substatuses"
+    __table_args__ = (
+        UniqueConstraint("work_order_id", "code", name="uq_lab_work_order_substatus_code"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_order_id: Mapped[int] = mapped_column(
+        ForeignKey("laboratory_work_orders.id", ondelete="CASCADE"), index=True
+    )
+    code: Mapped[str] = mapped_column(String(40), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class LaboratoryQuote(Base):

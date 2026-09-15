@@ -43,7 +43,7 @@ def test_frontend_management_roles_can_see_all_statuses() -> None:
 
     assert 'const canManageStatus = ["admin", "gestao", "super_admin"].includes(user.role);' in source
     assert "const visibleBusinessStatuses = canManageStatus" in source
-    assert "? businessStatusOptions" in source
+    assert "? primaryStatuses" in source
     assert "const visibleOperationalStatuses = canManageStatus" in source
     assert "? operationalStatusOptions" in source
     assert "canManageStatus={canManageStatus}" in source
@@ -53,7 +53,7 @@ def test_frontend_lab_still_uses_transition_matrix() -> None:
     source = LAB_FRONTEND.read_text(encoding="utf-8")
 
     assert "const validOperationalStatuses = new Set(operationalTransitions[detail.status] ?? []);" in source
-    assert ": businessStatusOptions.filter((item) => validOperationalStatuses.has(item.value));" in source
+    assert ": primaryStatuses.filter((item) => validOperationalStatuses.has(item.value));" in source
     assert ": operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));" in source
 
 

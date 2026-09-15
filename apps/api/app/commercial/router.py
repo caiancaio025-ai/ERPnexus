@@ -16,6 +16,7 @@ from app.commercial.quote_pdf import commercial_quote_pdf
 from app.commercial.schemas import CompanyProfileInput, CompanyProfileOutput, CommercialEquipmentInput, CommercialEquipmentOutput, CommercialQuoteInput, CommercialQuoteOutput, PreventiveOrderInput, PreventiveOrderOutput, PreventiveOrderUpdate, QuoteItemOutput, QuoteStatusInput
 from app.core.db import get_db
 from app.laboratory.models import LaboratoryCustomer
+from app.notifications.service import notify_modules
 
 router = APIRouter(prefix="/commercial", dependencies=[Depends(require_module("comercial"))])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -240,7 +241,33 @@ async def set_quote_status(quote_id:int,payload:QuoteStatusInput,user:CurrentUse
     if payload.status not in allowed:
         raise HTTPException(409, f"Transição de status inválida: {quote.status} → {payload.status}.")
     if payload.status in {"approved","rejected","cancelled"}: _require_money(user)
-    quote.status=payload.status; await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
+    previous_status = quote.status
+    quote.status = payload.status
+    if previous_status != "approved" and payload.status == "approved" and quote.quote_type == "sale":
+        customer = await db.get(LaboratoryCustomer, quote.customer_id)
+        items = list((await db.scalars(
+            select(CommercialQuoteItem)
+            .where(CommercialQuoteItem.quote_id == quote.id)
+            .order_by(CommercialQuoteItem.sort_order, CommercialQuoteItem.id)
+        )).all())
+        item_names = ", ".join(item.description for item in items[:3])
+        if len(items) > 3:
+            item_names += f" e mais {len(items) - 3} item(ns)"
+        await notify_modules(
+            db,
+            modules={"compras"},
+            category="commercial_sale_approved",
+            severity="warning",
+            title=f"Venda aprovada · {quote.quote_number}",
+            message=f"{customer.legal_name if customer else 'Cliente'} aprovou a venda. Itens: {item_names or 'não informados'}.",
+            target=f"/comercial?tab=orcamento&quote={quote.id}",
+            entity_type="commercial_quote",
+            entity_id=quote.id,
+            amount=quote.total,
+        )
+    await db.commit()
+    await db.refresh(quote)
+    return await _quote_output(db,quote,user)
 
 
 @router.get("/quotes/{quote_id}/pdf")

@@ -15,13 +15,13 @@ import { EquipmentDocumentsPanel } from "./components/EquipmentDocumentsPanel";
 import { CameraCapture } from "./components/CameraCapture";
 import type {
   CompanyCode, Customer, Priority, StatusHistory, Technician, WorkOrder,
-  WorkOrderPage, WorkOrderStatus, WorkOrderSummary,
+  WorkflowOption, WorkOrderPage, WorkOrderStatus, WorkOrderSummary,
 } from "./types";
 import "./laboratory.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
 type View = "orders" | "invoiced" | "no_repair" | "warranty";
-type SettingsTab = "customers" | "technicians";
+type SettingsTab = "customers" | "technicians" | "workflow";
 type DetailTab = "general" | "technical" | "financial" | "materials" | "status" | "documents" | "history" | "quote";
 
 type FormState = {
@@ -32,7 +32,7 @@ type FormState = {
   quoted_value: string; approved_value: string; internal_notes: string; customer_notes: string;
 };
 
-type DetailState = FormState & { id: number; number: string; status: WorkOrderStatus; version: number };
+type DetailState = FormState & { id: number; number: string; status: WorkOrderStatus; substatuses: string[]; version: number };
 type LaboratoryPeriods = { latest_month: number; latest_year: number; years: number[] };
 
 const companyLabels: Record<CompanyCode, string> = {
@@ -45,11 +45,11 @@ const monthLabels = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
-const statusLabels: Record<WorkOrderStatus, string> = {
+const statusLabels: Record<string, string> = {
   received: "Entrada",
   awaiting_analysis: "Aguardando análise",
-  in_analysis: "Analisado",
-  awaiting_quote: "Analisado • preparando orçamento",
+  in_analysis: "Em análise",
+  awaiting_quote: "Em análise • preparando orçamento",
   quote_sent: "Ag. Aprovação",
   awaiting_approval: "Ag. Aprovação",
   approved: "Aprovado",
@@ -57,9 +57,9 @@ const statusLabels: Record<WorkOrderStatus, string> = {
   awaiting_parts: "Aprovado • ag. peças",
   in_repair: "Aprovado • em reparo",
   in_testing: "Aprovado • em testes",
-  completed: "Pronto",
+  completed: "Liberado",
   awaiting_pickup: "Liberado",
-  delivered: "Liberado • entregue",
+  delivered: "Liberado",
   warranty: "Garantia",
   invoiced: "Faturado",
   cancelled: "Cancelado",
@@ -71,11 +71,10 @@ const statusLabels: Record<WorkOrderStatus, string> = {
 // trabalhando com os mesmos marcos que já conhece no NEXUS.
 const businessStatusOptions: Array<{ value: WorkOrderStatus; label: string }> = [
   { value: "received", label: "Entrada" },
+  { value: "in_analysis", label: "Em análise" },
   { value: "awaiting_approval", label: "Ag. Aprovação" },
-  { value: "in_analysis", label: "Analisado" },
   { value: "approved", label: "Aprovado" },
   { value: "no_repair", label: "Sem conserto" },
-  { value: "completed", label: "Pronto" },
   { value: "awaiting_pickup", label: "Liberado" },
   { value: "warranty", label: "Garantia" },
   { value: "invoiced", label: "Faturado" },
@@ -84,11 +83,9 @@ const businessStatusOptions: Array<{ value: WorkOrderStatus; label: string }> = 
 const operationalStatusOptions: Array<{ value: WorkOrderStatus; label: string }> = [
   { value: "awaiting_analysis", label: "Aguardando análise" },
   { value: "awaiting_quote", label: "Preparando orçamento" },
-  { value: "quote_sent", label: "Orçamento enviado" },
   { value: "awaiting_parts", label: "Aguardando peças" },
   { value: "in_repair", label: "Em reparo" },
   { value: "in_testing", label: "Em testes" },
-  { value: "delivered", label: "Entregue" },
   { value: "rejected", label: "Reprovado" },
   { value: "cancelled", label: "Cancelado" },
 ];
@@ -114,6 +111,21 @@ const operationalTransitions: Partial<Record<WorkOrderStatus, WorkOrderStatus[]>
   no_repair: ["awaiting_pickup", "delivered", "invoiced", "warranty", "in_analysis"],
 };
 
+function statusLabel(status: WorkOrderStatus, workflowOptions: WorkflowOption[] = []) {
+  return workflowOptions.find((item) => item.kind === "status" && item.code === status)?.label
+    ?? statusLabels[status]
+    ?? status;
+}
+
+function substatusLabel(code: string, workflowOptions: WorkflowOption[] = []) {
+  return workflowOptions.find((item) => item.kind === "substatus" && item.code === code)?.label ?? code;
+}
+
+function detailTabFromQuery(value: string | null): DetailTab {
+  const allowed: DetailTab[] = ["general", "technical", "financial", "materials", "status", "documents", "history", "quote"];
+  return allowed.includes(value as DetailTab) ? value as DetailTab : "general";
+}
+
 const emptyForm = (): FormState => ({
   company_code: "universo_eletronica", customer_id: "", customer_name: "", serial_number: "",
   manufacturer: "", model: "", equipment_type: "", power: "", voltage: "", entry_invoice: "",
@@ -124,7 +136,7 @@ const emptyForm = (): FormState => ({
 
 function toDetail(order: WorkOrder): DetailState {
   return {
-    id: order.id, number: order.number, status: order.status, version: order.version,
+    id: order.id, number: order.number, status: order.status, substatuses: order.substatuses ?? [], version: order.version,
     company_code: order.company_code, customer_id: String(order.customer_id ?? ""),
     customer_name: order.customer_name, serial_number: order.equipment_serial ?? "",
     manufacturer: order.manufacturer ?? "", model: order.model ?? "",
@@ -148,6 +160,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [pageData, setPageData] = useState<WorkOrderPage>({ items: [], page: 1, page_size: 25, total: 0, pages: 0 });
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [workflowOptions, setWorkflowOptions] = useState<WorkflowOption[]>([]);
   const [company, setCompany] = useState<CompanyCode | "all">("all");
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "all">("all");
   const now = new Date();
@@ -208,13 +221,14 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       const summaryParams = new URLSearchParams({ year: String(yearFilter) });
       if (monthFilter !== "all") summaryParams.set("month", String(monthFilter));
       if (company !== "all") summaryParams.set("company_code", company);
-      const [summaryData, orders, customerData, technicianData] = await Promise.all([
+      const [summaryData, orders, customerData, technicianData, workflowData] = await Promise.all([
         apiClient.get<WorkOrderSummary>(`/laboratory/summary?${summaryParams.toString()}`),
         apiClient.get<WorkOrderPage>(`/laboratory/work-orders?${query}`),
         apiClient.get<Customer[]>(`/laboratory/customers${companyQuery}`),
         apiClient.get<Technician[]>(`/laboratory/technicians${companyQuery}`),
+        apiClient.get<WorkflowOption[]>("/laboratory/workflow-options?include_inactive=true"),
       ]);
-      setSummary(summaryData); setPageData(orders); setCustomers(customerData); setTechnicians(technicianData);
+      setSummary(summaryData); setPageData(orders); setCustomers(customerData); setTechnicians(technicianData); setWorkflowOptions(workflowData);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao carregar o Laboratório."); }
     finally { setLoading(false); }
   }
@@ -229,7 +243,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     if (params.get("acao") === "nova-os") setShowForm(true);
     const workOrderId = Number(params.get("os"));
     const requestedTab = params.get("aba");
-    const initialTab: DetailTab = requestedTab === "quote" ? "quote" : "general";
+    const initialTab = detailTabFromQuery(requestedTab);
     if (Number.isInteger(workOrderId) && workOrderId > 0) void openOrder(workOrderId, initialTab);
   }, []);
 
@@ -292,15 +306,38 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     try {
       const currentStatus = detail.status;
       const updated = await apiClient.post<WorkOrder>(`/laboratory/work-orders/${detail.id}/status`, {
-        status: targetStatus, version: detail.version, note: `Status alterado de ${statusLabels[currentStatus]} para ${statusLabels[targetStatus]} pela tela de detalhes.`,
+        status: targetStatus, version: detail.version, note: `Status alterado de ${statusLabel(currentStatus, workflowOptions)} para ${statusLabel(targetStatus, workflowOptions)} pela tela de detalhes.`,
       });
       setDetail(toDetail(updated));
       setHistory(await apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${detail.id}/history`));
-      setMessage(`Status da ${updated.number} alterado para ${statusLabels[updated.status]}.`);
+      setMessage(`Status da ${updated.number} alterado para ${statusLabel(updated.status, workflowOptions)}.`);
       await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível alterar o status."); }
     finally { setLoading(false); }
   }
+
+  async function toggleSubstatus(code: string, active: boolean) {
+    if (!detail) return;
+    setLoading(true); setError(""); setMessage("");
+    try {
+      const updated = await apiClient.post<WorkOrder>(`/laboratory/work-orders/${detail.id}/substatuses/${code}`, {
+        active, version: detail.version,
+      });
+      setDetail(toDetail(updated));
+      const option = workflowOptions.find((item) => item.kind === "substatus" && item.code === code);
+      setMessage(`${option?.label ?? "Substatus"} ${active ? "marcado" : "desmarcado"} na ${updated.number}.`);
+      await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível alterar o substatus."); }
+    finally { setLoading(false); }
+  }
+
+  const primaryStatusOptions = useMemo(() => {
+    const configured = workflowOptions
+      .filter((item) => item.kind === "status" && item.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+      .map((item) => ({ value: item.code, label: item.label }));
+    return configured.length ? configured : businessStatusOptions;
+  }, [workflowOptions]);
 
   const filteredItems = pageData.items;
 
@@ -326,7 +363,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
 
         <section className="lab-priority-kpis" aria-label="Prioridades comerciais do laboratório">
           <button className={statusFilter === "in_analysis" ? "active" : ""} onClick={() => filterByPriorityStatus("in_analysis")}>
-            <span>ANALISADOS</span><strong>{summary?.analyzed ?? 0}</strong><small>Falta orçamento</small>
+            <span>EM ANÁLISE</span><strong>{summary?.analyzed ?? 0}</strong><small>Diagnóstico em andamento</small>
           </button>
           <button className={statusFilter === "awaiting_approval" ? "active" : ""} onClick={() => filterByPriorityStatus("awaiting_approval")}>
             <span>AG. APROVAÇÃO</span><strong>{summary?.awaiting_approval ?? 0}</strong><small>Orçamento enviado</small>
@@ -360,7 +397,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
           <select value={company} onChange={(e) => { setCompany(e.target.value as CompanyCode | "all"); setPage(1); }}><option value="all">Todas as empresas</option>{Object.entries(companyLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as WorkOrderStatus | "all"); setPage(1); }}>
             <option value="all">Todos os status</option>
-            <optgroup label="Status principais">{businessStatusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>
+            <optgroup label="Status principais">{primaryStatusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>
             <optgroup label="Etapas operacionais">{operationalStatusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>
           </select>
           <ActionButton variant="secondary" icon={<RefreshCw size={17} />} loading={loading} onClick={() => void load()}>Atualizar</ActionButton>
@@ -370,7 +407,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         <section className="lab-table-card">
           <table><thead><tr><th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>NF entrada</th><th>NF saída</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
             <tbody>{filteredItems.map((order) => <tr key={order.id} className={`lab-order-row priority-${order.priority}`} onClick={() => void openOrder(order.id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") void openOrder(order.id); }}>
-              <td><button className="lab-order-link">{order.number}</button></td><td>{order.customer_name}</td><td>{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td><td>{order.entry_invoice || "—"}</td><td>{order.exit_invoice || "—"}</td><td><span className={`lab-status ${order.status}`}>{statusLabels[order.status]}</span></td><td><span className={`lab-priority ${order.priority}`}>{priorityLabels[order.priority]}</span></td><td>{new Date(`${order.opened_at}T12:00:00`).toLocaleDateString("pt-BR")}</td>{canViewValues && <td>{currency(order.approved_value ?? order.quoted_value ?? "")}</td>}
+              <td><button className="lab-order-link">{order.number}</button></td><td>{order.customer_name}</td><td>{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td><td>{order.entry_invoice || "—"}</td><td>{order.exit_invoice || "—"}</td><td><div className="lab-status-stack"><span className={`lab-status ${order.status}`}>{statusLabel(order.status, workflowOptions)}</span>{(order.substatuses ?? []).map((code) => <span key={code} className="lab-substatus-mini">{substatusLabel(code, workflowOptions)}</span>)}</div></td><td><span className={`lab-priority ${order.priority}`}>{priorityLabels[order.priority]}</span></td><td>{new Date(`${order.opened_at}T12:00:00`).toLocaleDateString("pt-BR")}</td>{canViewValues && <td>{currency(order.approved_value ?? order.quoted_value ?? "")}</td>}
             </tr>)}</tbody></table>
           {!filteredItems.length && <div className="lab-empty">Nenhuma ordem encontrada.</div>}
           <footer className="lab-pagination"><strong>{pageData.total} registro(s)</strong><div><button disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><span>Página {page} de {pageData.pages || 1}</span><button disabled={page >= pageData.pages} onClick={() => setPage(page + 1)}>Próxima</button></div></footer>
@@ -378,8 +415,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       </section>
 
       {showForm && <OrderForm form={form} setForm={setForm} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} loading={loading} saved={saved} canManageQuote={canManageQuote} canManageStatus={canManageStatus} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onClose={() => setDetail(null)} />}
-      {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} canManageTechnicians={canManageTechnicians} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} setTab={setDetailTab} customers={customers} technicians={technicians} history={history} workflowOptions={workflowOptions} loading={loading} saved={saved} canManageQuote={canManageQuote} canManageStatus={canManageStatus} canViewValues={canViewValues} onSave={() => void saveDetail()} onStatus={(status) => void changeStatus(status)} onSubstatus={(code, active) => void toggleSubstatus(code, active)} onClose={() => setDetail(null)} />}
+      {showSettings && <SettingsModal company={company === "all" ? "universo_eletronica" : company} customers={customers} technicians={technicians} workflowOptions={workflowOptions} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={load} canManageTechnicians={canManageTechnicians} />}
     </main>
   );
 }
@@ -439,22 +476,30 @@ function OrderForm({ form, setForm, customers, technicians, loading, onSubmit, o
   </>;
 }
 
-function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, loading, saved, canManageQuote, canManageStatus, canViewValues, onSave, onStatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; loading: boolean; saved: boolean; canManageQuote: boolean; canManageStatus: boolean; canViewValues: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onClose: () => void }) {
+function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, history, workflowOptions, loading, saved, canManageQuote, canManageStatus, canViewValues, onSave, onStatus, onSubstatus, onClose }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; setTab: (value: DetailTab) => void; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; workflowOptions: WorkflowOption[]; loading: boolean; saved: boolean; canManageQuote: boolean; canManageStatus: boolean; canViewValues: boolean; onSave: () => void; onStatus: (status: WorkOrderStatus) => void; onSubstatus: (code: string, active: boolean) => void; onClose: () => void }) {
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const validOperationalStatuses = new Set(operationalTransitions[detail.status] ?? []);
+  const configuredBusinessStatuses = workflowOptions
+    .filter((item) => item.kind === "status" && item.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+    .map((item) => ({ value: item.code, label: item.label }));
+  const primaryStatuses = configuredBusinessStatuses.length ? configuredBusinessStatuses : businessStatusOptions;
   const visibleBusinessStatuses = canManageStatus
-    ? businessStatusOptions
-    : businessStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
+    ? primaryStatuses
+    : primaryStatuses.filter((item) => validOperationalStatuses.has(item.value));
   const visibleOperationalStatuses = canManageStatus
     ? operationalStatusOptions
     : operationalStatusOptions.filter((item) => validOperationalStatuses.has(item.value));
+  const substatusOptions = workflowOptions
+    .filter((item) => item.kind === "substatus" && item.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
 
   useEffect(() => {
     setTargetStatus("");
   }, [detail.id, detail.status]);
 
   return <div className="lab-modal lab-modal-top"><section className="lab-detail">
-    <header className="lab-detail-header"><div><p className="lab-eyebrow">DETALHE DA O.S.</p><h2>{detail.number}</h2><span>{detail.customer_name} · {detail.equipment_type || detail.model || "Equipamento"}</span><div className="lab-detail-badges"><span className={`lab-status ${detail.status}`}>{statusLabels[detail.status]}</span><span className={`lab-priority ${detail.priority}`}>{priorityLabels[detail.priority]}</span></div></div><div className="lab-detail-header-actions"><ActionButton variant="secondary" icon={<Printer size={17}/>} onClick={() => window.open(`/api/laboratory/work-orders/${detail.id}/label.pdf`, "_blank", "noopener,noreferrer")}>Emitir etiqueta</ActionButton><button className="lab-close-button" onClick={onClose}><X /></button></div></header>
+    <header className="lab-detail-header"><div><p className="lab-eyebrow">DETALHE DA O.S.</p><h2>{detail.number}</h2><span>{detail.customer_name} · {detail.equipment_type || detail.model || "Equipamento"}</span><div className="lab-detail-badges"><span className={`lab-status ${detail.status}`}>{statusLabel(detail.status, workflowOptions)}</span>{detail.substatuses.map((code) => <span key={code} className="lab-substatus-mini">{substatusLabel(code, workflowOptions)}</span>)}<span className={`lab-priority ${detail.priority}`}>{priorityLabels[detail.priority]}</span></div></div><div className="lab-detail-header-actions"><ActionButton variant="secondary" icon={<Printer size={17}/>} onClick={() => window.open(`/api/laboratory/work-orders/${detail.id}/label.pdf`, "_blank", "noopener,noreferrer")}>Emitir etiqueta</ActionButton><button className="lab-close-button" onClick={onClose}><X /></button></div></header>
     <nav className="lab-detail-tabs">
       <TabButton active={tab === "general"} icon={<Pencil size={16} />} onClick={() => setTab("general")}>Edição completa</TabButton>
       <TabButton active={tab === "technical"} icon={<Wrench size={16} />} onClick={() => setTab("technical")}>Dados técnicos</TabButton>
@@ -470,7 +515,7 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
       {tab === "technical" && <><SectionTitle title="Informações do equipamento" /><div className="lab-grid three"><Input label="Equipamento" value={detail.equipment_type} onChange={(value) => setDetail({ ...detail, equipment_type: value })} /><Input label="Fabricante" value={detail.manufacturer} onChange={(value) => setDetail({ ...detail, manufacturer: value })} /><Input label="Modelo" value={detail.model} onChange={(value) => setDetail({ ...detail, model: value })} /><Input label="Número de série" value={detail.serial_number} onChange={(value) => setDetail({ ...detail, serial_number: value })} /><Input label="Potência" value={detail.power} onChange={(value) => setDetail({ ...detail, power: value })} /><Input label="Tensão" value={detail.voltage} onChange={(value) => setDetail({ ...detail, voltage: value })} /></div><label>Observações internas<textarea rows={6} value={detail.internal_notes} onChange={(e) => setDetail({ ...detail, internal_notes: e.target.value })} /></label></>}
       {canViewValues && tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} />}
-      {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabels[detail.status]}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option>{visibleBusinessStatuses.length > 0 && <optgroup label="Status principais">{visibleBusinessStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}{visibleOperationalStatuses.length > 0 && <optgroup label="Próximas etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status principais restaurados conforme o fluxo histórico. Compras e materiais continuam sincronizados pelas etapas operacionais.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus); }}>Aplicar status</ActionButton></div></>}
+      {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabel(detail.status, workflowOptions)}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option>{visibleBusinessStatuses.length > 0 && <optgroup label="Status principais">{visibleBusinessStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}{visibleOperationalStatuses.length > 0 && <optgroup label="Próximas etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Os status principais são configuráveis. Etapas técnicas permanecem protegidas pela matriz operacional.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus); }}>Aplicar status</ActionButton></div>{substatusOptions.length > 0 && <div className="lab-substatus-box"><div><strong>Sinalizadores / substatus</strong><span>Marque informações complementares sem criar novos status principais.</span></div><div className="lab-substatus-grid">{substatusOptions.map((item) => { const checked = detail.substatuses.includes(item.code); return <label key={item.id} className={checked ? "active" : ""}><input type="checkbox" checked={checked} disabled={loading} onChange={(event) => onSubstatus(item.code, event.target.checked)} /><span>{item.label}</span></label>; })}</div></div>}</>}
       {tab === "documents" && <EquipmentDocumentsPanel workOrderId={detail.id} />}
       {tab === "quote" && <QuoteEditor
         workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
@@ -478,20 +523,34 @@ function OrderDetail({ detail, setDetail, tab, setTab, customers, technicians, h
         serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
         defect={detail.reported_defect} quotedValue={canViewValues ? detail.quoted_value : ""} readOnly={!canManageQuote}
       />}
-      {tab === "history" && <div className="lab-timeline">{history.map((item) => <article key={item.id}><span className="lab-timeline-dot" /><div><strong>{statusLabels[item.new_status as WorkOrderStatus] ?? item.new_status}</strong><p>{item.note || "Alteração de status."}</p><small>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div></article>)}{!history.length && <div className="lab-empty">Nenhum evento registrado.</div>}</div>}
+      {tab === "history" && <div className="lab-timeline">{history.map((item) => <article key={item.id}><span className="lab-timeline-dot" /><div><strong>{statusLabel(item.new_status, workflowOptions)}</strong><p>{item.note || "Alteração de status."}</p><small>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div></article>)}{!history.length && <div className="lab-empty">Nenhum evento registrado.</div>}</div>}
     </div>
     <footer className="lab-detail-footer"><ActionButton variant="secondary" icon={<X size={17} />} onClick={onClose}>Fechar</ActionButton><ActionButton loading={loading} success={saved} icon={<Save size={17} />} onClick={onSave}>{saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>
   </section></div>;
 }
 
-function SettingsModal({ company, customers, technicians, tab, setTab, onClose, onSaved, canManageTechnicians }: { company: CompanyCode; customers: Customer[]; technicians: Technician[]; tab: SettingsTab; setTab: (value: SettingsTab) => void; onClose: () => void; onSaved: () => Promise<void>; canManageTechnicians: boolean }) {
+function SettingsModal({ company, customers, technicians, workflowOptions, tab, setTab, onClose, onSaved, canManageTechnicians }: { company: CompanyCode; customers: Customer[]; technicians: Technician[]; workflowOptions: WorkflowOption[]; tab: SettingsTab; setTab: (value: SettingsTab) => void; onClose: () => void; onSaved: () => Promise<void>; canManageTechnicians: boolean }) {
   const [customerName, setCustomerName] = useState("");
   const [customerDocument, setCustomerDocument] = useState("");
   const [technicianName, setTechnicianName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [editingTechnicianId, setEditingTechnicianId] = useState<number | null>(null);
+  const [workflowRows, setWorkflowRows] = useState<WorkflowOption[]>(workflowOptions);
+  const [workflowKind, setWorkflowKind] = useState<"status" | "substatus">("status");
+  const [workflowLabel, setWorkflowLabel] = useState("");
+  const [workflowOrder, setWorkflowOrder] = useState("10");
+  const [editingWorkflowId, setEditingWorkflowId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+
+  async function loadWorkflowRows() {
+    const rows = await apiClient.get<WorkflowOption[]>("/laboratory/workflow-options?include_inactive=true");
+    setWorkflowRows(rows);
+  }
+
+  useEffect(() => {
+    if (tab === "workflow") void loadWorkflowRows();
+  }, [tab]);
 
   function clearTechnicianEditor() {
     setEditingTechnicianId(null);
@@ -505,6 +564,25 @@ function SettingsModal({ company, customers, technicians, tab, setTab, onClose, 
     setSpecialty(technician.specialty ?? "");
   }
 
+  function clearWorkflowEditor() {
+    setEditingWorkflowId(null);
+    setWorkflowKind("status");
+    setWorkflowLabel("");
+    setWorkflowOrder("10");
+  }
+
+  function editWorkflow(item: WorkflowOption) {
+    setEditingWorkflowId(item.id);
+    setWorkflowKind(item.kind);
+    setWorkflowLabel(item.label);
+    setWorkflowOrder(String(item.sort_order));
+  }
+
+  async function refreshAfterSettingsChange() {
+    await onSaved();
+    if (tab === "workflow") await loadWorkflowRows();
+  }
+
   async function saveCadastro() {
     setSaving(true);
     try {
@@ -516,6 +594,24 @@ function SettingsModal({ company, customers, technicians, tab, setTab, onClose, 
         });
         setCustomerName("");
         setCustomerDocument("");
+      } else if (tab === "workflow") {
+        if (!workflowLabel.trim()) return;
+        const sortOrder = Math.max(0, Number(workflowOrder) || 0);
+        if (editingWorkflowId) {
+          const current = workflowRows.find((item) => item.id === editingWorkflowId);
+          await apiClient.put(`/laboratory/workflow-options/${editingWorkflowId}`, {
+            label: workflowLabel.trim(),
+            sort_order: sortOrder,
+            is_active: current?.is_active ?? true,
+          });
+        } else {
+          await apiClient.post("/laboratory/workflow-options", {
+            kind: workflowKind,
+            label: workflowLabel.trim(),
+            sort_order: sortOrder,
+          });
+        }
+        clearWorkflowEditor();
       } else if (editingTechnicianId) {
         const current = technicians.find((item) => item.id === editingTechnicianId);
         await apiClient.put(`/laboratory/technicians/${editingTechnicianId}`, {
@@ -534,41 +630,70 @@ function SettingsModal({ company, customers, technicians, tab, setTab, onClose, 
         });
         clearTechnicianEditor();
       }
-      await onSaved();
+      await refreshAfterSettingsChange();
     } finally {
       setSaving(false);
     }
   }
 
-  async function deactivate(kind: SettingsTab, id: number) {
+  async function deactivate(kind: "customers" | "technicians", id: number) {
     setBusyId(id);
     try {
       await apiClient.delete(`/laboratory/${kind}/${id}`);
       if (editingTechnicianId === id) clearTechnicianEditor();
-      await onSaved();
+      await refreshAfterSettingsChange();
     } finally {
       setBusyId(null);
     }
   }
 
+  async function setWorkflowActive(item: WorkflowOption, isActive: boolean) {
+    setBusyId(item.id);
+    try {
+      await apiClient.put(`/laboratory/workflow-options/${item.id}`, {
+        label: item.label,
+        sort_order: item.sort_order,
+        is_active: isActive,
+      });
+      if (!isActive && editingWorkflowId === item.id) clearWorkflowEditor();
+      await refreshAfterSettingsChange();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const heading = tab === "customers"
+    ? ["Cadastro de clientes", "Razão social, documento e vínculos com as ordens de serviço."]
+    : tab === "technicians"
+      ? [editingTechnicianId ? "Editar técnico" : "Cadastro de técnicos", "Equipe técnica, especialidade e disponibilidade operacional."]
+      : [editingWorkflowId ? "Editar status / substatus" : "Workflow do laboratório", "Defina status principais e sinalizadores sem apagar o histórico existente."];
+
   return <div className="lab-modal"><section className="lab-settings professional">
-    <header><div><p>CONFIGURAÇÕES</p><h2>Central de cadastros</h2><span>Administre clientes e técnicos sem perder o histórico operacional.</span></div><button onClick={onClose}><X /></button></header>
+    <header><div><p>CONFIGURAÇÕES</p><h2>Central de cadastros</h2><span>Administre clientes, técnicos e o workflow do Laboratório preservando o histórico.</span></div><button onClick={onClose}><X /></button></header>
     <div className="lab-settings-layout">
       <nav>
         <TabButton active={tab === "customers"} icon={<Users size={17} />} onClick={() => setTab("customers")}>Clientes <small>{customers.length}</small></TabButton>
         <TabButton active={tab === "technicians"} icon={<UserRoundCog size={17} />} onClick={() => setTab("technicians")}>Técnicos <small>{technicians.length}</small></TabButton>
+        <TabButton active={tab === "workflow"} icon={<ClipboardList size={17} />} onClick={() => setTab("workflow")}>Status e substatus <small>{workflowRows.filter((item) => item.is_active).length}</small></TabButton>
       </nav>
       <div className="lab-settings-main">
         <div className="lab-settings-heading">
-          <div><h3>{tab === "customers" ? "Cadastro de clientes" : editingTechnicianId ? "Editar técnico" : "Cadastro de técnicos"}</h3><p>{tab === "customers" ? "Razão social, documento e vínculos com as ordens de serviço." : "Equipe técnica, especialidade e disponibilidade operacional."}</p></div>
+          <div><h3>{heading[0]}</h3><p>{heading[1]}</p></div>
           <div className="lab-settings-heading-actions">
             {tab === "technicians" && editingTechnicianId && canManageTechnicians && <ActionButton variant="secondary" icon={<X size={16} />} onClick={clearTechnicianEditor}>Cancelar edição</ActionButton>}
-            {(tab === "customers" || canManageTechnicians) && <ActionButton loading={saving} icon={editingTechnicianId ? <Save size={17} /> : <Plus size={17} />} onClick={() => void saveCadastro()}>{editingTechnicianId ? "Salvar técnico" : "Cadastrar"}</ActionButton>}
+            {tab === "workflow" && editingWorkflowId && canManageTechnicians && <ActionButton variant="secondary" icon={<X size={16} />} onClick={clearWorkflowEditor}>Cancelar edição</ActionButton>}
+            {(tab === "customers" || canManageTechnicians) && <ActionButton loading={saving} icon={(editingTechnicianId || editingWorkflowId) ? <Save size={17} /> : <Plus size={17} />} onClick={() => void saveCadastro()}>{(editingTechnicianId || editingWorkflowId) ? "Salvar" : "Cadastrar"}</ActionButton>}
           </div>
         </div>
-        {tab === "customers"
-          ? <div className="lab-settings-form"><Input label="Razão social / cliente" value={customerName} onChange={setCustomerName} /><Input label="CNPJ/CPF" value={customerDocument} onChange={setCustomerDocument} /></div>
-          : canManageTechnicians ? <div className="lab-settings-form"><Input label="Nome do técnico" value={technicianName} onChange={setTechnicianName} /><Input label="Especialidade" value={specialty} onChange={setSpecialty} /></div> : <div className="lab-alert">Técnicos podem ser consultados aqui. Cadastro, edição e inativação são restritos a ADM/Gestão.</div>}
+
+        {tab === "customers" && <div className="lab-settings-form"><Input label="Razão social / cliente" value={customerName} onChange={setCustomerName} /><Input label="CNPJ/CPF" value={customerDocument} onChange={setCustomerDocument} /></div>}
+        {tab === "technicians" && (canManageTechnicians ? <div className="lab-settings-form"><Input label="Nome do técnico" value={technicianName} onChange={setTechnicianName} /><Input label="Especialidade" value={specialty} onChange={setSpecialty} /></div> : <div className="lab-alert">Técnicos podem ser consultados aqui. Cadastro, edição e inativação são restritos a ADM/Gestão.</div>)}
+        {tab === "workflow" && (canManageTechnicians ? <div className="lab-settings-form lab-workflow-form">
+          <label>Tipo<select value={workflowKind} disabled={editingWorkflowId !== null} onChange={(e) => setWorkflowKind(e.target.value as "status" | "substatus")}><option value="status">Status principal</option><option value="substatus">Substatus / sinalizador</option></select></label>
+          <Input label="Nome exibido" value={workflowLabel} onChange={setWorkflowLabel} />
+          <Input label="Ordem" value={workflowOrder} onChange={setWorkflowOrder} />
+        </div> : <div className="lab-alert">Status e substatus podem ser consultados aqui. Alterações são restritas a ADM/Gestão.</div>)}
+
         <div className="lab-settings-list">
           {tab === "customers" && customers.map((item) => <article key={item.id}>
             <div className="lab-avatar">{item.legal_name.slice(0,2).toUpperCase()}</div>
@@ -581,6 +706,16 @@ function SettingsModal({ company, customers, technicians, tab, setTab, onClose, 
             {canManageTechnicians && <div className="lab-settings-row-actions">
               <ActionButton variant="secondary" icon={<Pencil size={16} />} onClick={() => editTechnician(item)}>Editar</ActionButton>
               <ActionButton variant="danger" loading={busyId === item.id} icon={<Trash2 size={16} />} onClick={() => void deactivate("technicians", item.id)}>Inativar</ActionButton>
+            </div>}
+          </article>)}
+          {tab === "workflow" && [...workflowRows].sort((a,b) => a.kind.localeCompare(b.kind) || a.sort_order - b.sort_order || a.id - b.id).map((item) => <article key={item.id} className={!item.is_active ? "inactive" : ""}>
+            <div className="lab-avatar">{item.kind === "status" ? "ST" : "SB"}</div>
+            <div className="lab-settings-item-copy"><strong>{item.label}</strong><span>{item.kind === "status" ? "Status principal" : "Substatus / sinalizador"} · ordem {item.sort_order}{item.is_system ? " · padrão do sistema" : " · personalizado"}{!item.is_active ? " · inativo" : ""}</span></div>
+            {canManageTechnicians && <div className="lab-settings-row-actions">
+              <ActionButton variant="secondary" icon={<Pencil size={16} />} onClick={() => editWorkflow(item)}>Editar</ActionButton>
+              {item.is_active
+                ? <ActionButton variant="danger" loading={busyId === item.id} icon={<Trash2 size={16} />} onClick={() => void setWorkflowActive(item, false)}>Remover</ActionButton>
+                : <ActionButton loading={busyId === item.id} icon={<RefreshCw size={16} />} onClick={() => void setWorkflowActive(item, true)}>Reativar</ActionButton>}
             </div>}
           </article>)}
         </div>

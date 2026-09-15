@@ -22,13 +22,21 @@ WORK_ORDER_STATUSES = (
 BUSINESS_STATUS_TARGETS = {
     "received",  # Entrada
     "awaiting_approval",  # Ag. Aprovação
-    "in_analysis",  # Analisado
+    "in_analysis",  # Em análise
     "approved",  # Aprovado
     "no_repair",  # Sem conserto
-    "completed",  # Pronto
     "awaiting_pickup",  # Liberado
     "warranty",  # Garantia
     "invoiced",  # Faturado
+}
+
+# Esses códigos continuam reconhecidos para leitura de dados históricos e para
+# permitir que uma OS antiga avance no fluxo. Novas alterações não devem mais
+# gravá-los como status principal; eles foram substituídos por substatus.
+LEGACY_SUBSTATUS_TARGETS = {
+    "quote_sent": "quote_sent",
+    "completed": "awaiting_delivery",
+    "delivered": "delivered",
 }
 
 # O NEXUS possui dois níveis de leitura do processo:

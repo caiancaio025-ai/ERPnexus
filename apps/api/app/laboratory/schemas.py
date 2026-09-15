@@ -6,27 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 CompanyCode = Literal["universo_eletronica", "universo_automacao", "solucoes_eletronica"]
 LaboratoryPriority = Literal["low", "normal", "high", "urgent"]
-LaboratoryStatus = Literal[
-    "received",
-    "awaiting_analysis",
-    "in_analysis",
-    "awaiting_quote",
-    "quote_sent",
-    "awaiting_approval",
-    "approved",
-    "rejected",
-    "awaiting_parts",
-    "in_repair",
-    "in_testing",
-    "completed",
-    "awaiting_pickup",
-    "delivered",
-    "warranty",
-    "invoiced",
-    "cancelled",
-    "no_repair",
-]
+LaboratoryStatus = str
 DocumentCategory = Literal["entrada", "analise", "reparo", "testes", "saida", "general"]
+WorkflowOptionKind = Literal["status", "substatus"]
 
 
 class CustomerInput(BaseModel):
@@ -125,9 +107,38 @@ class WorkOrderUpdate(WorkOrderInput):
 
 
 class StatusChangeInput(BaseModel):
-    status: LaboratoryStatus
+    status: str = Field(min_length=1, max_length=40)
     version: int
     note: str | None = Field(default=None, max_length=500)
+
+
+class WorkflowOptionCreate(BaseModel):
+    kind: WorkflowOptionKind
+    label: str = Field(min_length=1, max_length=100)
+    sort_order: int = Field(default=0, ge=0, le=10000)
+
+
+class WorkflowOptionUpdate(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    sort_order: int = Field(default=0, ge=0, le=10000)
+    is_active: bool = True
+
+
+class WorkflowOptionOutput(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    code: str
+    label: str
+    sort_order: int
+    is_active: bool
+    is_system: bool
+
+
+class SubstatusToggleInput(BaseModel):
+    active: bool
+    version: int
 
 
 class WorkOrderOutput(BaseModel):
@@ -162,6 +173,7 @@ class WorkOrderOutput(BaseModel):
     approved_value: Decimal | None
     internal_notes: str | None
     customer_notes: str | None
+    substatuses: list[str] = Field(default_factory=list)
     version: int
     created_at: datetime
     updated_at: datetime

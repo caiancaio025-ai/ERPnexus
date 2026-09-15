@@ -280,10 +280,7 @@ async def work_order_summary_counts(
         )
         .label("high_priority"),
         func.count(LaboratoryWorkOrder.id)
-        .filter(
-            LaboratoryWorkOrder.status.in_(("completed", "delivered")),
-            *completed_filters,
-        )
+        .filter(*completed_filters)
         .label("completed_month"),
         func.coalesce(
             func.sum(LaboratoryWorkOrder.approved_value).filter(

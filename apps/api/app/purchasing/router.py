@@ -578,6 +578,20 @@ async def update_material_request(
         target=payload.status,
         note=payload.note,
     ))
+    if previous != "approved" and payload.status == "approved" and request.work_order_id is not None:
+        await notify_modules(
+            db,
+            modules={"laboratorio"},
+            category="material_request_approved",
+            severity="success",
+            title=f"Material aprovado · {request.code}",
+            message=f"Compras aprovou {request.quantity}x {request.item_name}. Acompanhe o andamento na O.S.",
+            target=f"/laboratorio?os={request.work_order_id}&aba=materials",
+            entity_type="material_request",
+            entity_id=request.id,
+            work_order_id=request.work_order_id,
+            exclude_user_id=user.id,
+        )
     if previous != "purchased" and payload.status == "purchased":
         await notify_modules(
             db,

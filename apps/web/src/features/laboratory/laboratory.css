@@ -88,3 +88,10 @@
 }
 @media(max-width:480px){.lab-secondary-kpis{grid-template-columns:1fr}.lab-priority-kpis{grid-template-columns:repeat(3,minmax(138px,1fr))}.equipment-documents__actions{grid-template-columns:1fr}.lab-action-button{width:100%}}
 .lab-entry-upload[type="button"], button.lab-entry-upload { width: 100%; text-align: left; color: inherit; font: inherit; }
+
+/* Workflow configurável: status principais + substatus/sinalizadores */
+.lab-substatus-box{margin-top:14px;padding:15px;border:1px solid #223f5b;border-radius:12px;background:#091725;display:grid;gap:12px}.lab-substatus-box>div:first-child{display:grid;gap:3px}.lab-substatus-box>div:first-child span{font-size:12px;color:#8fa7bf}.lab-substatus-grid{display:flex;flex-wrap:wrap;gap:9px}.lab-substatus-grid label{display:inline-flex;align-items:center;gap:8px;margin:0;padding:9px 11px;border:1px solid #2a4a64;border-radius:9px;background:#0b1c2c;color:#b7cadd;cursor:pointer}.lab-substatus-grid label.active{border-color:#2f8fc8;background:#10304a;color:#fff}.lab-substatus-grid input{accent-color:#38a7ff}.lab-workflow-form{grid-template-columns:.9fr 1.6fr .6fr}.lab-settings-list article.inactive{opacity:.62}.lab-settings-row-actions{display:flex;gap:8px;align-items:center}.lab-settings-heading-actions{display:flex;gap:8px;align-items:center}
+@media(max-width:850px){.lab-workflow-form{grid-template-columns:1fr}.lab-settings-row-actions{flex-wrap:wrap}}
+
+/* Patch UX: status principal + substatus visíveis na listagem e no detalhe */
+.lab-status-stack{display:flex;flex-wrap:wrap;align-items:center;gap:5px}.lab-substatus-mini{display:inline-flex;align-items:center;width:max-content;padding:3px 7px;border-radius:999px;border:1px solid #2f6687;background:#0b2940;color:#8ed3ff;font-size:10px;font-weight:800;white-space:nowrap}.lab-detail-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}

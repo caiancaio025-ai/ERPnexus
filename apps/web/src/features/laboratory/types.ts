@@ -1,10 +1,11 @@
 export type CompanyCode = "universo_eletronica" | "universo_automacao" | "solucoes_eletronica";
 export type Priority = "low" | "normal" | "high" | "urgent";
-export type WorkOrderStatus =
-  | "received" | "awaiting_analysis" | "in_analysis" | "awaiting_quote" | "quote_sent"
-  | "awaiting_approval" | "approved" | "rejected" | "awaiting_parts" | "in_repair"
-  | "in_testing" | "completed" | "awaiting_pickup" | "delivered" | "warranty" | "invoiced"
-  | "cancelled" | "no_repair";
+export type WorkOrderStatus = string;
+
+export type WorkflowOption = {
+  id: number; kind: "status" | "substatus"; code: string; label: string;
+  sort_order: number; is_active: boolean; is_system: boolean;
+};
 
 export type Customer = {
   id: number; company_code: CompanyCode; document: string | null; legal_name: string;
@@ -28,7 +29,7 @@ export type WorkOrder = {
   accessories_received: string | null; assigned_technician_id: number | null;
   opened_at: string; completed_at: string | null; delivered_at: string | null;
   parts_cost: string | null; quoted_value: string | null; approved_value: string | null;
-  internal_notes: string | null; customer_notes: string | null; version: number;
+  internal_notes: string | null; customer_notes: string | null; substatuses: string[]; version: number;
   created_at: string; updated_at: string;
 };
 

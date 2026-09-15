@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Building2, FilePlus2, FileText, LogOut, PackagePlus, Pencil, Plus, Printer, Search, ShoppingBag, Trash2, Wrench } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -37,12 +37,39 @@ export function CommercialDashboard({ user, onLogout }: Props) {
   const [equipmentModal,setEquipmentModal]=useState(false); const [equipmentForm,setEquipmentForm]=useState(blankEquipment); const [editingEquipment,setEditingEquipment]=useState<number|null>(null);
   const [customerForm,setCustomerForm]=useState(blankCustomer); const [companyForm,setCompanyForm]=useState(blankCompany);
   const [quoteEditor,setQuoteEditor]=useState<{type:QuoteType;quote:CommercialQuote|null}|null>(null);
+  const deepLinkHandled=useRef(false);
 
   async function loadAll(){ setError(""); try { const [eq,cu,co,qu,po]=await Promise.all([
     apiClient.get<CommercialEquipment[]>(`/commercial/equipment${search.trim()?`?search=${encodeURIComponent(search.trim())}`:""}`),
     apiClient.get<CustomerLite[]>("/customers"), apiClient.get<CommercialCompany[]>("/commercial/companies"), apiClient.get<CommercialQuote[]>("/commercial/quotes"), apiClient.get<PreventiveOrder[]>("/commercial/preventive-orders")
   ]); setEquipment(eq); setCustomers(cu); setCompanies(co); setQuotes(qu); setPreventiveOrders(po); } catch(reason){ setError(reason instanceof Error?reason.message:"Falha ao carregar o Comercial."); } }
   useEffect(()=>{ void loadAll(); },[search]);
+
+  useEffect(()=>{
+    if(deepLinkHandled.current) return;
+    const params=new URLSearchParams(window.location.search);
+    const requestedTab=params.get("tab") as Tab|null;
+    const quoteId=Number(params.get("quote"));
+    const hasQuoteId=Number.isInteger(quoteId)&&quoteId>0;
+
+    if(hasQuoteId&&quotes.length===0) return;
+
+    if(requestedTab&&tabLabels.some(([value])=>value===requestedTab)){
+      setTab(requestedTab);
+    }
+
+    if(hasQuoteId){
+      const quote=quotes.find((item)=>item.id===quoteId);
+      if(quote){
+        setTab(quote.quote_type==="preventive"?"preventiva":"orcamento");
+        setQuoteEditor({type:quote.quote_type,quote});
+      }else{
+        setError(`Orçamento #${quoteId} não encontrado.`);
+      }
+    }
+
+    deepLinkHandled.current=true;
+  },[quotes]);
 
   async function saveCustomer(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/customers",{...customerForm, trade_name:customerForm.trade_name||null,document:customerForm.document||null,phone:customerForm.phone||null,email:customerForm.email||null,city:customerForm.city||null,state:customerForm.state||null,state_registration:null,municipal_registration:null,whatsapp:null,website:null,postal_code:null,address:null,address_number:null,complement:null,district:null,notes:null}); setCustomerForm(blankCustomer()); setMessage("Cliente cadastrado e disponível para os orçamentos."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao cadastrar cliente.");} finally{setBusy(false);} }
   async function saveCompany(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/commercial/companies",{...companyForm,trade_name:companyForm.trade_name||null,document:companyForm.document||null,state_registration:companyForm.state_registration||null,email:companyForm.email||null,phone:companyForm.phone||null,address:companyForm.address||null,city:companyForm.city||null,state:companyForm.state||null}); setCompanyForm(blankCompany()); setMessage("Empresa emitente salva."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar empresa.");} finally{setBusy(false);} }
@@ -73,7 +100,7 @@ export function CommercialDashboard({ user, onLogout }: Props) {
       {tab==="relatorios"&&<section className="com-card"><div className="com-section-title"><div><h2>Relatórios e O.S.</h2><p>Histórico consolidado de venda, locação e preventiva.</p></div></div><div className="com-table-wrap"><table className="com-table"><thead><tr><th>Número</th><th>Tipo</th><th>Cliente</th><th>Status</th><th>Emissão</th>{canSeeMoney(user.role)&&<th>Total</th>}<th>PDF</th></tr></thead><tbody>{quotes.map(q=><tr key={q.id}><td className="com-serial">{q.quote_number}</td><td>{q.quote_type==="sale"?"Venda":q.quote_type==="rental"?"Locação":"Preventiva"}</td><td>{q.customer_name}</td><td><span className="com-tag">{statusLabel(q.status)}</span></td><td>{formatDate(q.issue_date)}</td>{canSeeMoney(user.role)&&<td>{money(q.total)}</td>}<td><button className="com-btn" onClick={()=>window.open(`/api/commercial/quotes/${q.id}/pdf`,"_blank","noopener,noreferrer")}><Printer size={15}/></button></td></tr>)}</tbody></table></div></section>}
     </main>
     {equipmentModal&&<div className="com-modal"><form className="com-equipment-modal" onSubmit={saveEquipment}><header><div><span>ESTOQUE COMERCIAL</span><h2>{editingEquipment?"Editar equipamento":"Novo equipamento"}</h2></div><button type="button" className="com-icon-btn" onClick={()=>setEquipmentModal(false)}>×</button></header><div className="com-form-grid three"><label>Empresa<select value={equipmentForm.company_code} onChange={e=>setEquipmentForm({...equipmentForm,company_code:e.target.value as CompanyCode})}>{Object.entries(companyLabels).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>Finalidade<select value={equipmentForm.purpose} onChange={e=>setEquipmentForm({...equipmentForm,purpose:e.target.value as CommercialPurpose})}><option value="rental_sale">Venda / Locação</option><option value="preventive">Preventiva</option></select></label><label>Quantidade<input type="number" min="0" value={equipmentForm.quantity} onChange={e=>setEquipmentForm({...equipmentForm,quantity:Number(e.target.value)})}/></label></div><label>Equipamento<input required value={equipmentForm.equipment_type} onChange={e=>setEquipmentForm({...equipmentForm,equipment_type:e.target.value})}/></label><div className="com-form-grid two"><label>Fabricante<input value={equipmentForm.manufacturer} onChange={e=>setEquipmentForm({...equipmentForm,manufacturer:e.target.value})}/></label><label>Modelo<input value={equipmentForm.model} onChange={e=>setEquipmentForm({...equipmentForm,model:e.target.value})}/></label><label>Potência / Corrente<input value={equipmentForm.power} onChange={e=>setEquipmentForm({...equipmentForm,power:e.target.value})}/></label><label>Tensão<input value={equipmentForm.voltage} onChange={e=>setEquipmentForm({...equipmentForm,voltage:e.target.value})}/></label><label>Condição<input value={equipmentForm.condition} onChange={e=>setEquipmentForm({...equipmentForm,condition:e.target.value})}/></label><label>Status<select value={equipmentForm.stock_status} onChange={e=>setEquipmentForm({...equipmentForm,stock_status:e.target.value})}><option value="available">Disponível</option><option value="reserved">Reservado</option><option value="rented">Locado</option><option value="sold">Vendido</option><option value="maintenance">Manutenção</option></select></label><label>Localização<input value={equipmentForm.location} onChange={e=>setEquipmentForm({...equipmentForm,location:e.target.value})}/></label><label>Aquisição<input type="date" value={equipmentForm.acquisition_date} onChange={e=>setEquipmentForm({...equipmentForm,acquisition_date:e.target.value})}/></label></div>{canSeeMoney(user.role)&&<div className="com-form-grid four com-money-block"><label>Custo<input type="number" step="0.01" min="0" value={equipmentForm.unit_cost} onChange={e=>setEquipmentForm({...equipmentForm,unit_cost:e.target.value})}/></label><label>Venda<input type="number" step="0.01" min="0" value={equipmentForm.sale_price} onChange={e=>setEquipmentForm({...equipmentForm,sale_price:e.target.value})}/></label><label>Locação/dia<input type="number" step="0.01" min="0" value={equipmentForm.rental_daily_price} onChange={e=>setEquipmentForm({...equipmentForm,rental_daily_price:e.target.value})}/></label><label>Locação/mês<input type="number" step="0.01" min="0" value={equipmentForm.rental_monthly_price} onChange={e=>setEquipmentForm({...equipmentForm,rental_monthly_price:e.target.value})}/></label></div>}<label>Observações<textarea rows={4} value={equipmentForm.notes} onChange={e=>setEquipmentForm({...equipmentForm,notes:e.target.value})}/></label><footer><button type="button" className="com-btn" onClick={()=>setEquipmentModal(false)}>Cancelar</button><button disabled={busy} className="com-btn primary">Salvar equipamento</button></footer></form></div>}
-    {quoteEditor&&<CommercialQuoteEditor quoteType={quoteEditor.type} companies={companies} customers={customers} equipment={equipment} selected={quoteEditor.quote} onClose={()=>setQuoteEditor(null)} onSaved={async()=>{setQuoteEditor(null);setMessage("Orçamento atualizado.");await loadAll();}}/>}
+    {quoteEditor&&<CommercialQuoteEditor quoteType={quoteEditor.type} companies={companies} customers={customers} equipment={equipment} selected={quoteEditor.quote} canApprove={canSeeMoney(user.role)} onClose={()=>setQuoteEditor(null)} onSaved={async(quote)=>{setQuoteEditor(null);setMessage(quote.status==="approved"?"Orçamento aprovado. Compras foi notificado.":"Orçamento atualizado.");await loadAll();}}/>}
   </div>;
 }
 

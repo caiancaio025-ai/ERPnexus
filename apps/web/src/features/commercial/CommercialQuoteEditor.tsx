@@ -1,4 +1,4 @@
-import { Plus, Printer, Save, Send, Trash2, X } from "lucide-react";
+import { CheckCircle2, Plus, Printer, Save, Send, Trash2, X, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { apiClient } from "../../shared/api/apiClient";
@@ -10,8 +10,20 @@ type Props = {
   customers: CustomerLite[];
   equipment: CommercialEquipment[];
   selected: CommercialQuote | null;
+  canApprove: boolean;
   onClose: () => void;
   onSaved: (quote: CommercialQuote) => void;
+};
+
+
+const issuerLabels: Record<CompanyCode, string> = {
+  universo_eletronica: "Universo Eletrônica",
+  universo_automacao: "Universo Automação",
+  solucoes_eletronica: "Soluções Eletrônicas",
+};
+const issuerCodes = Object.keys(issuerLabels) as CompanyCode[];
+const quoteStatusLabels: Record<string, string> = {
+  draft: "Rascunho", issued: "Emitido", approved: "Aprovado", rejected: "Reprovado", cancelled: "Cancelado",
 };
 
 function blankItem(): CommercialQuoteItem {
@@ -22,8 +34,9 @@ function localDate(days = 0) {
   const date = new Date(); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10);
 }
 
-export function CommercialQuoteEditor({ quoteType, companies, customers, equipment, selected, onClose, onSaved }: Props) {
+export function CommercialQuoteEditor({ quoteType, companies, customers, equipment, selected, canApprove, onClose, onSaved }: Props) {
   const [companyCode, setCompanyCode] = useState<CompanyCode>(selected?.company_code ?? companies[0]?.company_code ?? "universo_eletronica");
+  const configuredIssuer = companies.find((company) => company.company_code === companyCode);
   const [customerId, setCustomerId] = useState(String(selected?.customer_id ?? ""));
   const [validUntil, setValidUntil] = useState(selected?.valid_until ?? localDate(15));
   const [title, setTitle] = useState(selected?.title ?? "");
@@ -85,16 +98,27 @@ export function CommercialQuoteEditor({ quoteType, companies, customers, equipme
     finally { setSaving(false); }
   }
 
+  async function changeStatus(status: "approved" | "rejected" | "cancelled") {
+    if (!selected) return;
+    setSaving(true); setError("");
+    try {
+      const updated = await apiClient.patch<CommercialQuote>(`/commercial/quotes/${selected.id}/status`, { status });
+      onSaved(updated);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível atualizar o status do orçamento.");
+    } finally { setSaving(false); }
+  }
+
   return <div className="com-modal" role="dialog" aria-modal="true">
     <section className="com-editor">
       <header className="com-editor-head">
-        <div><span>{quoteType === "sale" ? "VENDA" : quoteType === "rental" ? "LOCAÇÃO" : "PREVENTIVA"}</span><h2>{selected?.quote_number ?? "Novo orçamento"}</h2><p>{locked ? `Emitido · R${String(selected?.revision ?? 1).padStart(2,"0")}` : "Rascunho editável"}</p></div>
+        <div><span>{quoteType === "sale" ? "VENDA" : quoteType === "rental" ? "LOCAÇÃO" : "PREVENTIVA"}</span><h2>{selected?.quote_number ?? "Novo orçamento"}</h2><p>{selected ? `${quoteStatusLabels[selected.status] ?? selected.status} · R${String(selected.revision ?? 1).padStart(2,"0")}` : "Rascunho editável"}</p></div>
         <button className="com-icon-btn" onClick={onClose}><X size={20}/></button>
       </header>
       {error && <div className="com-notice danger">{error}</div>}
       <div className="com-editor-body">
         <section className="com-editor-section"><h3>Cliente e proposta</h3><div className="com-form-grid three">
-          <label>Empresa emitente<select disabled={locked} value={companyCode} onChange={(e)=>setCompanyCode(e.target.value as CompanyCode)}>{companies.map((c)=><option key={c.id} value={c.company_code}>{c.trade_name || c.legal_name}</option>)}</select></label>
+          <label>Empresa emitente<select disabled={locked} value={companyCode} onChange={(e)=>setCompanyCode(e.target.value as CompanyCode)}>{issuerCodes.map((code)=>{const profile=companies.find((company)=>company.company_code===code);return <option key={code} value={code}>{profile?.trade_name || profile?.legal_name || issuerLabels[code]}{profile ? "" : " · cadastro incompleto"}</option>})}</select>{!configuredIssuer && !locked && <small className="com-field-hint">Complete os dados desta emitente em Cadastros para o PDF sair com CNPJ, contato e endereço.</small>}</label>
           <label>Cliente<select disabled={locked} value={customerId} onChange={(e)=>setCustomerId(e.target.value)}><option value="">Selecione...</option>{customers.map((c)=><option key={c.id} value={c.id}>{c.trade_name || c.legal_name}</option>)}</select></label>
           <label>Validade<input disabled={locked} type="date" value={validUntil} onChange={(e)=>setValidUntil(e.target.value)}/></label>
         </div><label>Título<input disabled={locked} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Ex.: Venda de inversor CFW11 / Locação mensal / Preventiva anual"/></label><label>Apresentação<textarea disabled={locked} rows={3} value={introText} onChange={(e)=>setIntroText(e.target.value)} placeholder="Texto introdutório da proposta..."/></label></section>
@@ -118,7 +142,10 @@ export function CommercialQuoteEditor({ quoteType, companies, customers, equipme
       </div>
       <footer className="com-editor-footer">
         {selected && <button className="com-btn" onClick={()=>window.open(`/api/commercial/quotes/${selected.id}/pdf`,"_blank","noopener,noreferrer")}><Printer size={16}/> Visualizar PDF</button>}
-        <div className="com-spacer"/>{!locked && <button disabled={saving} className="com-btn primary" onClick={()=>void save()}><Save size={16}/> {saving?"Salvando...":"Salvar rascunho"}</button>}{selected && !locked && <button disabled={saving} className="com-btn success" onClick={()=>void issue()}><Send size={16}/> Emitir orçamento</button>}
+        <div className="com-spacer"/>
+        {!locked && <button disabled={saving} className="com-btn primary" onClick={()=>void save()}><Save size={16}/> {saving?"Salvando...":"Salvar rascunho"}</button>}
+        {selected && !locked && <button disabled={saving} className="com-btn success" onClick={()=>void issue()}><Send size={16}/> Emitir orçamento</button>}
+        {selected?.status === "issued" && canApprove && <><button disabled={saving} className="com-btn success" onClick={()=>void changeStatus("approved")}><CheckCircle2 size={16}/> Aprovar venda</button><button disabled={saving} className="com-btn danger" onClick={()=>void changeStatus("rejected")}><XCircle size={16}/> Reprovar</button></>}
       </footer>
     </section>
   </div>;

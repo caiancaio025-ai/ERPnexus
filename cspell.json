@@ -73,6 +73,7 @@
     "SQLAlchemy",
     "sqlalchemy",
     "superadmin",
+    "substatuses",
     "tablename",
     "tecnico",
     "TENSAO",

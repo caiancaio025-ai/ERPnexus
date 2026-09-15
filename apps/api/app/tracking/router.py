@@ -26,11 +26,17 @@ _STATUS_LABELS = {
     "awaiting_parts": "Aguardando peças",
     "in_repair": "Em reparo",
     "in_testing": "Em testes",
-    "completed": "Concluído",
-    "awaiting_pickup": "Aguardando retirada",
-    "delivered": "Entregue",
+    "completed": "Liberado",
+    "awaiting_pickup": "Liberado",
+    "delivered": "Liberado",
     "cancelled": "Cancelado",
     "no_repair": "Sem reparo",
+}
+
+_SUBSTATUS_LABELS = {
+    "quote_sent": "Orçamento enviado",
+    "awaiting_delivery": "Ag. entregar",
+    "delivered": "Entregue",
 }
 
 
@@ -123,6 +129,18 @@ async def public_work_order_tracking(
 
     equipment = work_order.equipment
     status_label = _STATUS_LABELS.get(work_order.status, work_order.status)
+    substatus_labels = [
+        _SUBSTATUS_LABELS.get(row.code, row.code)
+        for row in work_order.substatuses
+        if row.is_active
+    ]
+    substatus_html = ""
+    if substatus_labels:
+        substatus_html = (
+            "<dt>Sinalizadores</dt><dd>"
+            + escape(" · ".join(substatus_labels))
+            + "</dd>"
+        )
     opened_at = work_order.opened_at.strftime("%d/%m/%Y")
     equipment_name = " / ".join(
         value
@@ -143,6 +161,7 @@ async def public_work_order_tracking(
     <dt>Data de entrada</dt><dd>{escape(opened_at)}</dd>
     <dt>Equipamento</dt><dd>{escape(equipment_name)}</dd>
     <dt>Status atual</dt><dd>{escape(status_label)}</dd>
+    {substatus_html}
   </dl>
 </section>"""
     return _page(f"OS {work_order.number}", body)

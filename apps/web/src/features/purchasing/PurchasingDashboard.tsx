@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  Bell,
   Boxes,
   Building2,
   CalendarClock,
@@ -32,6 +33,7 @@ import type { AuthUser } from "../auth/AuthCard";
 import { MaterialRequestsPanel } from "./MaterialRequestsPanel";
 import type {
   CompanyCode,
+  MaterialRequest,
   PurchaseAudit,
   PurchaseOrder,
   PurchaseOrigin,
@@ -43,6 +45,20 @@ import "./purchasing.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
 type View = "dashboard" | "requests" | "new" | "orders" | "audit";
+
+type PurchaseNotification = {
+  id: number;
+  category: string;
+  severity: string;
+  title: string;
+  message: string;
+  target: string | null;
+  entity_type: string | null;
+  entity_id: number | null;
+  is_read: boolean;
+  created_at: string;
+};
+type PurchaseNotificationSummary = { unread_count: number; items: PurchaseNotification[] };
 
 type FormState = {
   company_code: CompanyCode;
@@ -111,6 +127,13 @@ function dateLabel(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
 }
 
+function notificationDestination(item: PurchaseNotification) {
+  if (item.category === "commercial_sale_approved" && item.entity_id) {
+    return `/comercial?tab=orcamento&quote=${item.entity_id}`;
+  }
+  return item.target;
+}
+
 function statusTone(order: PurchaseOrder) {
   if (order.status === "delivered") return "delivered";
   if (order.status === "cancelled") return "cancelled";
@@ -128,6 +151,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   const [company, setCompany] = useState<CompanyCode | "all">("all");
   const [summary, setSummary] = useState<PurchaseSummary | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
+  const [notifications, setNotifications] = useState<PurchaseNotificationSummary>({ unread_count: 0, items: [] });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [audit, setAudit] = useState<PurchaseAudit[]>([]);
   const [search, setSearch] = useState("");
@@ -156,10 +181,13 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   async function load() {
     setError("");
     const companyQuery = company === "all" ? "" : `?company_code=${company}`;
-    const [summaryResult, ordersResult, suppliersResult] = await Promise.allSettled([
+    const requestQuery = company === "all" ? "" : `?company_code=${company}`;
+    const [summaryResult, ordersResult, suppliersResult, requestsResult, notificationsResult] = await Promise.allSettled([
       apiClient.request<PurchaseSummary>(`/api/purchasing/summary${companyQuery}`),
       apiClient.request<PurchaseOrder[]>(`/api/purchasing/orders${query ? `?${query}` : ""}`),
       apiClient.request<Supplier[]>("/api/purchasing/suppliers"),
+      apiClient.request<MaterialRequest[]>(`/api/purchasing/material-requests${requestQuery}`),
+      apiClient.request<PurchaseNotificationSummary>("/api/notifications?limit=20&unread_only=true"),
     ]);
 
     const failures: string[] = [];
@@ -186,6 +214,18 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       failures.push(`Fornecedores: ${suppliersResult.reason instanceof Error ? suppliersResult.reason.message : "falha ao carregar"}`);
     }
 
+    if (requestsResult.status === "fulfilled") {
+      setMaterialRequests(requestsResult.value);
+    } else {
+      failures.push(`Solicitações: ${requestsResult.reason instanceof Error ? requestsResult.reason.message : "falha ao carregar"}`);
+    }
+
+    if (notificationsResult.status === "fulfilled") {
+      setNotifications(notificationsResult.value);
+    } else {
+      failures.push(`Notificações: ${notificationsResult.reason instanceof Error ? notificationsResult.reason.message : "falha ao carregar"}`);
+    }
+
     if (failures.length) {
       setError(failures.join(" | "));
     }
@@ -193,6 +233,10 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   useEffect(() => {
     void load();
+    const refresh = () => void load();
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [query, company]);
 
   useEffect(() => {
@@ -207,7 +251,12 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const filter = params.get("filtro");
+    const requestedView = params.get("view") as View | null;
     const purchaseId = Number(params.get("pedido"));
+
+    if (requestedView && ["dashboard", "requests", "new", "orders", "audit"].includes(requestedView)) {
+      setView(requestedView);
+    }
 
     if (filter === "atrasados") {
       setStatusFilter("overdue");
@@ -351,6 +400,14 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
     }
   }
 
+  const requestStats = useMemo(() => ({
+    approval: materialRequests.filter((item) => item.status === "awaiting_approval").length,
+    buying: materialRequests.filter((item) => ["approved", "purchasing"].includes(item.status)).length,
+    waiting: materialRequests.filter((item) => ["purchased", "in_transit"].includes(item.status)).length,
+  }), [materialRequests]);
+  const activeRequests = useMemo(() => materialRequests.filter((item) => !["rejected", "cancelled", "delivered_to_lab"].includes(item.status)).slice(0, 6), [materialRequests]);
+  const purchaseAlerts = useMemo(() => notifications.items.filter((item) => ["purchase_request", "material_request_approved", "purchase", "commercial_sale_approved"].includes(item.category)).slice(0, 5), [notifications]);
+
   const nav: { id: View; label: string; icon: typeof ShoppingCart }[] = [
     { id: "dashboard", label: "Dashboard & alertas", icon: Boxes },
     { id: "requests", label: "Solicitações de material", icon: FileSearch },
@@ -396,6 +453,34 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             <article className="warning"><CalendarClock /><span>Próximos 7 dias</span><strong>{summary?.due_soon ?? 0}</strong></article>
             <article className="success"><PackageCheck /><span>Entregues no mês</span><strong>{summary?.delivered_month ?? 0}</strong></article>
             {canViewValues && <article><Boxes /><span>Valor em aberto</span><strong>{money(summary?.total_value_open)}</strong></article>}
+          </section>
+          <section className="material-request-kpis purchase-dashboard-demands">
+            <button onClick={() => setView("requests")}><CheckCircle2 /><span>Solicitações aguardando aprovação</span><strong>{requestStats.approval}</strong></button>
+            <button onClick={() => setView("requests")}><ShoppingCart /><span>Materiais para comprar</span><strong>{requestStats.buying}</strong></button>
+            <button onClick={() => setView("requests")}><Truck /><span>Comprados / aguardando chegada</span><strong>{requestStats.waiting}</strong></button>
+          </section>
+          <section className="purchase-panel purchase-demand-panel">
+            <div className="panel-title"><div><small>CENTRAL DE DEMANDAS</small><h2>Solicitações e notificações recentes</h2></div><button onClick={() => setView("requests")}>Abrir solicitações <ChevronRight size={16} /></button></div>
+            <div className="purchase-demand-grid">
+              <div className="purchase-demand-list">
+                <h3>Materiais pendentes</h3>
+                {activeRequests.map((item) => <button key={item.id} onClick={() => setView("requests")}><div><strong>{item.code} · {item.item_name}</strong><span>{item.work_order_number || "Compra avulsa"} · {item.quantity} un.</span></div><em className={`material-request-status ${item.status}`}>{item.status === "awaiting_approval" ? "Aguardando aprovação" : item.status === "approved" ? "Aprovado" : item.status === "purchasing" ? "Em compra" : item.status === "purchased" ? "Comprado" : item.status === "in_transit" ? "Em trânsito" : item.status}</em></button>)}
+                {!activeRequests.length && <p className="purchase-demand-empty">Nenhuma solicitação pendente.</p>}
+              </div>
+              <div className="purchase-notification-list">
+                <h3><Bell size={16}/> Alertas do módulo</h3>
+                {purchaseAlerts.map((item) => {
+                  const destination = notificationDestination(item);
+                  return <button key={item.id} onClick={() => destination ? navigate(destination) : undefined}>
+                    <strong>{item.title}</strong>
+                    <span>{item.message}</span>
+                    <small>{new Date(item.created_at).toLocaleString("pt-BR")}</small>
+                    {item.category === "commercial_sale_approved" && destination && <em className="purchase-notification-action">Abrir orçamento no Comercial <ChevronRight size={14}/></em>}
+                  </button>;
+                })}
+                {!purchaseAlerts.length && <p className="purchase-demand-empty">Nenhum alerta novo para Compras.</p>}
+              </div>
+            </div>
           </section>
           <section className="purchase-panel">
             <div className="panel-title"><div><small>RADAR DE COMPRAS</small><h2>Pedidos que exigem atenção</h2></div><button onClick={() => setView("orders")}>Ver todos <ChevronRight size={16} /></button></div>

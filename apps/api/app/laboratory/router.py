@@ -1,5 +1,7 @@
 import asyncio
 import secrets
+import re
+import unicodedata
 from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -19,13 +21,16 @@ from app.core.file_validation import InvalidUpload
 from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.finance.models import FinancialEntry
 from app.laboratory.models import (
+    LaboratoryAuditEvent,
     LaboratoryCustomer,
     LaboratoryDocument,
     LaboratoryQuote,
     LaboratoryQuoteItem,
     LaboratoryStatusHistory,
     LaboratoryTechnician,
+    LaboratoryWorkflowOption,
     LaboratoryWorkOrder,
+    LaboratoryWorkOrderSubstatus,
 )
 from app.laboratory.quote_pdf import label_pdf, quote_pdf
 from app.laboratory.storage import (
@@ -44,9 +49,13 @@ from app.laboratory.schemas import (
     QuoteOutput,
     StatusChangeInput,
     StatusHistoryOutput,
+    SubstatusToggleInput,
     TechnicianInput,
     TechnicianOutput,
     TechnicianUpdate,
+    WorkflowOptionCreate,
+    WorkflowOptionOutput,
+    WorkflowOptionUpdate,
     WorkOrderInput,
     WorkOrderOutput,
     WorkOrderPage,
@@ -65,6 +74,7 @@ from app.laboratory.service import (
     work_order_period_range,
     work_order_summary_counts,
 )
+from app.laboratory.status_flow import LEGACY_SUBSTATUS_TARGETS, WORK_ORDER_STATUSES
 
 router = APIRouter(prefix="/laboratory", dependencies=[Depends(require_module("laboratorio"))])
 UPLOAD_ROOT = Path(settings.storage_root) / "laboratory"
@@ -92,8 +102,75 @@ def _can_override_work_order_status(user: User) -> bool:
     return user.role.strip().lower() in {"super_admin", "admin", "gestao"}
 
 
+def _require_workflow_management(user: User) -> None:
+    if not _can_override_work_order_status(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A configuração de status do Laboratório é restrita à ADM/Gestão.",
+        )
+
+
+def _workflow_code(kind: str, label: str) -> str:
+    normalized = unicodedata.normalize("NFKD", label)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_") or "item"
+    prefix = "custom" if kind == "status" else "flag"
+    return f"{prefix}_{slug}"[:40].rstrip("_")
+
+
+async def _workflow_option_by_code(
+    db: AsyncSession,
+    *,
+    kind: str,
+    code: str,
+    active_only: bool = True,
+) -> LaboratoryWorkflowOption | None:
+    query = select(LaboratoryWorkflowOption).where(
+        LaboratoryWorkflowOption.kind == kind,
+        LaboratoryWorkflowOption.code == code,
+    )
+    if active_only:
+        query = query.where(LaboratoryWorkflowOption.is_active.is_(True))
+    return await db.scalar(query)
+
+
+async def _set_work_order_substatus(
+    db: AsyncSession,
+    *,
+    work_order: LaboratoryWorkOrder,
+    code: str,
+    active: bool,
+    user_id: int | None,
+) -> None:
+    row = await db.scalar(
+        select(LaboratoryWorkOrderSubstatus).where(
+            LaboratoryWorkOrderSubstatus.work_order_id == work_order.id,
+            LaboratoryWorkOrderSubstatus.code == code,
+        )
+    )
+    if row is None:
+        row = LaboratoryWorkOrderSubstatus(
+            work_order_id=work_order.id,
+            code=code,
+            is_active=active,
+            updated_by=user_id,
+        )
+        db.add(row)
+    else:
+        row.is_active = active
+        row.updated_by = user_id
+
+
+def _active_substatus_codes(work_order: LaboratoryWorkOrder) -> list[str]:
+    return sorted(row.code for row in work_order.substatuses if row.is_active)
+
+
 async def _work_order_or_404(db: AsyncSession, work_order_id: int) -> LaboratoryWorkOrder:
-    work_order = await db.get(LaboratoryWorkOrder, work_order_id)
+    work_order = await db.scalar(
+        select(LaboratoryWorkOrder)
+        .where(LaboratoryWorkOrder.id == work_order_id)
+        .execution_options(populate_existing=True)
+    )
     if not work_order:
         raise HTTPException(status_code=404, detail="OS não encontrada.")
     return work_order
@@ -135,6 +212,7 @@ def _to_work_order_output(
         approved_value=work_order.approved_value if include_sensitive_values else None,
         internal_notes=work_order.internal_notes,
         customer_notes=work_order.customer_notes,
+        substatuses=_active_substatus_codes(work_order),
         version=work_order.version,
         created_at=work_order.created_at,
         updated_at=work_order.updated_at,
@@ -473,6 +551,94 @@ async def deactivate_technician(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ----------------------------------------------------- workflow settings --
+
+
+@router.get("/workflow-options", response_model=list[WorkflowOptionOutput])
+async def list_workflow_options(
+    include_inactive: bool = QUERY_INCLUDE_INACTIVE,
+    _: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    query = select(LaboratoryWorkflowOption)
+    if not include_inactive:
+        query = query.where(LaboratoryWorkflowOption.is_active.is_(True))
+    query = query.order_by(
+        LaboratoryWorkflowOption.kind,
+        LaboratoryWorkflowOption.sort_order,
+        LaboratoryWorkflowOption.id,
+    )
+    return list((await db.scalars(query)).all())
+
+
+@router.post(
+    "/workflow-options",
+    response_model=WorkflowOptionOutput,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_option(
+    payload: WorkflowOptionCreate,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    _require_workflow_management(user)
+    base_code = _workflow_code(payload.kind, payload.label)
+    code = base_code
+    suffix = 2
+    while await _workflow_option_by_code(db, kind=payload.kind, code=code, active_only=False):
+        tail = f"_{suffix}"
+        code = f"{base_code[: 40 - len(tail)]}{tail}"
+        suffix += 1
+
+    option = LaboratoryWorkflowOption(
+        kind=payload.kind,
+        code=code,
+        label=payload.label.strip(),
+        sort_order=payload.sort_order,
+        is_active=True,
+        is_system=False,
+        created_by=user.id,
+    )
+    db.add(option)
+    await db.commit()
+    await db.refresh(option)
+    return option
+
+
+@router.put("/workflow-options/{option_id}", response_model=WorkflowOptionOutput)
+async def update_workflow_option(
+    option_id: int,
+    payload: WorkflowOptionUpdate,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    _require_workflow_management(user)
+    option = await db.get(LaboratoryWorkflowOption, option_id)
+    if not option:
+        raise HTTPException(status_code=404, detail="Status/substatus não encontrado.")
+    option.label = payload.label.strip()
+    option.sort_order = payload.sort_order
+    option.is_active = payload.is_active
+    await db.commit()
+    await db.refresh(option)
+    return option
+
+
+@router.delete("/workflow-options/{option_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deactivate_workflow_option(
+    option_id: int,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    _require_workflow_management(user)
+    option = await db.get(LaboratoryWorkflowOption, option_id)
+    if not option:
+        raise HTTPException(status_code=404, detail="Status/substatus não encontrado.")
+    option.is_active = False
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ------------------------------------------------------------ work orders --
 
 
@@ -643,6 +809,29 @@ async def change_status(
             status_code=409,
             detail="Esta OS foi alterada por outra pessoa. Recarregue antes de aplicar o status.",
         )
+    if payload.status in LEGACY_SUBSTATUS_TARGETS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Este marco deixou de ser status principal. "
+                "Use a caixa de substatus correspondente na O.S."
+            ),
+        )
+    is_builtin_status = payload.status in WORK_ORDER_STATUSES
+    if not is_builtin_status:
+        custom_status = await _workflow_option_by_code(
+            db,
+            kind="status",
+            code=payload.status,
+            active_only=True,
+        )
+        if custom_status is None:
+            raise HTTPException(status_code=422, detail="Status do Laboratório inválido ou inativo.")
+        if not _can_override_work_order_status(user):
+            raise HTTPException(
+                status_code=403,
+                detail="Status personalizados só podem ser aplicados pela ADM/Gestão.",
+            )
     if (
         not _can_override_work_order_status(user)
         and not can_transition_status(work_order.status, payload.status)
@@ -669,14 +858,14 @@ async def change_status(
             )
         )
         await _sync_finance_on_status_change(db, work_order, previous, payload.status, user.id)
-        if payload.status == "in_analysis" and previous != "in_analysis":
+        if payload.status == "awaiting_quote" and previous != "awaiting_quote":
             await notify_roles(
                 db,
                 roles={"super_admin", "admin", "gestao"},
                 category="quote",
                 severity="warning",
-                title=f"OS {work_order.number} analisada · orçamento pendente",
-                message=f"{work_order.customer_name} · {work_order.equipment_name}. O diagnóstico foi concluído e a OS aguarda orçamento.",
+                title=f"OS {work_order.number} · orçamento pendente",
+                message=f"{work_order.customer_name} · {work_order.equipment_name}. A análise técnica foi concluída e a OS está preparando orçamento.",
                 target=f"/laboratorio?os={work_order.id}&aba=quote",
                 entity_type="laboratory_work_order",
                 entity_id=work_order.id,
@@ -684,6 +873,62 @@ async def change_status(
                 exclude_user_id=user.id,
             )
         await db.commit()
+    return _to_work_order_output(
+        await _work_order_or_404(db, work_order.id),
+        include_sensitive_values=user_can_view_sensitive_values(user.role),
+    )
+
+
+@router.post(
+    "/work-orders/{work_order_id}/substatuses/{substatus_code}",
+    response_model=WorkOrderOutput,
+)
+async def toggle_substatus(
+    work_order_id: int,
+    substatus_code: str,
+    payload: SubstatusToggleInput,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    work_order = await _work_order_or_404(db, work_order_id)
+    if work_order.version != payload.version:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta OS foi alterada por outra pessoa. Recarregue antes de alterar o substatus.",
+        )
+    option = await _workflow_option_by_code(
+        db,
+        kind="substatus",
+        code=substatus_code,
+        active_only=True,
+    )
+    if option is None:
+        raise HTTPException(status_code=404, detail="Substatus não encontrado ou inativo.")
+
+    await _set_work_order_substatus(
+        db,
+        work_order=work_order,
+        code=substatus_code,
+        active=payload.active,
+        user_id=user.id,
+    )
+    if payload.active and substatus_code == "awaiting_delivery" and work_order.completed_at is None:
+        work_order.completed_at = datetime.now(UTC)
+    if payload.active and substatus_code == "delivered" and work_order.delivered_at is None:
+        work_order.delivered_at = datetime.now(UTC)
+    work_order.version += 1
+    db.add(
+        LaboratoryAuditEvent(
+            work_order_id=work_order.id,
+            action="substatus_changed",
+            description=(
+                f"Substatus '{option.label}' "
+                f"{'marcado' if payload.active else 'desmarcado'}."
+            ),
+            user_id=user.id,
+        )
+    )
+    await db.commit()
     return _to_work_order_output(
         await _work_order_or_404(db, work_order.id),
         include_sensitive_values=user_can_view_sensitive_values(user.role),
@@ -906,6 +1151,20 @@ async def quote_pdf_endpoint(
     if not preview and quote.emitted_at is None:
         quote.emitted_at = datetime.now(UTC)
         quote.status = "emitted"
+        quote_sent_option = await _workflow_option_by_code(
+            db,
+            kind="substatus",
+            code="quote_sent",
+            active_only=True,
+        )
+        if quote_sent_option is not None:
+            await _set_work_order_substatus(
+                db,
+                work_order=work_order,
+                code="quote_sent",
+                active=True,
+                user_id=user.id,
+            )
         await db.commit()
         await db.refresh(quote)
 
