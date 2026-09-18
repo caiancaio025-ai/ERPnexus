@@ -177,6 +177,19 @@ async def list_work_orders_page(
                 LaboratoryWorkOrder.equipment_serial.ilike(term),
                 LaboratoryWorkOrder.entry_invoice.ilike(term),
                 LaboratoryWorkOrder.exit_invoice.ilike(term),
+                LaboratoryWorkOrder.equipment.has(
+                    or_(
+                        LaboratoryEquipment.equipment_type.ilike(term),
+                        LaboratoryEquipment.manufacturer.ilike(term),
+                        LaboratoryEquipment.model.ilike(term),
+                        func.concat_ws(
+                            " ",
+                            LaboratoryEquipment.equipment_type,
+                            LaboratoryEquipment.manufacturer,
+                            LaboratoryEquipment.model,
+                        ).ilike(term),
+                    )
+                ),
             )
         )
 

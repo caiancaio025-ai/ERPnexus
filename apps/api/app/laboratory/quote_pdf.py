@@ -65,6 +65,18 @@ def _safe(value: object | None, fallback: str = "Não informado") -> str:
     return escape(raw)
 
 
+def _effective_validity_days(quote: object) -> int:
+    """Normaliza registros legados gravados com validade 0 para o padrao de 30 dias."""
+    value = int(getattr(quote, "validity_days", 0) or 0)
+    return value if value > 0 else 30
+
+
+def _entry_invoice_text(work_order: object) -> str:
+    """Retorna a NF de entrada cadastrada na O.S. para exibicao no orcamento."""
+    value = str(getattr(work_order, "entry_invoice", "") or "").strip()
+    return value or "Não informada"
+
+
 def _section_title(text: str, style: ParagraphStyle) -> Table:
     return Table(
         [[Paragraph(_safe(text), style)]],
@@ -109,7 +121,6 @@ def _info_card(title: str, rows: list[tuple[str, object | None]], body: Paragrap
     return Table(
         [[flowables]],
         colWidths=[82.5 * mm],
-        rowHeights=[35 * mm],
         style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
             ("BOX", (0, 0), (-1, -1), 0.45, GRID),
@@ -172,6 +183,7 @@ def quote_pdf(
     company_name, cnpj, email = COMPANIES.get(work_order.company_code, COMPANIES["universo_eletronica"])
     emitted = quote.emitted_at or quote.updated_at
     service_code = _safe(getattr(quote, "service_code", None), "3312102 / 14.01")
+    validity_days = _effective_validity_days(quote)
     story: list[object] = []
 
     # Cabeçalho corporativo com símbolo da engrenagem isolado.
@@ -200,7 +212,7 @@ def quote_pdf(
         f"ORÇAMENTO PRÉVIO E<br/>ESTIMATIVO<br/>"
         f"<font name='Helvetica-Bold' size='8.8'>Nº {_safe(work_order.number)}</font><br/>"
         f"<font name='Helvetica' size='8.2'>Emissão: {emitted.strftime('%d/%m/%Y')}<br/>"
-        f"Validade: {int(quote.validity_days)} dias</font>",
+        f"Validade: {validity_days} dias</font>",
         header_right,
     )
     header = Table([[left_header, right_header]], colWidths=[111 * mm, 63 * mm], rowHeights=[48 * mm])
@@ -247,6 +259,7 @@ def quote_pdf(
         ("Potência/Corrente", equip_power),
         ("Tensão", equipment.voltage),
         ("Data de Entrada", work_order.opened_at.strftime("%d/%m/%Y") if getattr(work_order, "opened_at", None) else None),
+        ("NF de Entrada", _entry_invoice_text(work_order)),
     ]
     cards = Table(
         [[_info_card("DADOS DO CLIENTE", customer_rows, info_body, card_title),
@@ -334,7 +347,7 @@ def quote_pdf(
             f"{quote.delivery_days} dias",
             (quote.billing_terms or f"{quote.billing_days} dias").strip(),
             (quote.warranty_terms or f"{quote.warranty_months} meses").strip(),
-            f"{quote.validity_days} dias",
+            f"{validity_days} dias",
         ],
     ], colWidths=[57 * mm, 60 * mm, 32 * mm, 25 * mm])
     conditions.setStyle(TableStyle([

@@ -162,16 +162,24 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [saved, setSaved] = useState(false);
 
   const query = useMemo(() => {
-    const params = new URLSearchParams({ page: String(page), page_size: "25", year: String(yearFilter) });
-    if (monthFilter !== "all") params.set("month", String(monthFilter));
+    const normalizedSearch = search.trim();
+    const hasSearch = normalizedSearch.length > 0;
+    const params = new URLSearchParams({ page: String(page), page_size: "25" });
     if (company !== "all") params.set("company_code", company);
-    const effectiveStatus =
-      view === "no_repair" ? "no_repair" :
-      view === "invoiced" ? "invoiced" :
-      view === "warranty" ? "warranty" :
-      statusFilter;
-    if (effectiveStatus !== "all") params.set("status", effectiveStatus);
-    if (search.trim()) params.set("search", search.trim());
+    if (hasSearch) {
+      // A pesquisa textual e global dentro da empresa. Nao restringir por mes/status,
+      // senao uma O.S. valida pode parecer inexistente apenas por causa dos filtros da tela.
+      params.set("search", normalizedSearch);
+    } else {
+      params.set("year", String(yearFilter));
+      if (monthFilter !== "all") params.set("month", String(monthFilter));
+      const effectiveStatus =
+        view === "no_repair" ? "no_repair" :
+        view === "invoiced" ? "invoiced" :
+        view === "warranty" ? "warranty" :
+        statusFilter;
+      if (effectiveStatus !== "all") params.set("status", effectiveStatus);
+    }
     return params.toString();
   }, [company, monthFilter, page, search, statusFilter, view, yearFilter]);
 
@@ -361,7 +369,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         </section>
 
         <section className="lab-toolbar">
-          <div className="lab-search"><Search size={18} /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar O.S., cliente, equipamento, NF entrada ou saída" /></div>
+          <div className="lab-search"><Search size={18} /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar O.S., cliente, equipamento/modelo, NF entrada ou saída" /></div>
           <select aria-label="Mês de entrada" value={monthFilter} onChange={(e) => {
             setMonthFilter(e.target.value === "all" ? "all" : Number(e.target.value));
             setPage(1);

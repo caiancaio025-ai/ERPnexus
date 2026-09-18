@@ -249,7 +249,7 @@ class QuoteInput(BaseModel):
     warranty_months: int = 3
     warranty_terms: str | None = Field(default=None, max_length=200)
     payment_terms: str
-    validity_days: int = 0
+    validity_days: int = 30
     return_condition: str
     consumer_clause: str
     supply_clause: str

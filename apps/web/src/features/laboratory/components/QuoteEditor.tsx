@@ -25,7 +25,7 @@ type Props = {
 const empty = (defect: string, value: string): Form => ({
   service_code: "3312102 / 14.01", technical_report: defect, services_description: "",
   delivery_days: 20, billing_days: 21, billing_terms: "21 dias", warranty_months: 3, warranty_terms: "3 meses",
-  payment_terms: "TRANSFERÊNCIA, BOLETO E PIX.", validity_days: 0,
+  payment_terms: "TRANSFERÊNCIA, BOLETO E PIX.", validity_days: 30,
   return_condition: "ORÇAMENTO NÃO APROVADO EM 30 DIAS: O EQUIPAMENTO SERÁ DEVOLVIDO.",
   consumer_clause: CONSUMER, supply_clause: SUPPLY, estimate_clause: ESTIMATE,
   discount_type: "none", discount_value: "0",
@@ -58,7 +58,7 @@ export function QuoteEditor(props: Props) {
       services_description: quote.services_description ?? "", delivery_days: quote.delivery_days,
       billing_days: quote.billing_days, billing_terms: quote.billing_terms ?? `${quote.billing_days} dias`,
       warranty_months: quote.warranty_months, warranty_terms: quote.warranty_terms ?? `${quote.warranty_months} meses`,
-      payment_terms: quote.payment_terms, validity_days: quote.validity_days,
+      payment_terms: quote.payment_terms, validity_days: quote.validity_days > 0 ? quote.validity_days : 30,
       return_condition: quote.return_condition, consumer_clause: quote.consumer_clause,
       supply_clause: quote.supply_clause, estimate_clause: quote.estimate_clause,
       discount_type: quote.discount_type, discount_value: quote.discount_value ?? "0",

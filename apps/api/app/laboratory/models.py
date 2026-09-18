@@ -243,7 +243,7 @@ class LaboratoryQuote(Base):
     warranty_months: Mapped[int] = mapped_column(Integer, default=3)
     warranty_terms: Mapped[str | None] = mapped_column(String(200))
     payment_terms: Mapped[str] = mapped_column(String(500))
-    validity_days: Mapped[int] = mapped_column(Integer, default=0)
+    validity_days: Mapped[int] = mapped_column(Integer, default=30)
     return_condition: Mapped[str] = mapped_column(String(500))
     consumer_clause: Mapped[str] = mapped_column(Text)
     supply_clause: Mapped[str] = mapped_column(Text)
