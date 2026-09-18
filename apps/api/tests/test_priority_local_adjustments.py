@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -11,11 +11,13 @@ from app.laboratory.service import can_transition_status
 # STATUS
 # ---------------------------------------------------------------------------
 
-def test_status_received_does_not_allow_arbitrary_business_jump():
+def test_status_received_allows_free_business_jump_without_hierarchy():
     """
-    O frontend nao deve oferecer uma transicao que o backend recusara.
-    Este teste documenta a regra backend atualmente existente.
+    Usuarios do Laboratorio podem aplicar livremente qualquer status principal
+    valido. ``delivered`` permanece fora porque agora e substatus.
     """
+    assert can_transition_status("received", "invoiced") is True
+    assert can_transition_status("in_repair", "received") is True
     assert can_transition_status("received", "delivered") is False
 
 

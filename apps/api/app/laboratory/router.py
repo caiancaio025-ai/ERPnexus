@@ -66,7 +66,6 @@ from app.notifications.service import notify_quote_users, notify_roles
 from app.laboratory.service import (
     TERMINAL_STATUSES,
     apply_work_order_update,
-    can_transition_status,
     find_or_create_equipment,
     list_work_orders_page,
     next_work_order_number,
@@ -74,7 +73,11 @@ from app.laboratory.service import (
     work_order_period_range,
     work_order_summary_counts,
 )
-from app.laboratory.status_flow import LEGACY_SUBSTATUS_TARGETS, WORK_ORDER_STATUSES
+from app.laboratory.status_flow import (
+    BUSINESS_STATUS_TARGETS,
+    LEGACY_SUBSTATUS_TARGETS,
+    WORK_ORDER_STATUSES,
+)
 
 router = APIRouter(prefix="/laboratory", dependencies=[Depends(require_module("laboratorio"))])
 UPLOAD_ROOT = Path(settings.storage_root) / "laboratory"
@@ -818,7 +821,16 @@ async def change_status(
             ),
         )
     is_builtin_status = payload.status in WORK_ORDER_STATUSES
-    if not is_builtin_status:
+    if payload.status in BUSINESS_STATUS_TARGETS:
+        configured_status = await _workflow_option_by_code(
+            db,
+            kind="status",
+            code=payload.status,
+            active_only=True,
+        )
+        if configured_status is None:
+            raise HTTPException(status_code=422, detail="Status do Laboratório inválido ou inativo.")
+    elif not is_builtin_status:
         custom_status = await _workflow_option_by_code(
             db,
             kind="status",
@@ -827,25 +839,18 @@ async def change_status(
         )
         if custom_status is None:
             raise HTTPException(status_code=422, detail="Status do Laboratório inválido ou inativo.")
-        if not _can_override_work_order_status(user):
-            raise HTTPException(
-                status_code=403,
-                detail="Status personalizados só podem ser aplicados pela ADM/Gestão.",
-            )
-    if (
-        not _can_override_work_order_status(user)
-        and not can_transition_status(work_order.status, payload.status)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Transição de {work_order.status} para {payload.status} não permitida.",
-        )
+
+    # Nao existe mais hierarquia de transicao para usuarios com acesso ao
+    # modulo Laboratorio. A validacao acima garante apenas que o destino seja
+    # um status principal valido/ativo e preserva os antigos marcos que agora
+    # sao substatus. O bloqueio por versao continua protegendo edicoes
+    # concorrentes.
 
     previous = work_order.status
     if previous != payload.status:
         work_order.status = payload.status
         work_order.version += 1
-        if payload.status == "completed" and work_order.completed_at is None:
+        if payload.status in {"completed", "awaiting_pickup"} and work_order.completed_at is None:
             work_order.completed_at = datetime.now(UTC)
         work_order.is_cancelled = payload.status == "cancelled"
         db.add(

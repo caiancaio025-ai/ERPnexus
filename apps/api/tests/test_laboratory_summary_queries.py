@@ -65,6 +65,9 @@ async def test_work_order_summary_counts_uses_one_aggregate_query_and_preserves_
     assert "laboratory_work_orders.completed_at >= '2026-08-01'" in sql
     assert "laboratory_work_orders.status IN ('received', 'awaiting_analysis')" in sql
     assert "laboratory_work_orders.priority IN ('high', 'urgent')" in sql
+    assert "NOT (EXISTS (SELECT 1" in sql
+    assert "laboratory_work_order_substatuses.code = 'delivered'" in sql
+    assert "laboratory_work_order_substatuses.is_active IS true" in sql
 
 
 @pytest.mark.asyncio

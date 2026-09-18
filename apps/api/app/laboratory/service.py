@@ -2,10 +2,14 @@ from datetime import date
 import re
 from math import ceil
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.laboratory.models import LaboratoryEquipment, LaboratoryWorkOrder
+from app.laboratory.models import (
+    LaboratoryEquipment,
+    LaboratoryWorkOrder,
+    LaboratoryWorkOrderSubstatus,
+)
 from app.laboratory.status_flow import WORK_ORDER_STATUSES, can_transition  # noqa: F401
 
 TERMINAL_STATUSES = {"delivered", "invoiced", "cancelled", "no_repair"}
@@ -251,9 +255,21 @@ async def work_order_summary_counts(
     if completed_before is not None:
         completed_filters.append(LaboratoryWorkOrder.completed_at < completed_before)
 
+    delivered_substatus_active = exists(
+        select(1).where(
+            LaboratoryWorkOrderSubstatus.work_order_id == LaboratoryWorkOrder.id,
+            LaboratoryWorkOrderSubstatus.code == "delivered",
+            LaboratoryWorkOrderSubstatus.is_active.is_(True),
+        )
+    )
+    open_work_order = (
+        LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES)
+        & ~delivered_substatus_active
+    )
+
     statement = select(
         func.count(LaboratoryWorkOrder.id)
-        .filter(LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES))
+        .filter(open_work_order)
         .label("total_open"),
         func.count(LaboratoryWorkOrder.id)
         .filter(LaboratoryWorkOrder.status == "in_analysis")
@@ -276,7 +292,7 @@ async def work_order_summary_counts(
         func.count(LaboratoryWorkOrder.id)
         .filter(
             LaboratoryWorkOrder.priority.in_(("high", "urgent")),
-            LaboratoryWorkOrder.status.notin_(TERMINAL_STATUSES),
+            open_work_order,
         )
         .label("high_priority"),
         func.count(LaboratoryWorkOrder.id)

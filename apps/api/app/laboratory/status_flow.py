@@ -39,75 +39,21 @@ LEGACY_SUBSTATUS_TARGETS = {
     "delivered": "delivered",
 }
 
-# O NEXUS possui dois níveis de leitura do processo:
-# 1) marcos comerciais históricos (Entrada, Ag. Aprovação, Analisado, ...)
-# 2) etapas operacionais detalhadas (ag. peças, reparo, testes, ...)
-#
-# A matriz abaixo preserva governança sem obrigar o laboratório a percorrer
-# dezenas de cliques. O operador pode avançar para um marco comercial e, ao
-# mesmo tempo, Compras/Materiais continuam usando as etapas técnicas.
-ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "received": {"awaiting_analysis", "in_analysis", "awaiting_approval", "no_repair", "cancelled"},
-    "awaiting_analysis": {"in_analysis", "awaiting_approval", "no_repair", "cancelled"},
-    "in_analysis": {
-        "awaiting_quote",
-        "quote_sent",
-        "awaiting_approval",
-        "approved",
-        "in_repair",
-        "no_repair",
-        "cancelled",
-    },
-    "awaiting_quote": {"quote_sent", "awaiting_approval", "approved", "no_repair", "cancelled"},
-    "quote_sent": {"awaiting_approval", "approved", "rejected", "no_repair", "cancelled"},
-    "awaiting_approval": {"approved", "rejected", "no_repair", "cancelled"},
-    "approved": {
-        "awaiting_parts",
-        "in_repair",
-        "in_testing",
-        "completed",
-        "no_repair",
-        "cancelled",
-    },
-    "rejected": {"awaiting_approval", "approved", "no_repair", "cancelled"},
-    "awaiting_parts": {
-        "approved",
-        "in_repair",
-        "in_testing",
-        "completed",
-        "no_repair",
-        "cancelled",
-    },
-    "in_repair": {
-        "approved",
-        "awaiting_parts",
-        "in_testing",
-        "completed",
-        "no_repair",
-        "cancelled",
-    },
-    "in_testing": {"in_repair", "awaiting_parts", "completed", "no_repair", "cancelled"},
-    "completed": {"awaiting_pickup", "delivered", "invoiced", "warranty", "in_repair"},
-    "awaiting_pickup": {"delivered", "invoiced", "warranty", "in_repair"},
-    "delivered": {"invoiced", "warranty"},
-    "warranty": {
-        "in_analysis",
-        "approved",
-        "awaiting_parts",
-        "in_repair",
-        "in_testing",
-        "completed",
-        "no_repair",
-    },
-    "invoiced": {"warranty"},
-    "cancelled": {"received"},
-    "no_repair": {"awaiting_pickup", "delivered", "invoiced", "warranty", "in_analysis"},
-}
+# A partir deste checkpoint, usuarios com acesso ao modulo Laboratorio podem
+# selecionar livremente qualquer status principal valido. Os codigos abaixo
+# continuam reservados como substatus e nao podem voltar a ser gravados como
+# status principal.
+SELECTABLE_BUILTIN_STATUSES = set(WORK_ORDER_STATUSES) - set(LEGACY_SUBSTATUS_TARGETS)
 
 
 def can_transition(current: str, target: str) -> bool:
+    """Valida apenas a existencia do status; nao ha mais hierarquia operacional.
+
+    Status legados convertidos em substatus permanecem bloqueados como destino
+    principal para evitar duas fontes de verdade (status + substatus).
+    """
     if current not in WORK_ORDER_STATUSES or target not in WORK_ORDER_STATUSES:
         return False
-    if current == target:
-        return True
-    return target in ALLOWED_TRANSITIONS.get(current, set())
+    if target in LEGACY_SUBSTATUS_TARGETS:
+        return False
+    return True
