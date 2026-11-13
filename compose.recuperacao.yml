@@ -1,0 +1,95 @@
+name: sentico-v14-recuperado
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${SENTICO_DB_ROLE:-sentico_green}
+      POSTGRES_PASSWORD: ${SENTICO_RECOVERY_DB_PASSWORD:?Senha local de recuperacao ausente}
+    volumes:
+      - v14_pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5543:5432"
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [dev_private]
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      SENTICO_DB_NAME: ${SENTICO_DB_NAME:?Banco nao identificado}
+      SENTICO_DB_ROLE: ${SENTICO_DB_ROLE:-sentico_green}
+      PGOPTIONS: "-c default_transaction_read_only=off"
+      SENTICO_DEV_TEST_ACCOUNT: "0"  # Somente neste Compose isolado; nao copiar para producao.
+      DATABASE_URL: postgresql+psycopg://${SENTICO_DB_ROLE:-sentico_green}:${SENTICO_RECOVERY_DB_PASSWORD:?Senha local de recuperacao ausente}@db:5432/${SENTICO_DB_NAME:?Banco verificado ainda nao definido}
+      ALLOWED_HOSTS: localhost,127.0.0.1,api,gateway,testserver
+      CORS_ORIGINS: http://localhost:5183,http://127.0.0.1:5183,http://localhost:5184,http://127.0.0.1:5184
+      STORAGE_ROOT: /app/storage
+      TRACKING_BASE_URL: http://localhost:5184/e
+      SESSION_COOKIE_NAME: sentico_recuperado_session
+    volumes:
+      - ./apps/api:/app
+      - v14_uploads:/app/storage
+    ports:
+      - "127.0.0.1:8183:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [dev_private]
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: /api
+      VITE_API_PROXY_TARGET: http://api:8000
+    volumes:
+      - ./apps/web:/app
+      - v14_node_modules:/app/node_modules
+    ports:
+      - "127.0.0.1:5183:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [dev_private]
+
+  gateway:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5184:8080"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+    networks: [dev_private]
+
+networks:
+  dev_private:
+    internal: false
+volumes:
+  v14_pgdata:
+    external: true
+    name: ${SENTICO_PGDATA_VOLUME:-sentico-v14-recuperado_pgdata}
+  v14_uploads:
+    external: true
+    name: ${SENTICO_UPLOADS_VOLUME:-sentico-v14-recuperado_uploads}
+  v14_node_modules:
+    external: true
+    name: ${SENTICO_NODE_VOLUME:-sentico-v14-recuperado_node_modules}

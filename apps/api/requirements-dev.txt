@@ -1,0 +1,1 @@
+-e .[auth,ai,dev]

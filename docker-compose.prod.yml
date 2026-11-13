@@ -1,0 +1,105 @@
+# Stack de produção do Sêntico Green (reconstruído a partir dos containers em execução).
+# Projeto sentico-green-hml. REAPROVEITA os volumes e a rede externa existentes — nunca recria/apaga dados.
+name: sentico-green-hml
+
+services:
+  db:
+    image: postgres:17-alpine
+    env_file: .env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - green_postgres_data:/var/lib/postgresql/data
+    networks:
+      - green_private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./apps/api
+    image: sentico-green-api:${TAG}
+    env_file: .env.production
+    expose:
+      - "8000"
+    networks:
+      - green_private
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    volumes:
+      - green_uploads_data:/app/storage
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 1.0
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    image: sentico-green-web:${TAG}
+    expose:
+      - "8080"
+    networks:
+      - green_private
+    read_only: true
+    tmpfs: ["/config", "/data", "/tmp"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+  gateway:
+    image: caddy:2.10-alpine
+    volumes:
+      - ./Caddyfile.green:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:18089:8080"
+    networks:
+      green_private:
+        aliases: [gateway]
+      sentico-cutover-proxy:
+        aliases: [sentico-green-route]
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+networks:
+  # Rede interna do stack (compose cria/reaproveita sentico-green-hml_green_private).
+  green_private:
+    name: sentico-green-hml_green_private
+  # Rede compartilhada com o edge (nexus-prod-caddy) — já existe, não é gerenciada aqui.
+  sentico-cutover-proxy:
+    external: true
+
+volumes:
+  # Volumes EXISTENTES, declarados como externos: o compose os usa, mas NUNCA os cria nem apaga.
+  green_postgres_data:
+    external: true
+    name: sentico-green-hml_green_postgres_data
+  green_uploads_data:
+    external: true
+    name: sentico-green-hml_green_uploads_data

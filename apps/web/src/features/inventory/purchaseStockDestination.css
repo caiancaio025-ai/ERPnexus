@@ -1,0 +1,15 @@
+.purchase-stock-target{border:1px solid rgba(101,158,208,.45);border-radius:12px;padding:16px;margin:14px 0;background:#102b4b;color:#eaf3fc;display:grid;gap:12px;min-width:0}
+.purchase-stock-target legend{padding:0 8px;font-weight:700;color:#eaf3fc;font-size:14px}
+.purchase-stock-target p{font-size:12px;margin:0;color:#c7dbed;line-height:1.5}
+.purchase-stock-target label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:#eaf3fc;min-width:0}
+.purchase-stock-target select,.purchase-stock-target input{box-sizing:border-box;width:100%;min-width:0;border:1px solid #799abd;border-radius:8px;padding:10px;background:#f8fbff;color:#152c45;font:inherit}
+.purchase-stock-target-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.purchase-stock-target .stock-picker-warning{color:#ffd9a6;font-weight:600}
+.purchase-stock-target .purchase-stock-location-tip{grid-column:1/-1}
+.purchase-stock-target:disabled{opacity:.8}
+
+/* Campos dentro da seleção de Estoque seguem o tema azul-marinho. */
+.purchase-stock-target select,.purchase-stock-target input{background:#09243a;color:#eaf6ff;border-color:#3a7091;}
+.purchase-stock-target input:read-only{background:#17354a;color:#b9dced;}
+.purchase-stock-target input::placeholder{color:#a0c0d5;}
+.purchase-stock-target :is(input,select):focus-visible{outline:2px solid #61bcef;outline-offset:1px;}

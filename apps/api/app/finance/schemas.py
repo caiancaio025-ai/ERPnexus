@@ -1,0 +1,500 @@
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+EntryType = Literal["income", "expense"]
+EntryStatus = Literal["pending", "paid", "received", "cancelled"]
+CompanyCode = Literal["universo_eletronica", "universo_automacao", "solucoes_eletronica"]
+ExpenseKind = Literal["fixed", "tax", "salary", "supplier", "variable"]
+InvoiceType = Literal["nfse", "nfe"]
+DateBasis = Literal["posting", "issue", "due", "settlement"]
+
+
+class FinanceKpi(BaseModel):
+    label: str
+    value: float
+    detail: str
+    tone: Literal["positive", "negative", "warning", "neutral"]
+
+
+class FinanceEvent(BaseModel):
+    id: int
+    description: str
+    amount: float
+    due_date: date
+    due_label: str
+    entry_type: EntryType
+    status: Literal["overdue", "due_soon", "on_time", "settled"]
+    company_code: CompanyCode
+    bank_name: str | None = None
+    counterparty_name: str | None = None
+
+
+class CashFlowPoint(BaseModel):
+    label: str
+    income: float
+    expense: float
+    balance: float
+
+
+class ForecastItem(BaseModel):
+    id: int
+    entry_type: EntryType
+    counterparty_name: str
+    description: str
+    amount: float
+
+
+class ForecastPoint(BaseModel):
+    date: date
+    income: float
+    expense: float
+    net: float
+    items: list[ForecastItem] = Field(default_factory=list)
+
+
+class WeeklyForecastPoint(BaseModel):
+    week_number: int
+    start_date: date
+    end_date: date
+    opening_balance: float
+    income: float
+    expense: float
+    overdue_income: float
+    overdue_expense: float
+    net: float
+    closing_balance: float
+    entry_count: int
+
+
+class AgingBucket(BaseModel):
+    key: str
+    label: str
+    income: float
+    expense: float
+    count: int
+
+
+class MonthlyFlowPoint(BaseModel):
+    month: int
+    label: str
+    income: float
+    expense: float
+    settled_income: float
+    settled_expense: float
+    pending_income: float
+    pending_expense: float
+    result: float
+
+
+class FinanceSummary(BaseModel):
+    current_balance: float
+    period_income: float
+    period_expense: float
+    period_result: float
+    settled_income: float
+    settled_expense: float
+    pending_income: float
+    pending_expense: float
+    overdue_income: float
+    overdue_expense: float
+    period_entry_count: int
+    period_income_count: int
+    period_expense_count: int
+    period_start: date
+    period_end: date
+    date_basis: DateBasis
+    projected_balance: float
+    overdue_count: int
+    due_soon_count: int
+    kpis: list[FinanceKpi]
+    urgent_events: list[FinanceEvent]
+    income_events: list[FinanceEvent]
+    expense_events: list[FinanceEvent]
+    cash_flow: list[CashFlowPoint]
+    forecast_flow: list[ForecastPoint]
+    weekly_forecast_13w: list[WeeklyForecastPoint]
+    aging: list[AgingBucket]
+    monthly_flow: list[MonthlyFlowPoint]
+
+
+class FinancialEntryBase(BaseModel):
+    entry_type: EntryType
+    company_code: CompanyCode
+    invoice_type: InvoiceType | None = None
+    series: str | None = Field(default=None, max_length=40)
+    nfse_number: str | None = Field(default=None, max_length=80)
+    nfe_number: str | None = Field(default=None, max_length=80)
+    counterparty_name: str = Field(min_length=2, max_length=180)
+    description: str = Field(min_length=3, max_length=180)
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    issue_date: date
+    posting_date: date
+    due_date: date
+    bank_name: str = Field(min_length=2, max_length=80)
+    expense_kind: ExpenseKind | None = None
+    account_id: int | None = None
+    category_id: int | None = None
+    document_number: str | None = Field(default=None, max_length=80)
+    payment_code: str | None = Field(default=None, max_length=600)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def normalize_business_fields(self):
+        # "Brasil" era o nome histórico usado no SQLite da Universo Automação.
+        # Normalizamos no write para que registros legados continuem editáveis.
+        if self.company_code == "universo_automacao" and self.bank_name.strip().casefold() == "brasil":
+            self.bank_name = "Banco do Brasil"
+
+        allowed_banks = {
+            "universo_eletronica": {"Itaú", "Bradesco"},
+            "universo_automacao": {"Banco do Brasil", "Bradesco"},
+            "solucoes_eletronica": {"Bradesco"},
+        }
+        if self.bank_name not in allowed_banks[self.company_code]:
+            raise ValueError("Banco não permitido para a empresa selecionada.")
+
+        if self.entry_type == "expense":
+            if self.expense_kind is None:
+                raise ValueError("Informe a classificação da despesa.")
+            self.invoice_type = None
+            self.nfse_number = None
+            self.nfe_number = None
+        else:
+            self.expense_kind = None
+            nfse = (self.nfse_number or "").strip()
+            nfe = (self.nfe_number or "").strip()
+            self.nfse_number = nfse or None
+            self.nfe_number = nfe or None
+            if nfse and not nfe:
+                self.invoice_type = "nfse"
+            elif nfe and not nfse:
+                self.invoice_type = "nfe"
+            else:
+                self.invoice_type = None
+            self.document_number = None
+        return self
+
+
+class BillingConfirmation(BaseModel):
+    purchase_order_number: str | None = Field(default=None, max_length=120)
+    customer_order_number: str | None = Field(default=None, max_length=120)
+    measurement_reference: str | None = Field(default=None, max_length=120)
+    service_report_confirmed: bool = False
+    portal_submitted: bool = False
+    portal_protocol: str | None = Field(default=None, max_length=180)
+    invoice_email_confirmed: bool = False
+    xml_email_confirmed: bool = False
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class FinancialEntryInput(FinancialEntryBase):
+    work_order_id: int | None = None
+    billing_confirmation: BillingConfirmation | None = None
+
+    @model_validator(mode="after")
+    def require_invoice_for_new_income(self):
+        # Regra apenas para NOVOS lançamentos. Registros históricos importados
+        # podem não possuir NFS-e/NF-e e precisam continuar editáveis.
+        if self.entry_type == "income" and not self.nfse_number and not self.nfe_number:
+            raise ValueError("Informe o número da NFS-e ou da NF-e.")
+        return self
+
+
+class FinancialEntryUpdate(FinancialEntryBase):
+    work_order_id: int | None = None
+    billing_confirmation: BillingConfirmation | None = None
+
+
+class FinancialEntryOutput(BaseModel):
+    """Projection used when reading persisted rows.
+
+    Legacy imports can legitimately contain historical records that do not satisfy
+    today's creation rules (for example an old income without NFS-e/NF-e metadata).
+    Read models therefore must not inherit the input validators used for new writes.
+    """
+
+    id: int
+    obligation_id: int | None = None
+    installment_number: int | None = None
+    entry_type: EntryType
+    company_code: CompanyCode
+    invoice_type: InvoiceType | None = None
+    series: str | None = None
+    nfse_number: str | None = None
+    nfe_number: str | None = None
+    counterparty_name: str
+    description: str
+    amount: Decimal
+    issue_date: date
+    posting_date: date
+    due_date: date
+    bank_name: str
+    expense_kind: ExpenseKind | None = None
+    account_id: int | None = None
+    category_id: int | None = None
+    document_number: str | None = None
+    payment_code: str | None = None
+    notes: str | None = None
+    status: EntryStatus
+    settlement_date: date | None = None
+    attachment_name: str | None = None
+    attachment_mime: str | None = None
+    work_order_id: int | None = None
+    billing_compliance: dict | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkOrderReceivablesOutput(BaseModel):
+    """Recebimentos por OS, sem restringir o vencimento a um mês."""
+    work_order_id: int
+    work_order_number: str
+    company_code: CompanyCode
+    customer_name: str
+    approved_value: Decimal | None = None
+    total_registered: Decimal
+    total_received: Decimal
+    total_pending: Decimal
+    remaining_to_issue: Decimal | None = None
+    installments: list[FinancialEntryOutput]
+
+
+class FinancialEntryPage(BaseModel):
+    items: list[FinancialEntryOutput]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+
+class FinancialInstallmentInput(BaseModel):
+    installment_number: int = Field(ge=1)
+    due_date: date
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    payment_code: str | None = Field(default=None, max_length=600)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class FinancialObligationInput(BaseModel):
+    entry_type: EntryType
+    company_code: CompanyCode
+    invoice_type: InvoiceType | None = None
+    series: str | None = Field(default=None, max_length=40)
+    nfse_number: str | None = Field(default=None, max_length=80)
+    nfe_number: str | None = Field(default=None, max_length=80)
+    counterparty_name: str = Field(min_length=2, max_length=180)
+    description: str = Field(min_length=3, max_length=180)
+    total_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    issue_date: date
+    posting_date: date
+    bank_name: str = Field(min_length=2, max_length=80)
+    expense_kind: ExpenseKind | None = None
+    account_id: int | None = None
+    category_id: int | None = None
+    document_number: str | None = Field(default=None, max_length=80)
+    notes: str | None = Field(default=None, max_length=2000)
+    work_order_id: int | None = None
+    billing_confirmation: BillingConfirmation | None = None
+    installments: list[FinancialInstallmentInput] = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_obligation(self):
+        if (
+            self.company_code == "universo_automacao"
+            and self.bank_name.strip().casefold() == "brasil"
+        ):
+            self.bank_name = "Banco do Brasil"
+
+        allowed_banks = {
+            "universo_eletronica": {"Itaú", "Bradesco"},
+            "universo_automacao": {"Banco do Brasil", "Bradesco"},
+            "solucoes_eletronica": {"Bradesco"},
+        }
+        if self.bank_name not in allowed_banks[self.company_code]:
+            raise ValueError("Banco não permitido para a empresa selecionada.")
+
+        if self.entry_type == "expense":
+            if self.expense_kind is None:
+                raise ValueError("Informe a classificação da despesa.")
+            self.invoice_type = None
+            self.nfse_number = None
+            self.nfe_number = None
+        else:
+            self.expense_kind = None
+            nfse = (self.nfse_number or "").strip()
+            nfe = (self.nfe_number or "").strip()
+            self.nfse_number = nfse or None
+            self.nfe_number = nfe or None
+            if nfse and not nfe:
+                self.invoice_type = "nfse"
+            elif nfe and not nfse:
+                self.invoice_type = "nfe"
+            else:
+                self.invoice_type = None
+            self.document_number = None
+            if not self.nfse_number and not self.nfe_number:
+                raise ValueError("Informe o número da NFS-e ou da NF-e.")
+
+        ordered_numbers = sorted(item.installment_number for item in self.installments)
+        expected_numbers = list(range(1, len(self.installments) + 1))
+        if ordered_numbers != expected_numbers:
+            raise ValueError(
+                "As parcelas devem ser numeradas sequencialmente de 1 até a quantidade informada."
+            )
+
+        installment_total = sum(
+            (item.amount for item in self.installments),
+            start=Decimal("0.00"),
+        )
+        if installment_total != self.total_amount:
+            raise ValueError(
+                "A soma das parcelas deve ser igual ao valor total da obrigação."
+            )
+        return self
+
+
+class FinancialScheduleInstallmentInput(FinancialInstallmentInput):
+    # Mantém a identidade da parcela ao reorganizar ou excluir uma linha.
+    entry_id: int | None = Field(default=None, ge=1)
+
+
+class FinancialScheduleUpdate(BaseModel):
+    total_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    installments: list[FinancialScheduleInstallmentInput] = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        original_ids = [row.entry_id for row in self.installments if row.entry_id is not None]
+        if len(original_ids) != len(set(original_ids)):
+            raise ValueError("A mesma parcela não pode aparecer duas vezes.")
+        if sorted(row.installment_number for row in self.installments) != list(range(1, len(self.installments) + 1)):
+            raise ValueError("Numeração das parcelas deve ser sequencial.")
+        if sum((row.amount for row in self.installments), start=Decimal("0.00")) != self.total_amount:
+            raise ValueError("A soma das parcelas deve ser igual ao valor total.")
+        return self
+
+
+class FinancialObligationOutput(BaseModel):
+    id: int
+    entry_type: EntryType
+    company_code: CompanyCode
+    nfse_number: str | None = None
+    nfe_number: str | None = None
+    document_number: str | None = None
+    counterparty_name: str
+    description: str
+    total_amount: Decimal
+    installment_count: int
+    work_order_id: int | None = None
+    created_at: datetime
+    installments: list[FinancialEntryOutput]
+
+
+class SettlementInput(BaseModel):
+    settlement_date: date
+
+
+class FinanceWorkOrderOption(BaseModel):
+    id: int
+    number: str
+    company_code: str
+    customer_name: str
+    equipment_label: str
+    status: str
+    approved_value: Decimal | None = None
+
+
+class BillingChecklistItem(BaseModel):
+    key: str
+    label: str
+    required: bool
+    evidence_type: str
+    configured_value: str | None = None
+
+
+class BillingReadiness(BaseModel):
+    work_order_id: int
+    work_order_number: str
+    customer_id: int | None
+    customer_name: str
+    approved_value: Decimal | None
+    portal_url: str | None
+    invoice_email: str | None
+    xml_email: str | None
+    billing_instructions: str | None
+    financial_notes: str | None
+    items: list[BillingChecklistItem]
+
+
+class AuditOutput(BaseModel):
+    id: int
+    entity_type: str
+    entity_id: int
+    action: str
+    description: str
+    user_id: int
+    user_name: str
+    before_data: dict | None
+    after_data: dict | None
+    created_at: datetime
+
+
+class FinancialPeriodAction(BaseModel):
+    company_code: CompanyCode
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+
+
+class FinancialPeriodClosureOutput(BaseModel):
+    id: int
+    company_code: CompanyCode
+    year: int
+    month: int
+    is_closed: bool
+    snapshot_data: dict
+    closed_by: int
+    closed_at: datetime
+    reopened_by: int | None = None
+    reopened_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class FinancialAlertAcknowledgmentInput(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class FinancialAlertAcknowledgmentOutput(BaseModel):
+    entry_id: int
+    fingerprint: str
+    note: str | None = None
+    acknowledged_by: int
+    acknowledged_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TransferInput(BaseModel):
+    source_account_id: int
+    destination_account_id: int
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    transfer_date: date
+    reason: str = Field(min_length=3, max_length=240)
+
+    @model_validator(mode="after")
+    def validate_accounts(self):
+        if self.source_account_id == self.destination_account_id:
+            raise ValueError("A conta de origem deve ser diferente da conta de destino.")
+        return self
+
+
+class TransferOutput(TransferInput):
+    id: int
+    created_at: datetime
+    model_config = {"from_attributes": True}

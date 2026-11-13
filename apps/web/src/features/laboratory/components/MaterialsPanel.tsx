@@ -1,0 +1,128 @@
+import { useEffect, useMemo, useState } from "react";
+import { ExternalLink, PackagePlus, RefreshCw, ShoppingCart, Truck, Boxes } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import { apiClient } from "../../../shared/api/apiClient";
+import { InventoryUsePanel } from "../../inventory/InventoryUsePanel";
+import { PurchaseStockDestination, emptyStockDestination, stockDestinationPayload } from "../../inventory/PurchaseStockDestination";
+import type { MaterialRequest, MaterialRequestStatus, Priority } from "../types";
+
+const statusLabels: Record<MaterialRequestStatus, string> = {
+  awaiting_approval: "Aguardando aprovação",
+  approved: "Aprovado",
+  rejected: "Reprovado",
+  purchasing: "Em compras",
+  purchased: "Comprado",
+  in_transit: "Em trânsito",
+  received: "Recebido",
+  delivered_to_lab: "Entregue ao laboratório",
+  cancelled: "Cancelado",
+};
+
+function blocker(items: MaterialRequest[]) {
+  const open = items.filter((item) => !["delivered_to_lab", "cancelled", "rejected"].includes(item.status));
+  if (!open.length) return { tone: "ok", title: "Sem bloqueio de material", detail: "Nenhuma peça pendente nesta O.S." };
+  if (open.some((item) => item.status === "awaiting_approval")) return { tone: "warn", title: "Aguardando aprovação", detail: `${open.filter((i) => i.status === "awaiting_approval").length} solicitação(ões) precisa(m) de aprovação.` };
+  if (open.some((item) => ["approved", "purchasing"].includes(item.status))) return { tone: "warn", title: "Aguardando compras", detail: "Há material aprovado ainda não comprado." };
+  if (open.some((item) => ["purchased", "in_transit"].includes(item.status))) return { tone: "info", title: "Aguardando peças", detail: "Material comprado e aguardando recebimento." };
+  if (open.some((item) => item.status === "received")) return { tone: "ok", title: "Material recebido", detail: "Peça recebida e aguardando entrega ao laboratório." };
+  return { tone: "info", title: "Pendência de material", detail: "Existe uma solicitação em andamento." };
+}
+
+export function MaterialsPanel({ workOrderId, onInventoryChange }: { workOrderId: number; onInventoryChange?:()=>Promise<void>|void }) {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<MaterialRequest[]>([]);
+  const [itemName, setItemName] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [priority, setPriority] = useState<Priority>("normal");
+  const [technicalNote, setTechnicalNote] = useState("");
+  const [suggestedLink, setSuggestedLink] = useState("");
+  const [companyCode, setCompanyCode] = useState("");
+  const [stockTarget, setStockTarget] = useState(emptyStockDestination);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [activeAction, setActiveAction] = useState<"stock" | "purchase">("stock");
+  const [showPurchaseDestination, setShowPurchaseDestination] = useState(false);
+
+  async function load() {
+    try {
+      setItems(await apiClient.get<MaterialRequest[]>(`/laboratory/work-orders/${workOrderId}/materials`));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Falha ao carregar materiais.");
+    }
+  }
+
+  useEffect(() => {
+    setStockTarget(emptyStockDestination);
+    void load();
+    void apiClient.get<{ company_code: string }>(`/laboratory/work-orders/${workOrderId}`).then(order => setCompanyCode(order.company_code)).catch(() => setCompanyCode(""));
+  }, [workOrderId]);
+  const currentBlocker = useMemo(() => blocker(items), [items]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!itemName.trim()) return;
+    setSaving(true); setError("");
+    try {
+      await apiClient.post(`/laboratory/work-orders/${workOrderId}/materials`, {
+        item_name: itemName.trim(), quantity: Number(quantity), priority,
+        technical_note: technicalNote.trim() || null, suggested_link: suggestedLink.trim() || null,
+        ...stockDestinationPayload(stockTarget),
+      });
+      setItemName(""); setQuantity("1"); setTechnicalNote(""); setSuggestedLink(""); setPriority("normal"); setStockTarget(emptyStockDestination);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível criar a solicitação.");
+    } finally { setSaving(false); }
+  }
+
+  return <div className="lab-materials lab-materials-v7">
+    <div className={`lab-material-blocker ${currentBlocker.tone}`}>
+      <div><strong>{currentBlocker.title}</strong><span>{currentBlocker.detail}</span></div>
+      <div className="lab-material-nav-actions"><button onClick={() => navigate("/compras?view=requests")}><ShoppingCart size={15}/>Abrir em Compras</button><button onClick={() => void load()} title="Atualizar"><RefreshCw size={16} /></button></div>
+    </div>
+
+    <div className="lab-material-action-switch" role="group" aria-label="Escolha como obter o material">
+      <button type="button" className={activeAction === "stock" ? "active" : ""} aria-pressed={activeAction === "stock"} onClick={() => setActiveAction("stock")}>
+        <span className="lab-action-icon"><Boxes size={21}/></span>
+        <span><strong>Usar peça do estoque</strong><small>Buscar material disponível e dar baixa na OS</small></span>
+      </button>
+      <button type="button" className={activeAction === "purchase" ? "active" : ""} aria-pressed={activeAction === "purchase"} onClick={() => setActiveAction("purchase")}>
+        <span className="lab-action-icon"><ShoppingCart size={21}/></span>
+        <span><strong>Solicitar compra</strong><small>Criar solicitação e acompanhar o recebimento</small></span>
+      </button>
+    </div>
+    {activeAction === "stock" && <InventoryUsePanel workOrderId={workOrderId} onMovementChange={onInventoryChange} />}
+    {activeAction === "purchase" && <form className="lab-material-form lab-material-purchase" onSubmit={submit}>
+      <div className="lab-material-form-title"><PackagePlus size={18} /><div><strong>Solicitar material</strong><span>A solicitação entra automaticamente na fila de Compras.</span></div></div>
+      <div className="lab-material-grid">
+        <label className="wide">Peça / componente<input required value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ex.: IGBT FS450R12KE4" /></label>
+        <label>Qtd.<input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label>
+        <label>Prioridade<select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}><option value="low">Baixa</option><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label>
+        <label className="wide">Observação técnica<textarea rows={3} value={technicalNote} onChange={(e) => setTechnicalNote(e.target.value)} placeholder="Motivo da substituição, especificação, referência..." /></label>
+        <label className="wide">Link sugerido<input value={suggestedLink} onChange={(e) => setSuggestedLink(e.target.value)} placeholder="https://..." /></label>
+      </div>
+      <details className="lab-material-purchase-destination" open={showPurchaseDestination} onToggle={e => setShowPurchaseDestination(e.currentTarget.open)}>
+        <summary>Planejar a entrada no Estoque <span>Opcional agora · obrigatório ao receber</span></summary>
+        <p>Você pode decidir mais tarde em Compras. Se já souber o item que receberá, selecione-o aqui.</p>
+        <PurchaseStockDestination companyCode={companyCode} quantity={Number(quantity) || 1} value={stockTarget} onChange={setStockTarget} source="laboratory" />
+      </details>
+      {error && <div className="lab-material-error">{error}</div>}
+      <button className="lab-material-submit" disabled={saving}>{saving ? "Enviando..." : "Enviar para aprovação"}</button>
+    </form>}
+
+    <div className="lab-material-list">
+      {items.map((item) => <article key={item.id}>
+        <div className="lab-material-main"><div className="lab-material-code">{item.code}</div><strong>{item.item_name}</strong><span>{item.quantity} un. · solicitado por {item.requester_name}</span>{item.technical_note && <p>{item.technical_note}</p>}</div>
+        <div className="lab-material-meta">
+          <span className={`material-status ${item.status}`}>{statusLabels[item.status]}</span>
+          {item.supplier_name && <small><ShoppingCart size={13} />{item.supplier_name}</small>}
+          {item.expected_delivery_date && <small><Truck size={13} />Prev. {new Date(`${item.expected_delivery_date}T12:00:00`).toLocaleDateString("pt-BR")}</small>}
+          {item.purchase_reference && <small>Compra: {item.purchase_reference}</small>}
+          {item.purchase_link && <a href={item.purchase_link} target="_blank" rel="noreferrer"><ExternalLink size={13} />Abrir compra</a>}
+        </div>
+      </article>)}
+      {!items.length && <div className="lab-empty">Nenhum material solicitado para esta O.S.</div>}
+    </div>
+  </div>;
+}

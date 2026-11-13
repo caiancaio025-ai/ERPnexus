@@ -1,0 +1,13 @@
+{
+  "name": "SÊNTICO ERP",
+  "short_name": "SÊNTICO",
+  "description": "SÊNTICO · Gestão operacional integrada",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06111d",
+  "theme_color": "#102b26",
+  "icons": [
+    {"src": "/sentico-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/sentico-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

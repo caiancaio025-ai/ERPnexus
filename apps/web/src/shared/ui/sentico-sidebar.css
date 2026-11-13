@@ -1,0 +1,251 @@
+/* Identidade e geometria do menu são únicas em todos os módulos SÊNTICO. */
+.sentico-shell {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 100vh;
+  width: 100%;
+}
+.sentico-shell > .sentico-content {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding: 32px clamp(20px, 3vw, 42px) 48px !important;
+}
+.sentico-shell > .sentico-sidebar {
+  position: sticky !important;
+  inset: auto;
+  top: 0;
+  z-index: 35;
+  flex: 0 0 260px;
+  width: 260px;
+  min-width: 0;
+  height: 100vh;
+  padding: 16px 12px 14px;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+  overflow: hidden;
+  border-right: 1px solid rgba(109,190,231,.19);
+  background: #071725;
+  color: #eaf6ff;
+  font-family: inherit;
+  box-shadow: 9px 0 30px rgba(0,0,0,.08);
+  transition: flex-basis .22s ease, width .22s ease;
+}
+.sentico-shell > .sentico-sidebar--collapsed {
+  flex-basis: 80px;
+  width: 80px;
+  padding-inline: 10px;
+}
+.sentico-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 74px;
+  height: 74px;
+  gap: 5px;
+  padding: 2px 3px 14px;
+  border-bottom: 1px solid rgba(109,190,231,.16);
+}
+.sentico-sidebar__logo {
+  min-width: 0;
+  min-height: 48px;
+  flex: 1;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+}
+.sentico-sidebar__logo .sentico-mark {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 166px;
+  background: transparent;
+  border: 0;
+}
+.sentico-sidebar__logo .sentico-mark img { display: block; width: 100%; height: auto; max-height: 56px; object-fit: contain; object-position: left center; }
+.sentico-sidebar__collapse {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(109,190,231,.23);
+  border-radius: 9px;
+  background: #0d2940;
+  color: #b1d9f4;
+}
+.sentico-sidebar__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #294a61 transparent;
+}
+.sentico-sidebar__section-heading {
+  margin: 11px 8px 8px;
+  color: #87aabc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .135em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sentico-sidebar__section-heading--module {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(109,190,231,.16);
+}
+.sentico-sidebar__nav { display: grid; align-content: start; gap: 3px; }
+.sentico-shell .sentico-sidebar__item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 39px;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #adc2d2;
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  text-decoration: none;
+  box-shadow: none;
+  transform: none;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.sentico-sidebar__item svg { flex: 0 0 19px; }
+.sentico-sidebar__item span { min-width: 0; }
+.sentico-shell .sentico-sidebar__item:hover,
+.sentico-shell .sentico-sidebar__item:focus-visible {
+  transform: none !important;
+  background: #102e45;
+  color: #f3fbff;
+}
+.sentico-shell .sentico-sidebar__item.is-active {
+  border-color: rgba(67,198,255,.22);
+  background: #11364e;
+  color: #f1faff;
+  box-shadow: inset 3px 0 #43c6ff;
+}
+.sentico-shell .sentico-sidebar__item.is-active svg { color: #63d3ff; }
+.sentico-shell .sentico-sidebar__item--sub { min-height: 36px; font-size: 12px; }
+.sentico-sidebar__footer {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(109,190,231,.17);
+}
+.sentico-sidebar__profile { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 5px; }
+.sentico-sidebar__avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #207396;
+  border-radius: 50%;
+  background: #133248;
+  color: #85dcff;
+  font-size: 12px;
+  font-weight: 850;
+}
+.sentico-sidebar__profile-text { display: grid; min-width: 0; gap: 2px; }
+.sentico-sidebar__profile-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sentico-sidebar__profile-text small { font-size: 11px; color: #85a2b7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sentico-shell .sentico-sidebar__logout { color: #ffc0c8; }
+.sentico-shell .sentico-sidebar__logout:hover { background: #381e2a; color: #fff; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__header { flex-direction: column; height: 105px; flex-basis: 105px; padding: 3px 0 9px; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__logo { flex: 0 0 49px; min-height: 49px; width: 100%; justify-content: center; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__logo .sentico-mark { max-width: 38px; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__logo img { max-height: 40px; object-position: center; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__collapse { flex: 0 0 28px; height: 28px; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__section-heading { overflow: hidden; font-size: 0; height: 7px; margin-block: 6px; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__section-heading--module { height: 14px; padding-top: 12px; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__item { justify-content: center; padding: 10px 0; gap: 0; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__item span,
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__profile-text { display: none; }
+.sentico-shell > .sentico-sidebar--collapsed .sentico-sidebar__profile { justify-content: center; padding: 0; }
+.sentico-mobile-menu, .sentico-sidebar-backdrop { display: none; }
+
+@media (max-width: 980px) {
+  .sentico-shell { display: block !important; }
+  .sentico-shell > .sentico-content {
+    width: 100%;
+    padding: 76px 18px 32px !important;
+  }
+  .sentico-mobile-menu {
+    position: fixed;
+    z-index: 38;
+    top: 15px;
+    left: 16px;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #28516b;
+    border-radius: 11px;
+    background: #0b2940;
+    color: #e2f4ff;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+  }
+  .sentico-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 34;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgba(2,8,16,.72);
+  }
+  .sentico-shell > .sentico-sidebar,
+  .sentico-shell > .sentico-sidebar--collapsed {
+    position: fixed !important;
+    z-index: 36;
+    top: 0;
+    left: 0;
+    width: min(280px, calc(100vw - 48px));
+    height: 100dvh;
+    padding: 72px 12px 14px;
+    transform: translateX(-110%);
+    transition: transform .2s ease;
+  }
+  .sentico-shell > .sentico-sidebar--mobile-open { transform: translateX(0); }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__header { height: 65px; flex-basis: 65px; flex-direction: row; padding: 0 3px 10px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__logo { flex: 1; width: auto; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__logo .sentico-mark { max-width: 166px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__section-heading { font-size: 10px; height: auto; margin: 11px 8px 8px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__section-heading--module { height: auto; padding-top: 16px; margin-top: 18px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__item { justify-content: flex-start; padding: 9px 11px; gap: 11px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__item span,
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__profile-text { display: initial; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__profile { justify-content: flex-start; padding: 0 5px; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__collapse { display: none; }
+  .sentico-shell > .sentico-sidebar .sentico-sidebar__item span { display: inline; }
+  .sentico-shell .mobile-menu-button { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sentico-shell > .sentico-sidebar { transition: none; }
+}

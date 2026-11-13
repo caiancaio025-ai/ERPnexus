@@ -1,0 +1,638 @@
+# pyright: basic
+from __future__ import annotations
+
+from decimal import Decimal
+from html import escape
+from io import BytesIO
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from reportlab.graphics.barcode import qr
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen.canvas import Canvas
+from reportlab.platypus import Image as PlatypusImage
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from app.core.config import settings
+
+if TYPE_CHECKING:
+    from app.laboratory.models import (
+        LaboratoryCustomer,
+        LaboratoryEquipment,
+        LaboratoryQuote,
+        LaboratoryWorkOrder,
+    )
+
+DEFAULT_COMPANY = {
+    "legal_name": "Empresa Demonstração Industrial",
+    "document": "00.000.000/0000-00",
+    "email": "contato@empresa.example",
+    "phone": "00 00000-0000",
+    "address": "Rua Exemplo, 100",
+    "city": "Recife",
+    "state": "PE",
+}
+BLUE = colors.HexColor("#245681")
+DARK = colors.HexColor("#344454")
+MUTED = colors.HexColor("#5f8199")
+CYAN = colors.HexColor("#10acd2")
+LIGHT = colors.HexColor("#f6f8fa")
+GRID = colors.HexColor("#d9e0e6")
+SOFT_BLUE = colors.HexColor("#eef5fa")
+ASSET_DIR = Path(__file__).with_name("assets")
+GEAR_LOGO = ASSET_DIR / "gear_logo.png"
+GEAR_WATERMARK = ASSET_DIR / "gear_watermark.png"
+
+
+def money(value: Decimal) -> str:
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _safe(value: object | None, fallback: str = "Não informado") -> str:
+    raw = str(value).strip() if value not in (None, "") else fallback
+    return escape(raw)
+
+
+def _effective_validity_days(quote: object) -> int:
+    """Normaliza registros legados gravados com validade 0 para o padrao de 30 dias."""
+    value = int(getattr(quote, "validity_days", 0) or 0)
+    return value if value > 0 else 30
+
+
+def _entry_invoice_text(work_order: object) -> str:
+    """Retorna a NF de entrada cadastrada na O.S. para exibicao no orcamento."""
+    value = str(getattr(work_order, "entry_invoice", "") or "").strip()
+    return value or "Não informada"
+
+
+def _section_title(text: str, style: ParagraphStyle) -> Table:
+    return Table(
+        [[Paragraph(_safe(text), style)]],
+        colWidths=[174 * mm],
+        style=TableStyle([
+            ("LINEBELOW", (0, 0), (-1, -1), 0.45, GRID),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]),
+    )
+
+
+def _text_panel(text: object | None, style: ParagraphStyle, min_height: float = 13 * mm) -> Paragraph:
+    """Painel textual divisível entre páginas.
+
+    Um ``Table`` de célula única não pode se dividir quando o laudo cresce além
+    do espaço restante da página. Usar ``Paragraph`` com borda/fundo preserva
+    a leitura visual e permite que o ReportLab quebre conteúdo longo de forma
+    natural, sem ``LayoutError`` nem páginas quase vazias.
+    """
+    del min_height  # compatibilidade com chamadas antigas; a altura agora é natural.
+    panel_style = ParagraphStyle(
+        f"{style.name}-panel",
+        parent=style,
+        backColor=LIGHT,
+        borderColor=GRID,
+        borderWidth=0.45,
+        borderPadding=(7, 8, 7, 8),
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+    return Paragraph(_safe(text).replace("\n", "<br/>"), panel_style)
+
+
+def _info_card(title: str, rows: list[tuple[str, object | None]], body: ParagraphStyle, title_style: ParagraphStyle) -> Table:
+    flowables: list[object] = [Paragraph(_safe(title), title_style), Spacer(1, 2)]
+    for label, value in rows:
+        flowables.append(Paragraph(f"<b>{_safe(label, '')}:</b> {_safe(value)}", body))
+        flowables.append(Spacer(1, 2.2))
+    return Table(
+        [[flowables]],
+        colWidths=[82.5 * mm],
+        style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.45, GRID),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 9),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]),
+    )
+
+
+def quote_pdf(
+    work_order: LaboratoryWorkOrder,
+    equipment: LaboratoryEquipment,
+    quote: LaboratoryQuote,
+    customer: LaboratoryCustomer | None = None,
+    photo_paths: list[tuple[str, str | None]] | None = None,
+    company_profile: dict[str, object | None] | None = None,
+) -> bytes:
+    """Gera orçamento corporativo com paginação natural e blocos legíveis."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
+        topMargin=14 * mm,
+        bottomMargin=13 * mm,
+        title=f"Orçamento {work_order.number} R{quote.revision:02d}",
+    )
+    styles = getSampleStyleSheet()
+    body = ParagraphStyle(
+        "quote-body", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.7,
+        leading=11.8, textColor=DARK,
+    )
+    info_body = ParagraphStyle(
+        "quote-info", parent=body, fontSize=8.3, leading=11.2,
+    )
+    company_style = ParagraphStyle(
+        "company", parent=body, fontName="Helvetica-Bold", fontSize=17.5, leading=20,
+        textColor=colors.white,
+    )
+    header_right = ParagraphStyle(
+        "header-right", parent=body, fontName="Helvetica-Bold", fontSize=13.3, leading=16,
+        textColor=colors.white, alignment=TA_RIGHT,
+    )
+    section = ParagraphStyle(
+        "section", parent=body, fontName="Helvetica-Bold", fontSize=10.2, leading=12,
+        textColor=MUTED,
+    )
+    card_title = ParagraphStyle(
+        "card-title", parent=section, fontSize=9.4, leading=11,
+    )
+    clause = ParagraphStyle(
+        "clause", parent=body, fontSize=8.2, leading=10.7, textColor=colors.HexColor("#5c6d7d"),
+    )
+    clause_heading = ParagraphStyle(
+        "clause-heading", parent=section, fontSize=10.8, leading=13, textColor=BLUE,
+    )
+
+    company = {**DEFAULT_COMPANY, **(company_profile or {})}
+    company_name = company.get("trade_name") or company.get("legal_name") or DEFAULT_COMPANY["legal_name"]
+    cnpj = company.get("document") or "Não informado"
+    email = company.get("email") or "Não informado"
+    phone = company.get("phone") or "Não informado"
+    address_parts = [
+        company.get("address"),
+        company.get("city"),
+        company.get("state"),
+    ]
+    company_address = " - ".join(str(item).strip() for item in address_parts if item)
+    if not company_address:
+        company_address = "Não informado"
+    emitted = quote.emitted_at or quote.updated_at
+    service_code = _safe(getattr(quote, "service_code", None), "3312102 / 14.01")
+    validity_days = _effective_validity_days(quote)
+    story: list[object] = []
+
+    # Cabeçalho corporativo com símbolo da engrenagem isolado.
+    company_text = Paragraph(
+        f"{_safe(company_name)}<br/>"
+        f"<font name='Helvetica' size='8.2'>CNPJ: {_safe(cnpj)}<br/>"
+        f"{_safe(company_address)}<br/>Tel.: {_safe(phone)} | {_safe(email)}</font>",
+        company_style,
+    )
+    if GEAR_LOGO.exists():
+        logo = PlatypusImage(str(GEAR_LOGO), width=27 * mm, height=27 * mm)
+        left_header = Table([[logo, company_text]], colWidths=[31 * mm, 76 * mm])
+        left_header.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (0, 0), 4),
+            ("RIGHTPADDING", (1, 0), (1, 0), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        left_header = company_text
+
+    # Revisão não é exibida no cabeçalho. Validade 0 continua visível.
+    right_header = Paragraph(
+        f"ORÇAMENTO PRÉVIO E<br/>ESTIMATIVO<br/>"
+        f"<font name='Helvetica-Bold' size='8.8'>Nº {_safe(work_order.number)}</font><br/>"
+        f"<font name='Helvetica' size='8.2'>Emissão: {emitted.strftime('%d/%m/%Y')}<br/>"
+        f"Validade: {validity_days} dias</font>",
+        header_right,
+    )
+    header = Table([[left_header, right_header]], colWidths=[111 * mm, 63 * mm], rowHeights=[48 * mm])
+    header.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), BLUE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (0, 0), 8),
+        ("RIGHTPADDING", (0, 0), (0, 0), 5),
+        ("LEFTPADDING", (1, 0), (1, 0), 5),
+        ("RIGHTPADDING", (1, 0), (1, 0), 8),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.6, CYAN),
+    ]))
+    story += [header, Spacer(1, 5)]
+
+    # Destaque solicitado para o código de prestação de serviço.
+    service_banner = Table(
+        [[Paragraph("CÓDIGO DE PRESTAÇÃO DE SERVIÇO", ParagraphStyle(
+            "svc-label", parent=body, fontName="Helvetica-Bold", fontSize=8.3, textColor=BLUE,
+        )), Paragraph(service_code, ParagraphStyle(
+            "svc-code", parent=body, fontName="Helvetica-Bold", fontSize=11, textColor=colors.white,
+            alignment=TA_RIGHT,
+        ))]],
+        colWidths=[111 * mm, 63 * mm],
+        rowHeights=[9 * mm],
+    )
+    service_banner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), SOFT_BLUE),
+        ("BACKGROUND", (1, 0), (1, 0), CYAN),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#b8d7e5")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story += [service_banner, Spacer(1, 7)]
+
+    customer_rows = [
+        ("Cliente", customer.legal_name if customer and customer.legal_name else work_order.customer_name),
+        ("CNPJ/CPF", customer.document if customer else None),
+        ("Contato", (customer.phone or customer.email) if customer else None),
+    ]
+    equip_power = equipment.power or getattr(equipment, "current", None)
+    equipment_rows = [
+        ("Equipamento", " ".join(str(v) for v in [equipment.equipment_type, equipment.manufacturer, equipment.model] if v)),
+        ("Potência/Corrente", equip_power),
+        ("Tensão", equipment.voltage),
+        ("Data de Entrada", work_order.opened_at.strftime("%d/%m/%Y") if getattr(work_order, "opened_at", None) else None),
+        ("NF de Entrada", _entry_invoice_text(work_order)),
+    ]
+    cards = Table(
+        [[_info_card("DADOS DO CLIENTE", customer_rows, info_body, card_title),
+          _info_card("DADOS DO EQUIPAMENTO", equipment_rows, info_body, card_title)]],
+        colWidths=[85 * mm, 85 * mm],
+    )
+    cards.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ("RIGHTPADDING", (0, 0), (0, 0), 3.5),
+        ("LEFTPADDING", (1, 0), (1, 0), 3.5),
+        ("RIGHTPADDING", (1, 0), (1, 0), 0),
+    ]))
+    story += [cards, Spacer(1, 8)]
+
+    story += [_section_title("DEFEITO INFORMADO PELO CLIENTE", section), Spacer(1, 3), _text_panel(work_order.reported_defect, body), Spacer(1, 7)]
+    story += [_section_title("DIAGNÓSTICO TÉCNICO / LAUDO", section), Spacer(1, 3), _text_panel(quote.technical_report, body), Spacer(1, 7)]
+    story += [_section_title("SERVIÇO A REALIZAR", section), Spacer(1, 3), _text_panel(quote.services_description, body), Spacer(1, 7)]
+
+    story += [_section_title("SERVIÇOS E COMPONENTES", section), Spacer(1, 3)]
+    rows: list[list[object]] = [["Descrição", "Qtd.", "Unitário", "Total"]]
+    for item in quote.items:
+        item_total = Decimal(item.quantity) * Decimal(item.unit_value)
+        rows.append([
+            Paragraph(_safe(item.description), body),
+            f"{Decimal(item.quantity):.3f}",
+            money(Decimal(item.unit_value)),
+            money(item_total),
+        ])
+    items_table = Table(rows, colWidths=[99 * mm, 18 * mm, 27 * mm, 30 * mm], repeatRows=1)
+    items_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.3),
+        ("BACKGROUND", (0, 1), (-1, -1), LIGHT),
+        ("TEXTCOLOR", (0, 1), (-1, -1), DARK),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.35, GRID),
+    ]))
+    story += [items_table, Spacer(1, 6)]
+
+    discount = (
+        Decimal(quote.subtotal) * (Decimal(quote.discount_value) / 100)
+        if quote.discount_type == "percent"
+        else Decimal(quote.discount_value)
+        if quote.discount_type == "amount"
+        else Decimal("0")
+    )
+    discount_label = f"Desconto ({Decimal(quote.discount_value):g}%)" if quote.discount_type == "percent" else "Desconto"
+    summary = Table([
+        ["Subtotal", money(Decimal(quote.subtotal))],
+        [discount_label, f"- {money(discount)}" if discount > 0 else money(discount)],
+        ["TOTAL DO ORÇAMENTO", money(Decimal(quote.total))],
+    ], colWidths=[48 * mm, 35 * mm], hAlign="RIGHT")
+    summary.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 1), 8.8),
+        ("TEXTCOLOR", (0, 0), (-1, 0), DARK),
+        ("TEXTCOLOR", (0, 1), (-1, 1), colors.HexColor("#c92f35") if discount > 0 else DARK),
+        ("BACKGROUND", (0, 2), (-1, 2), SOFT_BLUE),
+        ("TEXTCOLOR", (0, 2), (-1, 2), BLUE),
+        ("FONTSIZE", (0, 2), (-1, 2), 10.5),
+        ("LINEABOVE", (0, 2), (-1, 2), 1.2, BLUE),
+        ("LINEBELOW", (0, 2), (-1, 2), 1.2, BLUE),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story += [summary]
+
+    # Condições seguem no fluxo natural. O ReportLab inicia nova página apenas
+    # quando o espaço restante realmente não comporta o próximo bloco.
+    story += [Spacer(1, 8), _section_title("CONDIÇÕES COMERCIAIS", section), Spacer(1, 4)]
+    conditions = Table([
+        ["Prazo de execução", "Prazo de faturamento", "Garantia", "Validade"],
+        [
+            f"{quote.delivery_days} dias",
+            (quote.billing_terms or f"{quote.billing_days} dias").strip(),
+            (quote.warranty_terms or f"{quote.warranty_months} meses").strip(),
+            f"{validity_days} dias",
+        ],
+    ], colWidths=[57 * mm, 60 * mm, 32 * mm, 25 * mm])
+    conditions.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f3f6")),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.white),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#506275")),
+        ("TEXTCOLOR", (0, 1), (-1, 1), BLUE),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.3),
+        ("GRID", (0, 0), (-1, -1), 0.45, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    story += [conditions, Spacer(1, 7)]
+    story += [
+        Paragraph(f"<b>Formas de Pagamento:</b> {_safe(quote.payment_terms)}", body),
+        Paragraph(f"<font color='#667788'>({_safe(quote.return_condition)})</font>", body),
+        Spacer(1, 11),
+        _section_title("TERMOS E CONDIÇÕES DA PROPOSTA", clause_heading),
+        Spacer(1, 7),
+    ]
+
+    clauses = [
+        ("Garantia legal / Código de Defesa do Consumidor", quote.consumer_clause),
+        ("Prazo, insumos e fornecedores", quote.supply_clause),
+        ("Natureza prévia e estimativa do orçamento", quote.estimate_clause),
+    ]
+    for heading, text in clauses:
+        story += [
+            Paragraph(f"<b>{_safe(heading)}:</b> {_safe(text).replace(chr(10), '<br/>')}", clause),
+            Spacer(1, 8),
+        ]
+
+    # Registro fotográfico é sempre o último conteúdo do orçamento, depois de
+    # todos os textos e cláusulas. Cada revisão recebe sua própria seleção de fotos.
+    valid_photos = [(Path(path), caption) for path, caption in (photo_paths or []) if Path(path).exists()]
+    if valid_photos:
+        story += [PageBreak(), _section_title("REGISTRO FOTOGRÁFICO", clause_heading), Spacer(1, 8)]
+        for index, (photo_path, caption) in enumerate(valid_photos, start=1):
+            image = PlatypusImage(str(photo_path))
+            max_width = 165 * mm
+            max_height = 105 * mm
+            ratio = min(max_width / image.imageWidth, max_height / image.imageHeight)
+            image.drawWidth = image.imageWidth * ratio
+            image.drawHeight = image.imageHeight * ratio
+            story += [
+                Paragraph(f"<b>Foto {index:02d}</b>{' — ' + _safe(caption) if caption else ''}", body),
+                Spacer(1, 4),
+                image,
+                Spacer(1, 10),
+            ]
+
+    def draw_watermark(canvas: Canvas, _doc: SimpleDocTemplate) -> None:
+        if not GEAR_WATERMARK.exists():
+            return
+        width = 112 * mm
+        height = 112 * mm
+        page_width, page_height = A4
+        canvas.saveState()
+        canvas.drawImage(
+            str(GEAR_WATERMARK),
+            (page_width - width) / 2,
+            (page_height - height) / 2 - 6 * mm,
+            width=width,
+            height=height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
+    return buffer.getvalue()
+
+def _wrap_text(
+    c: Canvas,
+    text: str,
+    x: float,
+    y: float,
+    max_width: float,
+    font: str,
+    size: float,
+    max_lines: int,
+) -> None:
+    words = text.split()
+    line = ""
+    lines = []
+    for word in words:
+        trial = f"{line} {word}".strip()
+        if stringWidth(trial, font, size) <= max_width:
+            line = trial
+        else:
+            lines.append(line)
+            line = word
+        if len(lines) == max_lines:
+            break
+    if line and len(lines) < max_lines:
+        lines.append(line)
+    c.setFont(font, size)
+    for i, ln in enumerate(lines):
+        c.drawString(x, y - i * (size + 0.6), ln)
+
+
+STATUS_LABELS_PT: dict[str, str] = {
+    "received": "Recebido",
+    "awaiting_analysis": "Aguardando análise",
+    "in_analysis": "Em análise",
+    "awaiting_quote": "Aguardando orçamento",
+    "quote_sent": "Orçamento enviado",
+    "awaiting_approval": "Aguardando aprovação",
+    "approved": "Aprovado",
+    "rejected": "Reprovado",
+    "awaiting_parts": "Aguardando peças",
+    "in_repair": "Em reparo",
+    "in_testing": "Em testes",
+    "completed": "Concluído",
+    "awaiting_pickup": "Aguardando retirada",
+    "delivered": "Entregue",
+    "cancelled": "Cancelado",
+    "no_repair": "Sem conserto",
+}
+
+
+def _fit_label_text(
+    c: Canvas,
+    text: str,
+    *,
+    max_width: float,
+    preferred_size: float,
+    min_size: float,
+    font: str = "Helvetica-Bold",
+) -> float:
+    """Return the largest font size that fits max_width."""
+    value = (text or "").strip()
+    size = preferred_size
+    while size > min_size and stringWidth(value, font, size) > max_width:
+        size -= 0.25
+    return max(size, min_size)
+
+
+def label_pdf(
+    work_order: LaboratoryWorkOrder,
+    equipment: LaboratoryEquipment,
+    tracking_token: str,
+) -> bytes:
+    """Etiqueta de laboratório 40 x 40 mm, legível e sem sobreposição.
+
+    Layout:
+    - cliente em linha própria;
+    - número da O.S. destacado em linha própria;
+    - equipamento/fabricante/modelo;
+    - defeito;
+    - NF de entrada no rodapé, no lugar do status;
+    - QR de rastreamento com 17 mm.
+    """
+    buffer = BytesIO()
+    width, height = 40 * mm, 40 * mm
+    c = Canvas(buffer, pagesize=(width, height))
+    margin = 2.2 * mm
+
+    c.setLineWidth(0.6)
+    c.rect(1.2 * mm, 1.2 * mm, width - 2.4 * mm, height - 2.4 * mm)
+
+    # Cabeçalho: cliente e O.S. em linhas independentes para nunca se sobreporem.
+    customer = (work_order.customer_name or "CLIENTE NÃO INFORMADO").strip().upper()
+    customer_size = _fit_label_text(
+        c,
+        customer,
+        max_width=width - (2 * margin),
+        preferred_size=7.4,
+        min_size=4.8,
+    )
+    c.setFont("Helvetica-Bold", customer_size)
+    c.drawString(margin, height - 5.0 * mm, customer)
+
+    os_number = (work_order.number or "OS").strip().upper()
+    os_size = _fit_label_text(
+        c,
+        os_number,
+        max_width=width - (2 * margin),
+        preferred_size=9.4,
+        min_size=7.0,
+    )
+    c.setFont("Helvetica-Bold", os_size)
+    c.drawString(margin, height - 9.0 * mm, os_number)
+    c.line(margin, height - 10.3 * mm, width - margin, height - 10.3 * mm)
+
+    # Equipamento.
+    equip = (equipment.equipment_type or "EQUIPAMENTO").strip().upper()
+    equip_size = _fit_label_text(
+        c,
+        equip,
+        max_width=width - (2 * margin),
+        preferred_size=6.2,
+        min_size=4.8,
+    )
+    c.setFont("Helvetica-Bold", equip_size)
+    c.drawString(margin, height - 13.6 * mm, equip)
+
+    specs = " · ".join(
+        value.strip()
+        for value in [equipment.manufacturer or "", equipment.model or ""]
+        if value and value.strip()
+    )
+    if specs:
+        specs = specs.upper()
+        specs_size = _fit_label_text(
+            c,
+            specs,
+            max_width=width - (2 * margin),
+            preferred_size=5.3,
+            min_size=4.2,
+            font="Helvetica",
+        )
+        c.setFont("Helvetica", specs_size)
+        c.drawString(margin, height - 16.4 * mm, specs)
+
+    # Defeito.
+    c.setFont("Helvetica-Bold", 5.0)
+    c.drawString(margin, height - 19.9 * mm, "DEFEITO:")
+    defect = (work_order.reported_defect or "DEFEITO NÃO INFORMADO").strip().upper()
+    _wrap_text(
+        c,
+        defect,
+        margin,
+        height - 22.8 * mm,
+        max_width=18.5 * mm,
+        font="Helvetica",
+        size=4.8,
+        max_lines=2,
+    )
+
+    # QR de rastreamento.
+    tracking_url = f"{settings.tracking_base_url.rstrip('/')}/{tracking_token}"
+    widget = qr.QrCodeWidget(tracking_url)
+    widget.barLevel = "M"
+    bounds = widget.getBounds()
+    qr_size = 17 * mm
+    drawing = Drawing(
+        qr_size,
+        qr_size,
+        transform=[
+            qr_size / (bounds[2] - bounds[0]),
+            0,
+            0,
+            qr_size / (bounds[3] - bounds[1]),
+            0,
+            0,
+        ],
+    )
+    drawing.add(widget)
+    drawing.drawOn(c, width - qr_size - 2 * mm, 2.2 * mm)
+
+    # Rodapé: NF de entrada substitui o antigo destaque de recebimento/status.
+    entry_invoice = str(getattr(work_order, "entry_invoice", "") or "NÃO INFORMADA").strip().upper()
+    footer_label = "NF ENTRADA"
+    footer_value = entry_invoice
+    footer_x = margin
+    footer_y = 2.2 * mm
+    footer_w = 18.0 * mm
+    footer_h = 6.8 * mm
+
+    c.setLineWidth(0.45)
+    c.rect(footer_x, footer_y, footer_w, footer_h, fill=0, stroke=1)
+    c.setFont("Helvetica-Bold", 4.2)
+    c.drawString(footer_x + 1.0 * mm, footer_y + 4.4 * mm, footer_label)
+    value_size = _fit_label_text(
+        c,
+        footer_value,
+        max_width=footer_w - 2.0 * mm,
+        preferred_size=5.4,
+        min_size=3.8,
+    )
+    c.setFont("Helvetica-Bold", value_size)
+    c.drawString(footer_x + 1.0 * mm, footer_y + 1.5 * mm, footer_value)
+
+    c.save()
+    return buffer.getvalue()
