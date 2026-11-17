@@ -48,21 +48,28 @@ def test_purchasing_can_open_approved_sale_in_commercial() -> None:
     assert "setQuoteEditor({type:quote.quote_type,quote})" in commercial
 
 
-def test_material_approval_notifies_laboratory() -> None:
-    source = (API_ROOT / "app" / "purchasing" / "router.py").read_text(encoding="utf-8")
+def test_material_status_change_emits_activity_with_lab_link() -> None:
+    # Estrutura nova (V26): a mudança de status da solicitação de material vira uma
+    # atividade pelo módulo de eventos; a aprovação mapeia para "material_approved" e
+    # a notificação leva ao laboratório, na aba de materiais da OS.
+    router = (API_ROOT / "app" / "purchasing" / "router.py").read_text(encoding="utf-8")
+    events = (API_ROOT / "app" / "notifications" / "events.py").read_text(encoding="utf-8")
 
-    assert 'category="material_request_approved"' in source
-    assert 'modules={"laboratorio"}' in source
-    assert 'target=f"/laboratorio?os={request.work_order_id}&aba=materials"' in source
+    assert "material_request_activity(" in router
+    assert '"approved": "material_approved"' in router
+    assert "async def material_request_activity" in events
+    assert 'target=(f"/laboratorio?os={order.id}&aba=materials"' in events
 
 
-def test_sale_approval_notifies_purchasing() -> None:
+def test_sale_status_change_emits_commercial_activity() -> None:
+    # Estrutura nova (V26): a aprovação de venda passa pelo fluxo unificado de status do
+    # orçamento, que emite a atividade comercial (severity "success" quando aprovado).
     source = (API_ROOT / "app" / "commercial" / "router.py").read_text(encoding="utf-8")
 
-    assert 'quote.quote_type == "sale"' in source
-    assert 'category="commercial_sale_approved"' in source
-    assert 'modules={"compras"}' in source
-    assert 'target=f"/comercial?tab=orcamento&quote={quote.id}"' in source
+    assert 'action="commercial_quote_status"' in source
+    assert 'activity_module="orcamentos"' in source
+    assert 'target=f"/comercial?quote={quote.id}"' in source
+    assert 'severity="success" if payload.status == "approved"' in source
 
 
 def test_quote_editor_has_all_issuers_and_approval_actions() -> None:
