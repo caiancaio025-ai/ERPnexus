@@ -35,7 +35,7 @@ def test_migration_seeds_requested_primary_statuses_and_substatuses() -> None:
 def test_frontend_preserves_historical_statuses_and_substatus_checkboxes() -> None:
     source = FRONTEND.read_text(encoding="utf-8")
 
-    assert 'in_analysis: "Em análise"' in source
+    assert 'in_analysis: "Analisado"' in source
     assert '{ value: "quote_sent", label: "Orçamento enviado" }' in source
     assert '{ value: "completed", label: "Concluído" }' in source
     assert '{ value: "delivered", label: "Entregue" }' in source

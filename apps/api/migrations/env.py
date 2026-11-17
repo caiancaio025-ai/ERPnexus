@@ -22,7 +22,7 @@ from app.finance.models import (  # noqa: F401
 )
 from app.laboratory import models as laboratory_models
 from app.inventory import models as inventory_models
-from app.notifications.models import Notification  # noqa: F401
+from app.notifications.models import Notification, PushSubscription  # noqa: F401
 from app.purchasing.models import PurchaseAuditEvent, PurchaseOrder, Supplier  # noqa: F401
 from app.purchasing.material_models import MaterialRequest, MaterialRequestEvent  # noqa: F401
 

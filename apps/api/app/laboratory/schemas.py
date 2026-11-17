@@ -580,7 +580,16 @@ class QuoteInput(BaseModel):
     discount_type: Literal["none", "amount", "percent"] = "none"
     discount_value: Decimal = Decimal("0")
     items: list[QuoteItemInput]
-    photos: list[QuotePhotoInput] = Field(default_factory=list)
+    # A mesma foto não pode ser vinculada duas vezes à revisão (índice único no banco).
+    photos: list[QuotePhotoInput] = Field(default_factory=list, max_length=10)
+
+    @field_validator("photos")
+    @classmethod
+    def validate_unique_quote_photos(cls, photos: list[QuotePhotoInput]) -> list[QuotePhotoInput]:
+        ids = [photo.document_id for photo in photos]
+        if len(ids) != len(set(ids)):
+            raise ValueError("A mesma foto não pode ser incluída duas vezes no orçamento.")
+        return photos
 
 
 class QuoteOutput(BaseModel):

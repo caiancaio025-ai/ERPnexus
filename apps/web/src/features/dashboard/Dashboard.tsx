@@ -3,7 +3,13 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Check,
+  Settings2,
+  RotateCcw,
+  Eye,
+  EyeOff,
   Bell,
+  Expand,
   Building2,
   Boxes,
   CalendarClock,
@@ -30,7 +36,13 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../auth/AuthCard";
-import type { Alert, DashboardSummary, NotificationItem, NotificationSummary, PurchaseEvent, QuickAction } from "./types";
+import { formatarNumeroOS, textoEmPortugues } from "../../shared/i18n/portugues";
+import type { Alert, DashboardSummary, NotificationItem, NotificationSummary, PurchaseEvent, QuickAction, WorkQueue } from "./types";
+import {
+  availableDashboardAreas, alertDashboardArea, dashboardAreaLabels,
+  dashboardPreferenceKey, readHiddenDashboardAreas, serializeHiddenDashboardAreas,
+  type DashboardArea,
+} from "./dashboardPreferences";
 import { apiClient } from "../../shared/api/apiClient";
 import "./dashboard.css";
 
@@ -41,11 +53,27 @@ const alertIcons = {
   delayed_purchases: TriangleAlert,
   delayed_invoices: FileClock,
   active_work_orders: Wrench,
+  quotes_pending: ReceiptText,
+  lab_entries: FlaskConical,
+  lab_approved: Wrench,
+  requests_buy: ShoppingCart,
+  finance_overdue: WalletCards,
   purchases_due_soon: CalendarClock,
   pending_finance: WalletCards,
   unread_notifications: Bell,
   monthly_equipment: Gauge,
 };
+
+const areaIcons = {
+  laboratorio: FlaskConical, orcamentos: ReceiptText, compras: ShoppingCart,
+  financeiro: WalletCards, estoque: Boxes, notificacoes: Bell,
+  atalhos: Gauge, geral: LayoutDashboard,
+};
+
+function readDashboardPreference(userId: number): DashboardArea[] {
+  try { return readHiddenDashboardAreas(window.localStorage.getItem(dashboardPreferenceKey(userId))); }
+  catch { return []; } // O painel continua funcional quando o navegador bloqueia armazenamento.
+}
 
 const actionIcons = {
   new_work_order: ClipboardPlus,
@@ -61,27 +89,6 @@ function displayName(name: string) {
   return name.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
 }
 
-
-const fallbackActions: QuickAction[] = [
-  {
-    key: "new_work_order",
-    label: "Criar nova OS",
-    description: "Entrada de equipamento no laboratório",
-    target: "/laboratorio/os/nova",
-  },
-  {
-    key: "new_budget",
-    label: "Fazer orçamento",
-    description: "Abrir a área de orçamentos das OS",
-    target: "/laboratorio/os?aba=orcamentos",
-  },
-  {
-    key: "unnoted_movement",
-    label: "Documento sem nota",
-    description: "Registrar entrada ou saída de mercadoria",
-    target: "/estoque/movimentos/sem-nota/novo",
-  },
-];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -117,6 +124,28 @@ function normalizeSummary(payload: unknown): DashboardSummary {
       }))
     : [];
 
+  const workQueues: WorkQueue[] = Array.isArray(payload.work_queues)
+    ? payload.work_queues.filter(isRecord).map((queue) => ({
+      key: String(queue.key ?? "fila"),
+      section: (["laboratorio", "orcamentos", "compras", "financeiro", "estoque"] as string[])
+        .includes(String(queue.section)) ? queue.section as WorkQueue["section"] : "laboratorio",
+      title: String(queue.title ?? "Pendências"),
+      description: String(queue.description ?? ""),
+      tone: (["warning", "danger", "success"] as unknown[]).includes(queue.tone)
+        ? queue.tone as WorkQueue["tone"] : "info",
+      total: Number(queue.total ?? 0),
+      target: String(queue.target ?? "/painel"),
+      items: Array.isArray(queue.items) ? queue.items.filter(isRecord).map((item) => ({
+        id: Number(item.id ?? 0),
+        title: String(item.title ?? "Registro"),
+        description: String(item.description ?? ""),
+        meta: item.meta == null ? null : String(item.meta),
+        status: String(item.status ?? "Pendente"),
+        target: String(item.target ?? queue.target ?? "/painel"),
+        date_label: item.date_label == null ? null : String(item.date_label),
+      })) : [],
+    })) : [];
+
   const rawActions = Array.isArray(payload.quick_actions)
     ? payload.quick_actions.filter(isRecord)
     : [];
@@ -132,17 +161,20 @@ function normalizeSummary(payload: unknown): DashboardSummary {
         description: String(action.description ?? "Abrir operação"),
         target: String(action.target ?? "/painel"),
       }))
-    : fallbackActions;
+    : [];
 
   const monthly = isRecord(payload.monthly_equipment_entries)
     ? payload.monthly_equipment_entries
     : {};
 
   return {
-    schema_version: "2",
+    schema_version: "3",
+    audience: (["gestao", "admin", "lab", "compras", "estoque"] as unknown[]).includes(payload.audience)
+      ? payload.audience as DashboardSummary["audience"] : "outros",
+    work_queues: workQueues,
     alerts,
     purchase_events: purchaseEvents,
-    quick_actions: quickActions.length ? quickActions : fallbackActions,
+    quick_actions: quickActions,
     monthly_equipment_entries: {
       month_label: String(monthly.month_label ?? currentMonthLabel()),
       count: Number(monthly.count ?? 0),
@@ -216,12 +248,84 @@ function QuickActionButton({ action }: { action: QuickAction }) {
   );
 }
 
+const sectionNames: Record<WorkQueue["section"], string> = {
+  laboratorio: "LABORATÓRIO", orcamentos: "ORÇAMENTOS", compras: "COMPRAS",
+  financeiro: "FINANCEIRO", estoque: "ESTOQUE",
+};
+const sectionIcons = {
+  laboratorio: FlaskConical, orcamentos: ReceiptText, compras: ShoppingCart,
+  financeiro: WalletCards, estoque: Boxes,
+};
+
+function WorkQueueCard({ queue }: { queue: WorkQueue }) {
+  const navigate = useNavigate();
+  const Icon = sectionIcons[queue.section];
+  return (
+    <article className={`work-queue work-queue--${queue.tone}`}>
+      <header className="work-queue__header">
+        <div className="work-queue__heading">
+          <span className="work-queue__section"><Icon size={15} />{sectionNames[queue.section]}</span>
+          <h2>{queue.title}</h2>
+          <p>{queue.description}</p>
+        </div>
+        <span className="work-queue__count" aria-label={`${queue.total} registros`}>{queue.total}</span>
+      </header>
+      <div className="work-queue__rows">
+        {queue.items.map((item) => <button type="button" key={item.id} className="work-queue__item" onClick={() => navigate(item.target)}>
+          <span className="work-queue__info">
+            <strong>{item.title}</strong>
+            <small>{item.description}</small>
+            {(item.meta || item.date_label) && <em>{[item.meta, item.date_label].filter(Boolean).join(" · ")}</em>}
+          </span>
+          <span className="work-queue__end"><span className="work-queue__status">{item.status}</span><ArrowUpRight size={16}/></span>
+        </button>)}
+        {queue.items.length === 0 && <div className="work-queue__empty">Nenhuma pendência nesta etapa.</div>}
+      </div>
+      <button type="button" className="work-queue__footer" onClick={() => navigate(queue.target)}>
+        Ver no módulo <ArrowUpRight size={16} />
+      </button>
+    </article>
+  );
+}
+
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [filter, setFilter] = useState<EventFilter>("all");
+  const [globalQuery, setGlobalQuery] = useState("");
   const [error, setError] = useState("");
   const [notifications, setNotifications] = useState<NotificationSummary>({ unread_count: 0, items: [] });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const [savedAreas, setSavedAreas] = useState<{ ownerId: number; hidden: DashboardArea[] }>(
+    () => ({ ownerId: user.id, hidden: readDashboardPreference(user.id) }),
+  );
+  const hiddenAreas = savedAreas.ownerId === user.id ? savedAreas.hidden : readDashboardPreference(user.id);
+  const availableAreas = useMemo(() => summary ? availableDashboardAreas(summary) : [], [summary]);
+  const selectedAreasCount = availableAreas.filter((area) => !hiddenAreas.includes(area)).length;
+  const isAreaVisible = (area: DashboardArea) => !hiddenAreas.includes(area);
+  const visibleAlerts = summary?.alerts.filter((alert) => isAreaVisible(alertDashboardArea(alert.key))) ?? [];
+  const visibleQueues = summary?.work_queues.filter((queue) => isAreaVisible(queue.section)) ?? [];
+  const showPurchases = !!summary && ["gestao", "compras"].includes(summary.audience) && isAreaVisible("compras");
+  const showShortcuts = !!summary && summary.quick_actions.length > 0 && isAreaVisible("atalhos");
+  const showRecent = isAreaVisible("notificacoes");
+  const showSidebarPanel = showShortcuts || showRecent;
+
+  function saveHiddenAreas(next: DashboardArea[]) {
+    const clean = Array.from(new Set(next));
+    setSavedAreas({ ownerId: user.id, hidden: clean });
+    try { window.localStorage.setItem(dashboardPreferenceKey(user.id), serializeHiddenDashboardAreas(clean)); }
+    catch { /* Modo de armazenamento privado: seleção mantida nesta sessão. */ }
+  }
+
+  function toggleDashboardArea(area: DashboardArea) {
+    saveHiddenAreas(isAreaVisible(area) ? [...hiddenAreas, area] : hiddenAreas.filter((item) => item !== area));
+  }
+
+  function showOnlyDashboardArea(area: DashboardArea) {
+    saveHiddenAreas(availableAreas.filter((item) => item !== area));
+    setVisibilityOpen(false);
+  }
+
   const location = useLocation();
 
   useEffect(() => {
@@ -234,19 +338,43 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   useEffect(() => {
     const controller = new AbortController();
 
-    Promise.all([
-      apiClient.get<DashboardSummary>("/api/dashboard/summary", { signal: controller.signal }),
-      apiClient.get<NotificationSummary>("/api/notifications?limit=10&unread_only=true", { signal: controller.signal }),
-    ])
-      .then(([response, notificationResponse]) => {
-        setSummary(normalizeSummary(response));
-        setNotifications(notificationResponse);
-      })
+    // Histórico e indicadores independentes: falha em um módulo não esconde o outro.
+    apiClient.get<DashboardSummary>("/api/dashboard/summary", { signal: controller.signal })
+      .then((response) => setSummary(normalizeSummary(response)))
+      .catch((requestError: Error) => {
+        if (requestError.name !== "AbortError") setError(requestError.message);
+      });
+    apiClient.get<NotificationSummary>("/api/notifications?limit=10", { signal: controller.signal })
+      .then(setNotifications)
       .catch((requestError: Error) => {
         if (requestError.name !== "AbortError") setError(requestError.message);
       });
 
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const refreshSummary = () => {
+      if (document.visibilityState === "hidden") return;
+      apiClient.get<DashboardSummary>("/api/dashboard/summary")
+        .then((response) => setSummary(normalizeSummary(response)))
+        .catch(() => { /* Falha momentânea não apaga o painel já exibido. */ });
+    };
+    const intervalId = window.setInterval(refreshSummary, 60000);
+    window.addEventListener("focus", refreshSummary);
+    return () => { window.clearInterval(intervalId); window.removeEventListener("focus", refreshSummary); };
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      apiClient.get<NotificationSummary>("/api/notifications?limit=10")
+        .then(setNotifications)
+        .catch(() => { /* Mantém as atividades já exibidas em caso de desconexão. */ });
+    };
+    const intervalId = window.setInterval(refresh, 40000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(intervalId); window.removeEventListener("focus", refresh); };
   }, []);
 
   const visibleEvents = useMemo(() => {
@@ -255,14 +383,21 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   }, [filter, summary]);
 
   const fullName = displayName(user.name);
+  const dashboardRoleName: Record<DashboardSummary["audience"], string> = {
+    gestao: "Visão da Gestão", admin: "Orçamentos e aprovações",
+    lab: "Atividades do Laboratório", compras: "Solicitações de Compras",
+    estoque: "Controle do Estoque", outros: "Atividades do sistema",
+  };
 
   async function openNotification(item: NotificationItem) {
     if (!item.is_read) {
-      await apiClient.post(`/api/notifications/${item.id}/read`, {});
-      setNotifications((current) => ({
-        unread_count: Math.max(0, current.unread_count - 1),
-        items: current.items.filter((entry) => entry.id !== item.id),
-      }));
+      try {
+        await apiClient.post(`/api/notifications/${item.id}/read`, {});
+        setNotifications((current) => ({
+          unread_count: Math.max(0, current.unread_count - 1),
+          items: current.items.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry),
+        }));
+      } catch { /* A falha de leitura não deve impedir a navegação. */ }
     }
     setNotificationsOpen(false);
     if (item.target) navigate(item.target);
@@ -272,7 +407,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     await apiClient.post("/api/notifications/read-all", {});
     setNotifications((current) => ({
       unread_count: 0,
-      items: [],
+      items: current.items.map((item) => ({ ...item, is_read: true })),
     }));
   }
 
@@ -284,26 +419,34 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         <header className="dashboard-header">
           <div className="dashboard-heading">
             <span>Visão geral</span>
-            <h1>Painel operacional</h1>
+            <h1>{summary ? dashboardRoleName[summary.audience] : "Painel operacional"}</h1>
             <p>Olá, {fullName}. Estes são os pontos que exigem atenção hoje.</p>
           </div>
           <div className="dashboard-tools">
-            <label className="global-search"><Search size={17} /><input placeholder="Buscar OS, cliente ou compra..." /></label>
+            {(!summary || ["gestao", "admin", "lab"].includes(summary.audience)) &&
+              <label className="global-search"><Search size={17} /><input
+                aria-label="Pesquisar OS ou equipamento no laboratório"
+                placeholder="Buscar OS ou equipamento..."
+                value={globalQuery}
+                onChange={(event) => setGlobalQuery(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter" && globalQuery.trim()) navigate(`/laboratorio?busca=${encodeURIComponent(globalQuery.trim())}`); }}
+              /></label>}
             <div className="notification-anchor">
               <button className={`round-button ${notifications.unread_count ? "has-notifications" : ""}`} aria-label="Notificações" onClick={() => setNotificationsOpen((value) => !value)}>
                 <Bell size={18} />
                 {notifications.unread_count > 0 && <b className="notification-count">{notifications.unread_count > 99 ? "99+" : notifications.unread_count}</b>}
               </button>
               {notificationsOpen && <section className="notification-popover">
-                <header><div><span>CENTRAL SÊNTICO</span><strong>Notificações</strong></div>{notifications.unread_count > 0 && <button onClick={() => void readAllNotifications()}>Marcar todas como lidas</button>}</header>
+                <header className="notification-popover__header"><div><span>CENTRAL SÊNTICO</span><strong>Últimas atividades</strong></div><div className="notification-popover__actions"><button type="button" onClick={() => { setNotificationsOpen(false); navigate("/notificacoes"); }}><Expand size={14} /> Ampliar</button>{notifications.unread_count > 0 && <button type="button" onClick={() => void readAllNotifications()}>Marcar lidas</button>}</div></header>
                 <div className="notification-list">
-                  {notifications.items.map((item) => <button key={item.id} className={`notification-item ${item.is_read ? "is-read" : "is-unread"}`} onClick={() => void openNotification(item)}>
+                  {notifications.items.map((item) => <button key={item.id} className={`notification-item ${item.is_read ? "is-read" : "is-unread"}`} data-modulo={item.activity_module} onClick={() => void openNotification(item)}>
                     <span className={`notification-dot notification-dot--${item.severity}`} />
-                    <span><strong>{item.title}</strong><small>{item.message}</small><em>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</em></span>
+                    <span><strong>{textoEmPortugues(item.title)}</strong><small>{textoEmPortugues(item.message)}</small><em>{[item.actor_name, item.work_order_number ? formatarNumeroOS(item.work_order_number) : null, item.equipment_name].filter(Boolean).join(" · ")}</em><em>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</em></span>
                     {item.amount != null && <b>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount)}</b>}
                   </button>)}
                   {!notifications.items.length && <p className="notification-empty">Nenhuma notificação até agora.</p>}
                 </div>
+                <button className="notification-expand" type="button" onClick={() => { setNotificationsOpen(false); navigate("/notificacoes"); }}><Expand size={16} /> Abrir central completa de notificações</button>
               </section>}
             </div>
             <button className="user-button" aria-label="Perfil do usuário"><UserRound size={18} /><span>{initials(user.name)}</span></button>
@@ -313,13 +456,54 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         {error && <p className="dashboard-error" role="alert">{error}</p>}
         {!summary && !error && <div className="dashboard-loading"><span />Carregando visão geral...</div>}
 
+        {summary && <section className="dashboard-visibility" aria-label="Personalizar as informações do painel">
+          <div className="dashboard-visibility__summary">
+            <div className="dashboard-visibility__copy">
+              <span className="dashboard-visibility__eyebrow">SEU PAINEL</span>
+              <strong>Escolha o que deseja acompanhar</strong>
+              <small>{selectedAreasCount} de {availableAreas.length} áreas visíveis · Sua escolha fica salva neste navegador</small>
+            </div>
+            <div className="dashboard-visibility__actions">
+              {selectedAreasCount < availableAreas.length && <button type="button" className="dashboard-visibility__reset" onClick={() => saveHiddenAreas([])}><RotateCcw size={15}/> Mostrar tudo</button>}
+              <button type="button" className="dashboard-visibility__open" aria-expanded={visibilityOpen} aria-controls="dashboard-visibility-options" onClick={() => setVisibilityOpen((open) => !open)}><Settings2 size={16}/> {visibilityOpen ? "Concluir" : "Personalizar painel"}</button>
+            </div>
+          </div>
+          {visibilityOpen && <div id="dashboard-visibility-options" className="dashboard-visibility__options">
+            <div className="dashboard-visibility__hint">Ative ou oculte áreas individualmente. Use <strong>Somente esta</strong> para acompanhar apenas um setor.</div>
+            <div className="dashboard-visibility__grid">
+              {availableAreas.map((area) => {
+                const Icon = areaIcons[area];
+                const enabled = isAreaVisible(area);
+                return <div className={`dashboard-visibility__option ${enabled ? "is-enabled" : "is-hidden"}`} key={area} data-area={area}>
+                  <span className="dashboard-visibility__icon"><Icon size={19}/></span>
+                  <div className="dashboard-visibility__info"><strong>{dashboardAreaLabels[area].title}</strong><small>{dashboardAreaLabels[area].description}</small></div>
+                  <div className="dashboard-visibility__controls">
+                    <button type="button" className="dashboard-visibility__toggle" role="switch" aria-label={`${enabled ? "Ocultar" : "Mostrar"} ${dashboardAreaLabels[area].title}`} aria-checked={enabled} onClick={() => toggleDashboardArea(area)}>{enabled ? <><Eye size={14}/> Visível</> : <><EyeOff size={14}/> Oculta</>}</button>
+                    <button type="button" className="dashboard-visibility__only" onClick={() => showOnlyDashboardArea(area)}>Somente esta</button>
+                  </div>
+                </div>;
+              })}
+            </div>
+            <button type="button" className="dashboard-visibility__show-all" onClick={() => saveHiddenAreas([])}><Check size={16}/> Mostrar todas as áreas disponíveis</button>
+          </div>}
+        </section>}
+
         {summary && (
           <motion.div initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}>
-            <section className="overview-grid" aria-label="Indicadores principais">
-              {summary.alerts.map((alert) => <AlertCard alert={alert} key={alert.key} />)}
-            </section>
+            {visibleAlerts.length > 0 && <section className="overview-grid" aria-label="Indicadores principais">
+              {visibleAlerts.map((alert) => <AlertCard alert={alert} key={alert.key} />)}
+            </section>}
 
-            <section className="dashboard-content-grid">
+            {visibleQueues.length > 0 && <section className="work-queue-section" aria-label="Pendências e atividades por função">
+              <header className="work-queue-section__topline">
+                <div><span className="section-kicker">O QUE PRECISA SER FEITO</span><h2>Suas prioridades</h2><p>Selecione um registro para continuar o trabalho sem procurar pelo menu.</p></div>
+                <span className="work-queue-section__total">{visibleQueues.reduce((total, queue) => total + queue.total, 0)} pendências</span>
+              </header>
+              <div className="work-queue-grid">{visibleQueues.map((queue) => <WorkQueueCard key={queue.key} queue={queue} />)}</div>
+            </section>}
+
+            {(showPurchases || showSidebarPanel) && <section className={`dashboard-content-grid ${!showPurchases ? "dashboard-content-grid--only-aside" : ""} ${!showSidebarPanel ? "dashboard-content-grid--only-purchases" : ""}`}>
+              {showPurchases && (
               <article className="purchase-center">
                 <header className="section-header">
                   <div><span className="section-kicker">COMPRAS</span><h2>Central de eventos urgentes</h2><p>Atrasos e entregas previstas dos pedidos em andamento.</p></div>
@@ -339,28 +523,30 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                   {!visibleEvents.length && <p className="purchase-events__empty">Nenhuma compra exige atenção neste filtro.</p>}
                 </div>
               </article>
+              )}
 
-              <aside className="quick-panel">
-                <header><span className="section-kicker">ATALHOS</span><h2>Ações rápidas</h2><p>Operações frequentes sem procurar pelo menu.</p></header>
-                <div className="quick-actions">
+              {showSidebarPanel && <aside className="quick-panel">
+                {showShortcuts && <header><span className="section-kicker">ATALHOS</span><h2>Ações rápidas</h2><p>Operações frequentes sem procurar pelo menu.</p></header>}
+                {showShortcuts && <div className="quick-actions">
                   {summary.quick_actions.map((action) => <QuickActionButton action={action} key={action.key} />)}
-                </div>
-                <div className="dashboard-notification-feed">
-                  <header><span><Bell size={14}/>Notificações recentes</span>{notifications.unread_count > 0 && <b>{notifications.unread_count} não lida{notifications.unread_count === 1 ? "" : "s"}</b>}</header>
-                  {notifications.items.slice(0, 3).map((item) => <button key={item.id} className={item.is_read ? "is-read" : ""} onClick={() => void openNotification(item)}>
-                    <span><strong>{item.title}</strong><small>{item.message}</small></span>
+                </div>}
+                {showRecent && <div className="dashboard-notification-feed">
+                  <header><span><Bell size={14}/>Atividades recentes</span><button className="feed-expand" type="button" onClick={() => navigate("/notificacoes")}><Expand size={13} /> Ver tudo</button>{notifications.unread_count > 0 && <b>{notifications.unread_count} nova{notifications.unread_count === 1 ? "" : "s"}</b>}</header>
+                  {notifications.items.slice(0, 3).map((item) => <button key={item.id} className={item.is_read ? "is-read" : ""} data-modulo={item.activity_module} onClick={() => void openNotification(item)}>
+                    <span><strong>{textoEmPortugues(item.title)}</strong><small>{item.actor_name ? `${item.actor_name} · ` : ""}{item.work_order_number ? `${formatarNumeroOS(item.work_order_number)} · ` : ""}{textoEmPortugues(item.message)}</small></span>
                     {item.amount != null && <b>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount)}</b>}
                   </button>)}
-                  {!notifications.items.length && <p>Nenhum evento novo.</p>}
-                </div>
-                <div className="quick-panel__note"><Truck size={18} /><p>Compras recebidas devem ser baixadas no módulo de Compras, mantendo o histórico do pedido.</p></div>
-              </aside>
-            </section>
+                  {!notifications.items.length && <p>Nenhuma atividade registrada para seu perfil.</p>}
+                </div>}
+                {showPurchases && <div className="quick-panel__note"><Truck size={18} /><p>Compras recebidas devem ser baixadas no módulo de Compras, mantendo o histórico do pedido.</p></div>}
+              </aside>}
+            </section>}
 
-            <footer className="monthly-equipment-bar">
+            {(["gestao", "lab"].includes(summary.audience)) && isAreaVisible("laboratorio") && <footer className="monthly-equipment-bar">
               <div><span className="monthly-equipment-bar__icon"><PackageOpen size={21} /></span><p>Equipamentos com entrada em <strong>{summary.monthly_equipment_entries.month_label}</strong></p></div>
               <strong>{summary.monthly_equipment_entries.count}</strong>
-            </footer>
+            </footer>}
+            {selectedAreasCount === 0 && <div className="dashboard-visibility__empty"><EyeOff size={20}/><strong>Você ocultou todas as áreas deste painel.</strong><p>Suas informações continuam disponíveis nos módulos do SÊNTICO.</p><button type="button" onClick={() => saveHiddenAreas([])}>Mostrar tudo novamente</button></div>}
           </motion.div>
         )}
       </main>

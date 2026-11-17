@@ -1,0 +1,320 @@
+/* SÊNTICO V20 · Cores semânticas para o tema claro.
+   Esse arquivo é carregado DEPOIS das regras herdadas da V19.
+   Escuro, permissões, valores persistidos e códigos de status não são modificados. */
+
+html[data-sentico-theme="claro"] {
+  --sentico-green-bg: #e5f6ed;
+  --sentico-green-border: #89cfaa;
+  --sentico-green-text: #14633d;
+  --sentico-red-bg: #fce8eb;
+  --sentico-red-border: #eba0ac;
+  --sentico-red-text: #a61f39;
+  --sentico-amber-bg: #fff3d7;
+  --sentico-amber-border: #ecc36e;
+  --sentico-amber-text: #885610;
+  --sentico-blue-bg: #e4f3ff;
+  --sentico-blue-border: #96c6e9;
+  --sentico-blue-text: #185f94;
+  --sentico-teal-bg: #e1f6f5;
+  --sentico-teal-border: #8ccfcb;
+  --sentico-teal-text: #116b69;
+  --sentico-purple-bg: #f1ebff;
+  --sentico-purple-border: #c4b2ee;
+  --sentico-purple-text: #6542a4;
+}
+
+/* Laboratório — os códigos do backend continuam sendo a fonte da situação. */
+html[data-sentico-theme="claro"] .lab-status,
+html[data-sentico-theme="claro"] .customers-status-pill,
+html[data-sentico-theme="claro"] .com-tag,
+html[data-sentico-theme="claro"] .material-request-status,
+html[data-sentico-theme="claro"] .status-pill {
+  font-weight: 750;
+  border-style: solid !important;
+  border-width: 1px !important;
+}
+html[data-sentico-theme="claro"] .lab-status,
+html[data-sentico-theme="claro"] .customers-status-pill,
+html[data-sentico-theme="claro"] .com-tag {
+  background: var(--sentico-blue-bg) !important;
+  border-color: var(--sentico-blue-border) !important;
+  color: var(--sentico-blue-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.customers-status-pill,.com-tag).received,
+html[data-sentico-theme="claro"] .customers-status-received,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).quote_sent,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).issued,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).in_progress,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).rented {
+  background: var(--sentico-blue-bg) !important;
+  border-color: var(--sentico-blue-border) !important;
+  color: var(--sentico-blue-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).in_analysis,
+html[data-sentico-theme="claro"] .customers-status-in_analysis,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).in_testing {
+  background: var(--sentico-teal-bg) !important;
+  border-color: var(--sentico-teal-border) !important;
+  color: var(--sentico-teal-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).awaiting_analysis,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).awaiting_quote,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).awaiting_approval,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).awaiting_parts,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).in_repair,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).draft,
+html[data-sentico-theme="claro"] .customers-status-awaiting_analysis,
+html[data-sentico-theme="claro"] .customers-status-awaiting_quote_approval,
+html[data-sentico-theme="claro"] .customers-status-awaiting_parts,
+html[data-sentico-theme="claro"] .customers-status-in_repair,
+html[data-sentico-theme="claro"] .customers-status-draft {
+  background: var(--sentico-amber-bg) !important;
+  border-color: var(--sentico-amber-border) !important;
+  color: var(--sentico-amber-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).approved,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).completed,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).awaiting_pickup,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).delivered,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).available,
+html[data-sentico-theme="claro"] .customers-status-approved,
+html[data-sentico-theme="claro"] .customers-status-completed,
+html[data-sentico-theme="claro"] .customers-status-delivered {
+  background: var(--sentico-green-bg) !important;
+  border-color: var(--sentico-green-border) !important;
+  color: var(--sentico-green-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).no_repair,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).cancelled,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).rejected,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).sold,
+html[data-sentico-theme="claro"] .customers-status-no_repair,
+html[data-sentico-theme="claro"] .customers-status-cancelled,
+html[data-sentico-theme="claro"] .customers-status-rejected {
+  background: var(--sentico-red-bg) !important;
+  border-color: var(--sentico-red-border) !important;
+  color: var(--sentico-red-text) !important;
+}
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).warranty,
+html[data-sentico-theme="claro"] :is(.lab-status,.com-tag).invoiced,
+html[data-sentico-theme="claro"] .customers-status-invoiced {
+  background: var(--sentico-purple-bg) !important;
+  border-color: var(--sentico-purple-border) !important;
+  color: var(--sentico-purple-text) !important;
+}
+
+/* Compras: as etapas têm uma cor própria e distinguível. */
+html[data-sentico-theme="claro"] .material-request-status {
+  background: var(--sentico-blue-bg) !important;
+  border-color: var(--sentico-blue-border) !important;
+  color: var(--sentico-blue-text) !important;
+}
+html[data-sentico-theme="claro"] .material-request-status:is(.awaiting_approval,.purchasing,.requested,.pending) {
+  background: var(--sentico-amber-bg) !important;
+  border-color: var(--sentico-amber-border) !important;
+  color: var(--sentico-amber-text) !important;
+}
+html[data-sentico-theme="claro"] .material-request-status:is(.approved,.received,.delivered_to_lab) {
+  background: var(--sentico-green-bg) !important;
+  border-color: var(--sentico-green-border) !important;
+  color: var(--sentico-green-text) !important;
+}
+html[data-sentico-theme="claro"] .material-request-status:is(.purchased,.in_transit) {
+  background: var(--sentico-blue-bg) !important;
+  border-color: var(--sentico-blue-border) !important;
+  color: var(--sentico-blue-text) !important;
+}
+html[data-sentico-theme="claro"] .material-request-status:is(.rejected,.cancelled) {
+  background: var(--sentico-red-bg) !important;
+  border-color: var(--sentico-red-border) !important;
+  color: var(--sentico-red-text) !important;
+}
+
+/* Finanças e pedidos compartilham a classe status-pill: preservar o significado de cada uma. */
+html[data-sentico-theme="claro"] .status-pill {
+  background: var(--sentico-amber-bg) !important;
+  border-color: var(--sentico-amber-border) !important;
+  color: var(--sentico-amber-text) !important;
+}
+html[data-sentico-theme="claro"] .status-pill:is(.overdue,.rejected,.cancelled) {
+  background: var(--sentico-red-bg) !important;
+  border-color: var(--sentico-red-border) !important;
+  color: var(--sentico-red-text) !important;
+}
+html[data-sentico-theme="claro"] .status-pill:is(.paid,.received,.settled,.delivered,.completed) {
+  background: var(--sentico-green-bg) !important;
+  border-color: var(--sentico-green-border) !important;
+  color: var(--sentico-green-text) !important;
+}
+html[data-sentico-theme="claro"] .status-pill:is(.due,.pending,.awaiting_approval) {
+  background: var(--sentico-amber-bg) !important;
+  border-color: var(--sentico-amber-border) !important;
+  color: var(--sentico-amber-text) !important;
+}
+html[data-sentico-theme="claro"] .lab-priority.high {
+  color: var(--sentico-amber-text) !important;
+  border-color: var(--sentico-amber-border) !important;
+  background: var(--sentico-amber-bg) !important;
+}
+html[data-sentico-theme="claro"] .lab-priority.urgent {
+  color: var(--sentico-red-text) !important;
+  border-color: var(--sentico-red-border) !important;
+  background: var(--sentico-red-bg) !important;
+}
+html[data-sentico-theme="claro"] .lab-priority-kpis button:nth-child(1) { border-left: 4px solid #0f9695 !important; }
+html[data-sentico-theme="claro"] .lab-priority-kpis button:nth-child(2) { border-left: 4px solid #d5a14c !important; }
+html[data-sentico-theme="claro"] .lab-priority-kpis button:nth-child(3) { border-left: 4px solid #269768 !important; }
+html[data-sentico-theme="claro"] .lab-priority-kpis button:is(:hover,.active) { background: #fff !important; box-shadow: 0 5px 18px rgba(34, 78, 108, .10); }
+
+/* Atividade por módulo: cor contextual, sem sugerir sucesso/erro sem dados do evento. */
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="laboratorio"] {
+  --nt-mod: #087f7b; --nt-mod-bg: #e4f6f3; --nt-mod-br: #b6dfd8;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="orcamentos"] {
+  --nt-mod: #186da9; --nt-mod-bg: #e6f2fc; --nt-mod-br: #b4d4ef;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="compras"] {
+  --nt-mod: #95610e; --nt-mod-bg: #fff3d9; --nt-mod-br: #efd49c;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="estoque"] {
+  --nt-mod: #6d4dad; --nt-mod-bg: #f0ebfb; --nt-mod-br: #d5c7f0;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="financeiro"] {
+  --nt-mod: #187248; --nt-mod-bg: #e5f6ec; --nt-mod-br: #b6dfc5;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="comercial"] {
+  --nt-mod: #9c4b79; --nt-mod-bg: #fbeaf3; --nt-mod-br: #eec7dd;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="colaboradores"] {
+  --nt-mod: #4a60aa; --nt-mod-bg: #ecf0fc; --nt-mod-br: #c7d0ef;
+}
+html[data-sentico-theme="claro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed>button)[data-modulo="configuracoes"] {
+  --nt-mod: #506d80; --nt-mod-bg: #edf3f7; --nt-mod-br: #ccdae3;
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] {
+  border-left: 4px solid var(--nt-mod) !important;
+  box-shadow: 0 3px 14px rgba(27, 60, 83, .05);
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo].is-unread {
+  background: linear-gradient(95deg, var(--nt-mod-bg), #fff 45%) !important;
+  border-top-color: var(--nt-mod-br) !important;
+  border-right-color: var(--nt-mod-br) !important;
+  border-bottom-color: var(--nt-mod-br) !important;
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] .sentico-notifications__item-icon,
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] .sentico-notifications__module {
+  color: var(--nt-mod) !important;
+  background: var(--nt-mod-bg) !important;
+  border: 1px solid var(--nt-mod-br);
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] .sentico-notifications__new {
+  color: var(--nt-mod) !important;
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] .sentico-notifications__new span {
+  background: var(--nt-mod) !important;
+}
+html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo]:hover {
+  border-color: var(--nt-mod-br) !important;
+  border-left-color: var(--nt-mod) !important;
+  box-shadow: 0 8px 22px rgba(28, 68, 88, .08);
+}
+/* Acentos de leitura no próprio painel, mantendo os títulos legíveis. */
+html[data-sentico-theme="claro"] .notification-popover .notification-item[data-modulo],
+html[data-sentico-theme="claro"] .dashboard-notification-feed > button[data-modulo] {
+  border-left: 3px solid var(--nt-mod) !important;
+  background: #fff !important;
+  padding-left: 10px;
+}
+html[data-sentico-theme="claro"] .notification-popover .notification-item[data-modulo]:hover,
+html[data-sentico-theme="claro"] .dashboard-notification-feed > button[data-modulo]:hover {
+  background: var(--nt-mod-bg) !important;
+  border-color: var(--nt-mod-br) !important;
+  border-left-color: var(--nt-mod) !important;
+}
+html[data-sentico-theme="claro"] .notification-popover .notification-item.is-read,
+html[data-sentico-theme="claro"] .dashboard-notification-feed > button.is-read { opacity: .86; }
+html[data-sentico-theme="claro"] .sentico-notifications__overview > button:nth-child(2) { border-top: 3px solid #d8a24e; }
+html[data-sentico-theme="claro"] .sentico-notifications__overview > button:nth-child(3) { border-top: 3px solid #9471cb; }
+html[data-sentico-theme="claro"] .sentico-notifications__overview-main { border-top: 3px solid #2c91b9; }
+html[data-sentico-theme="claro"] .sentico-notifications__filters { border-top: 3px solid #a5d0df; }
+html[data-sentico-theme="claro"] .sentico-notifications__results { border-top: 3px solid #b1d9cc; }
+/* O seletor da V19 contém !important e cinza uniforme. A cor das chamadas fica azul sem desativar a hierarquia. */
+html[data-sentico-theme="claro"] .sentico-notifications__filter-actions > button:first-child {
+  color: white !important;
+  background: #156e9a !important;
+  border-color: #156e9a !important;
+}
+@media (max-width: 767px) {
+  html[data-sentico-theme="claro"] .sentico-notifications__item[data-modulo] { border-left-width: 3px !important; }
+  html[data-sentico-theme="claro"] :is(.lab-status,.customers-status-pill,.com-tag,.status-pill,.material-request-status) {
+    max-width: 100%; overflow-wrap: anywhere; white-space: normal;
+  }
+  html[data-sentico-theme="claro"] .sentico-notifications__item h3 { font-size: 14px; }
+  html[data-sentico-theme="claro"] .sentico-notifications__metadata dd { font-size: 12px; }
+}
+
+/* Um pouco mais de personalidade em cartões importantes, sem criar cor artificial em dados. */
+html[data-sentico-theme="claro"] .overview-card--danger {
+  border-color: #e9b5bf !important;
+  background: linear-gradient(130deg, #fff, #fff4f6) !important;
+}
+html[data-sentico-theme="claro"] .overview-card--warning {
+  border-color: #ecd7a2 !important;
+  background: linear-gradient(130deg, #fff, #fffaed) !important;
+}
+html[data-sentico-theme="claro"] .overview-card--info {
+  border-color: #b9dce9 !important;
+  background: linear-gradient(130deg, #fff, #f0f9fc) !important;
+}
+html[data-sentico-theme="claro"] .overview-card--danger .overview-card__icon {
+  background: var(--sentico-red-bg) !important;
+  color: var(--sentico-red-text) !important;
+}
+html[data-sentico-theme="claro"] .overview-card--warning .overview-card__icon {
+  background: var(--sentico-amber-bg) !important;
+  color: var(--sentico-amber-text) !important;
+}
+html[data-sentico-theme="claro"] .overview-card--info .overview-card__icon {
+  background: var(--sentico-blue-bg) !important;
+  color: var(--sentico-blue-text) !important;
+}
+html[data-sentico-theme="claro"] .finance-kpi--positive { border-top: 3px solid #249669 !important; }
+html[data-sentico-theme="claro"] .finance-kpi--negative { border-top: 3px solid #d9576c !important; }
+html[data-sentico-theme="claro"] .finance-kpi--warning { border-top: 3px solid #d8a148 !important; }
+html[data-sentico-theme="claro"] .lab-kpis article.danger { border-color: #eab4bd !important; background: #fff4f5 !important; }
+html[data-sentico-theme="claro"] .sentico-notifications__results-heading {
+  border-bottom-color: #d2e7e5;
+}
+
+/* V21 — cores de ação no tema claro, com contraste para texto dos botões. */
+html[data-sentico-theme="claro"] .work-queue { --queue-accent: #17688f; --queue-soft: #eaf6fb; background: #fff; border-color: #d2e1ec; box-shadow: 0 6px 18px rgba(23, 63, 86, .035); }
+html[data-sentico-theme="claro"] .work-queue--warning { --queue-accent: #925f0a; --queue-soft: #fff4d9; }
+html[data-sentico-theme="claro"] .work-queue--danger { --queue-accent: #a72c43; --queue-soft: #fff0f3; }
+html[data-sentico-theme="claro"] .work-queue--success { --queue-accent: #166945; --queue-soft: #e6f8ef; }
+html[data-sentico-theme="claro"] .work-queue__item { color: #18394c; }
+html[data-sentico-theme="claro"] .work-queue__item:where(:hover,:focus-visible) { background: var(--queue-soft); }
+html[data-sentico-theme="claro"] .work-queue__info :is(small,em),
+html[data-sentico-theme="claro"] .work-queue__heading p { color: #5c7182; }
+html[data-sentico-theme="claro"] .work-queue__section,
+html[data-sentico-theme="claro"] .work-queue__end,
+html[data-sentico-theme="claro"] .work-queue__count,
+html[data-sentico-theme="claro"] .work-queue__status,
+html[data-sentico-theme="claro"] .work-queue__footer { color: var(--queue-accent) !important; }
+html[data-sentico-theme="claro"] .work-queue__status,
+html[data-sentico-theme="claro"] .work-queue__count,
+html[data-sentico-theme="claro"] .work-queue__footer { background: var(--queue-soft) !important; }
+/* A cor verde de fundo NÃO pode compartilhar o mesmo verde do texto. */
+html[data-sentico-theme="claro"] .employees-primary,
+html[data-sentico-theme="claro"] .employees-shell button.employees-primary,
+html[data-sentico-theme="claro"] .employee-modal button.employees-primary {
+  background: #116d92 !important; border-color: #116d92 !important; color: #fff !important;
+}
+html[data-sentico-theme="claro"] .employees-primary :is(span,strong,small,svg) { color: #fff !important; }
+html[data-sentico-theme="claro"] .employee-status.active { color: #115939 !important; background: #def5e8 !important; border: 1px solid #b6e7c8; }
+html[data-sentico-theme="claro"] .employee-status.inactive { color: #972c43 !important; background: #ffebef !important; border: 1px solid #f4c9d3; }
+html[data-sentico-theme="claro"] .employee-account-state button.success { color: #fff !important; background: #16724b !important; border-color: #16724b !important; }
+html[data-sentico-theme="claro"] .employee-account-state button.danger { color: #fff !important; background: #a73750 !important; border-color: #a73750 !important; }
+html[data-sentico-theme="claro"] .employee-role--gestao { color: #125b3b !important; background: #e5f7eb !important; }
+html[data-sentico-theme="claro"] .employee-role--lab { color: #165c88 !important; background: #e3f2fd !important; }
+html[data-sentico-theme="claro"] .employee-role--admin { color: #6240a0 !important; background: #f0e9fa !important; }
+html[data-sentico-theme="claro"] .event-filters button.active { background: #fff !important; color: #123f57 !important; box-shadow: 0 3px 12px rgba(35,77,99,.13); }

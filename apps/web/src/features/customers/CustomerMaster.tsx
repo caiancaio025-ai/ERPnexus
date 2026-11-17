@@ -76,7 +76,7 @@ const EMPTY_FORM: CustomerForm = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  received: "Recebido", in_analysis: "Em análise", awaiting_quote_approval: "Aguardando aprovação", approved: "Aprovado",
+  received: "Recebido", in_analysis: "Analisado", awaiting_quote_approval: "Aguardando aprovação", approved: "Aprovado",
   in_repair: "Em reparo", awaiting_parts: "Aguardando peças", completed: "Concluído", invoiced: "Faturado",
   delivered: "Entregue", cancelled: "Cancelado", draft: "Rascunho", sent: "Enviado", rejected: "Rejeitado",
 };

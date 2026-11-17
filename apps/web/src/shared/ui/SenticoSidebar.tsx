@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Boxes, Building2, ChevronLeft, ChevronRight, FlaskConical, Handshake,
+  Bell, Boxes, Building2, ChevronLeft, ChevronRight, FlaskConical, Handshake,
   LayoutDashboard, LogOut, Menu, ShoppingCart, UsersRound, WalletCards, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../../features/auth/AuthCard";
 import { SenticoMark } from "./SenticoMark";
+import { ThemeSwitcher } from "../theme/ThemeSwitcher";
 import "./sentico-sidebar.css";
 
 export type SenticoSidebarItem = {
@@ -29,6 +30,7 @@ const STORAGE_KEY = "sentico:sidebar:collapsed";
 
 const moduleLinks = [
   { label: "Painel", icon: LayoutDashboard, path: "/painel" },
+  { label: "Notificações", icon: Bell, path: "/notificacoes" },
   { label: "Financeiro", icon: WalletCards, path: "/financeiro" },
   { label: "Laboratório", icon: FlaskConical, path: "/laboratorio" },
   { label: "Clientes", icon: Building2, path: "/clientes" },
@@ -145,9 +147,10 @@ export function SenticoSidebar({ user, onLogout, sectionLabel, sectionItems = []
         </div>
 
         <footer className="sentico-sidebar__footer">
+          <ThemeSwitcher compacto={collapsed && !mobileOpen} />
           <div className="sentico-sidebar__profile" title={`${user.name} · ${user.role}`}>
             <span className="sentico-sidebar__avatar">{userInitials(user.name)}</span>
-            <div className="sentico-sidebar__profile-text"><strong>{user.name}</strong><small>{user.role}</small></div>
+            <div className="sentico-sidebar__profile-text"><strong>{user.name}</strong><small>{({super_admin:"Superadministrador",gestao:"Gestão",admin:"Administrador",laboratorio:"Laboratório",tecnico:"Técnico",compras:"Compras",estoque:"Estoque"} as Record<string,string>)[user.role] ?? user.role}</small></div>
           </div>
           <button className="sentico-sidebar__item sentico-sidebar__logout" type="button" onClick={() => runAction(onLogout)} title="Sair do sistema" aria-label="Sair do sistema">
             <LogOut size={19} aria-hidden="true" /><span>Sair do sistema</span>

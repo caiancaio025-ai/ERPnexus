@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Alert(BaseModel):
@@ -34,9 +34,32 @@ class MonthlyEquipmentEntries(BaseModel):
     count: int
 
 
+class WorkItem(BaseModel):
+    id: int
+    title: str
+    description: str
+    status: str
+    target: str
+    meta: str | None = None
+    date_label: str | None = None
+
+
+class WorkQueue(BaseModel):
+    key: str
+    section: Literal["laboratorio", "orcamentos", "compras", "financeiro", "estoque"]
+    title: str
+    description: str
+    tone: Literal["info", "warning", "danger", "success"]
+    total: int = Field(ge=0)
+    target: str
+    items: list[WorkItem] = Field(default_factory=list)
+
+
 class DashboardSummary(BaseModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
+    audience: Literal["gestao", "admin", "lab", "compras", "estoque", "outros"] = "outros"
     alerts: list[Alert]
+    work_queues: list[WorkQueue] = Field(default_factory=list)
     purchase_events: list[PurchaseEvent]
     quick_actions: list[QuickAction]
     monthly_equipment_entries: MonthlyEquipmentEntries

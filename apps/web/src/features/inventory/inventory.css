@@ -1014,3 +1014,23 @@
   padding: 3px 8px;
   vertical-align: middle;
 }
+
+/* V16 · pesquisa de posição física no formulário de estoque (desktop e mobile). */
+.inv-app .inv-slot-search { display:grid; gap:6px; min-width:0; position:relative; align-content:start; font-size:12px; font-weight:650; }
+.inv-app .inv-slot-search > label { display:block; font-size:12px; font-weight:650; }
+.inv-app .inv-slot-search__field { position:relative; min-width:0; display:flex; align-items:center; }
+.inv-app .inv-slot-search__field > svg { position:absolute; left:11px; z-index:1; color:#74b6d9; pointer-events:none; }
+.inv-app .inv-slot-search__field input { width:100%; padding-left:38px; padding-right:42px; min-height:43px; }
+.inv-app .inv-slot-search__field input::-webkit-search-cancel-button { display:none; }
+.inv-app .inv-slot-search__clear { position:absolute; right:5px; display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:7px; color:#9fdaf5; background:#17364c; }
+.inv-app .inv-slot-search__selected { display:flex; align-items:center; gap:5px; color:#7de1ba; line-height:1.4; font-size:11px; }
+.inv-app .inv-slot-search__results { position:absolute; z-index:140; top:calc(100% + 4px); left:0; right:0; max-height:min(315px, 48dvh); min-width:0; overflow:auto; border:1px solid #357396; border-radius:10px; padding:5px; background:#0b2539; box-shadow:0 16px 38px #0009; }
+.inv-app .inv-slot-search__results button { display:flex; text-align:left; align-items:center; justify-content:flex-start; gap:9px; padding:10px; width:100%; min-height:44px; border:0; border-radius:7px; background:transparent; color:#e8f6ff; }
+.inv-app .inv-slot-search__results button:hover,.inv-app .inv-slot-search__results button.is-active { background:#174462; }
+.inv-app .inv-slot-search__results button > svg { flex:none; color:#65c8f3; }
+.inv-app .inv-slot-search__results button > span { display:grid; gap:3px; min-width:0; flex:1; overflow-wrap:anywhere; }
+.inv-app .inv-slot-search__results button strong { font-size:12px; }
+.inv-app .inv-slot-search__results button small { font-size:11px; font-weight:400; color:#a0bdd1; }
+.inv-app .inv-slot-search__results button em { font-size:10px; font-weight:600; color:#9de7c6; font-style:normal; }
+.inv-app .inv-slot-search__results p { padding:12px; font-size:12px; color:#a6c5d9; }
+.inv-app .inv-slot-search__results .inv-slot-search__none { color:#bed1df; border-bottom:1px solid #264b65; border-radius:0; }

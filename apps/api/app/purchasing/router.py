@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.file_validation import InvalidUpload
 from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
-from app.notifications.service import notify_modules
+from app.notifications.events import purchase_order_activity, material_request_activity
 from app.purchasing.models import PurchaseAuditEvent, PurchaseOrder, Supplier
 from app.inventory.stock_codes import stock_id_from_query
 from app.inventory.purchase_cycle import purchase_unit_cost, receive_purchase
@@ -388,6 +388,11 @@ async def create_order(
             stock_category=purchase.inventory_category,
             stock_format_id=purchase.inventory_format_id)
     db.add(_audit(purchase, "created", f"Compra criada: {purchase.code}", user.id))
+    await purchase_order_activity(db, actor=user, purchase=purchase,
+        action="purchase_received" if purchase.status == "delivered" else "purchase_created",
+        title=f"{'Material recebido' if purchase.status == 'delivered' else 'Compra registrada'} · {purchase.code}",
+        message=f"{user.name} {'confirmou a chegada' if purchase.status == 'delivered' else 'registrou a compra'} de {purchase.quantity}x {purchase.product_name}.",
+        severity="success" if purchase.status == "delivered" else "info")
     await db.commit()
     await db.refresh(purchase)
     return _purchase_output(purchase, include_sensitive_values=True)
@@ -427,6 +432,7 @@ async def update_order(
     # Recebimentos antigos são imutáveis sem estorno; só sincronizar o nome antes da entrada.
     if prior_receipt is None:
         payload = await _purchase_with_canonical_inventory_name(db, payload)
+    previous_status = purchase.status
     for field, value in payload.model_dump().items():
         setattr(purchase, field, value)
     purchase.supplier_name = supplier.name
@@ -453,6 +459,11 @@ async def update_order(
             stock_category=purchase.inventory_category,
             stock_format_id=purchase.inventory_format_id)
     db.add(_audit(purchase, "updated", f"Compra editada: {purchase.code}", user.id))
+    await purchase_order_activity(db, actor=user, purchase=purchase,
+        action="purchase_received" if previous_status != "delivered" and purchase.status == "delivered" else "purchase_updated",
+        title=f"{'Material chegou' if previous_status != 'delivered' and purchase.status == 'delivered' else 'Compra atualizada'} · {purchase.code}",
+        message=f"{user.name} {'confirmou a entrega' if previous_status != 'delivered' and purchase.status == 'delivered' else 'alterou os dados'} de {purchase.quantity}x {purchase.product_name}.",
+        severity="success" if purchase.status == "delivered" else "info")
     await db.commit()
     await db.refresh(purchase)
     return _purchase_output(purchase, include_sensitive_values=True)
@@ -470,6 +481,8 @@ async def delete_order(
         raise HTTPException(409, "Compra já recebida em estoque; não é possível excluí-la sem estorno auditado.")
     purchase.is_deleted = True
     db.add(_audit(purchase, "deleted", f"Compra excluída: {purchase.code}", user.id))
+    await purchase_order_activity(db, actor=user, purchase=purchase, action="purchase_deleted",
+        title=f"Compra {purchase.code} excluída", message=f"{user.name} excluiu o registro de compra {purchase.code}.")
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -671,18 +684,8 @@ async def create_standalone_material_request(
         target="awaiting_approval",
         note="Solicitação avulsa criada no módulo de Compras.",
     ))
-    await notify_modules(
-        db,
-        modules={"compras"},
-        category="purchase_request",
-        severity="info",
-        title=f"Nova solicitação avulsa · {request.code}",
-        message=f"{user.name} solicitou {request.quantity}x {request.item_name}.",
-        target="/compras?view=requests",
-        entity_type="material_request",
-        entity_id=request.id,
-        exclude_user_id=user.id,
-    )
+    await material_request_activity(db, actor=user, request=request, action="material_requested",
+        title=f"Solicitação {request.code} criada", message=f"{user.name} solicitou {request.quantity}x {request.item_name}.")
     await db.commit()
     await db.refresh(request)
     return (await output_rows(
@@ -775,33 +778,20 @@ async def update_material_request(
         target=payload.status,
         note=payload.note,
     ))
-    if previous != "approved" and payload.status == "approved" and request.work_order_id is not None:
-        await notify_modules(
-            db,
-            modules={"laboratorio"},
-            category="material_request_approved",
-            severity="success",
-            title=f"Material aprovado · {request.code}",
-            message=f"Compras aprovou {request.quantity}x {request.item_name}. Acompanhe o andamento na O.S.",
-            target=f"/laboratorio?os={request.work_order_id}&aba=materials",
-            entity_type="material_request",
-            entity_id=request.id,
-            work_order_id=request.work_order_id,
-            exclude_user_id=user.id,
-        )
-    if previous != "purchased" and payload.status == "purchased":
-        await notify_modules(
-            db,
-            modules={"compras", "laboratorio"},
-            category="purchase",
-            severity="success",
-            title=f"Compra realizada · {request.code}",
-            message=f"{request.quantity}x {request.item_name} comprado(s). OS vinculada pronta para acompanhamento.",
-            target=(f"/laboratorio?os={request.work_order_id}&aba=materials" if request.work_order_id else "/compras?view=requests"),
-            entity_type="material_request",
-            entity_id=request.id,
-            work_order_id=request.work_order_id,
-        )
+    status_labels = {
+        "awaiting_approval": "Aguardando aprovação", "approved": "Aprovado",
+        "purchased": "Comprado", "received": "Material recebido",
+        "delivered_to_lab": "Entregue ao laboratório", "rejected": "Recusado",
+    }
+    label = status_labels.get(request.status, request.status.replace("_", " ").capitalize())
+    action = ({"approved": "material_approved", "purchased": "material_purchased",
+               "received": "material_received", "delivered_to_lab": "material_delivered"}.get(request.status)
+              if previous != request.status else "material_updated") or "material_status_changed"
+    await material_request_activity(db, actor=user, request=request, action=action,
+        title=f"{label} · {request.code}",
+        message=f"{user.name} {'alterou o status' if previous != request.status else 'atualizou os dados'} da solicitação de {request.quantity}x {request.item_name}.",
+        severity="success" if request.status in {"approved", "purchased", "received", "delivered_to_lab"} else "info",
+        details=payload.note)
     await recalculate_work_order_parts_cost(db, request.work_order_id)
     await db.commit()
     await db.refresh(request)

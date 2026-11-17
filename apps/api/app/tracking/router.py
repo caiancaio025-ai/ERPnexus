@@ -17,7 +17,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 _STATUS_LABELS = {
     "received": "Recebido",
     "awaiting_analysis": "Aguardando análise",
-    "in_analysis": "Em análise",
+    "in_analysis": "Analisado",
     "awaiting_quote": "Aguardando orçamento",
     "quote_sent": "Orçamento enviado",
     "awaiting_approval": "Aguardando aprovação",

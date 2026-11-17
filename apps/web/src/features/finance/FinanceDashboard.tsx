@@ -258,6 +258,21 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       .catch((reason: Error) => setError(`Não foi possível localizar a parcela: ${reason.message}`));
   }, [route.search, linkedWorkOrderId]);
 
+  // A central do painel pode abrir um lançamento individual, mesmo sem OS associada.
+  // O backend permanece responsável por autorizar a visualização financeira.
+  useEffect(() => {
+    const params = new URLSearchParams(route.search);
+    const entryId = Number(params.get("lancamento"));
+    if (linkedWorkOrderId > 0 || !Number.isSafeInteger(entryId) || entryId <= 0 || openedDeepLink.current === route.search) return;
+    openedDeepLink.current = route.search;
+    apiClient.get<FinancialEntry>(`/finance/entries/${entryId}`)
+      .then((entry) => {
+        setView(entry.entry_type === "expense" ? "expense" : "income");
+        return openEntry(entryId);
+      })
+      .catch((reason: Error) => setError(`Não foi possível abrir o lançamento: ${reason.message}`));
+  }, [route.search, linkedWorkOrderId]);
+
   function openNewForWorkOrder(group: WorkOrderReceivables) {
     if (group.remaining_to_issue !== null && Number(group.remaining_to_issue) < 0.01) {
       setError("O valor aprovado desta OS já foi integralmente lançado. Verifique as parcelas existentes.");

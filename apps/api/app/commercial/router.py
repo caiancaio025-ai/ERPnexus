@@ -47,7 +47,7 @@ from app.commercial.schemas import (
 )
 from app.core.db import get_db
 from app.laboratory.models import LaboratoryCustomer
-from app.notifications.service import notify_modules
+from app.notifications.service import notify_activity
 
 router = APIRouter(prefix="/commercial", dependencies=[Depends(require_module("comercial"))])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -519,7 +519,10 @@ async def create_quote(payload:CommercialQuoteInput,user:CurrentUser,db:DbSessio
     _require_quote(user)
     customer=await db.get(LaboratoryCustomer,payload.customer_id)
     if not customer or not customer.is_active: raise HTTPException(404,"Cliente não encontrado.")
-    data=payload.model_dump(exclude={"items"}); quote=CommercialQuote(**data,created_by=user.id,status="draft",revision=0,total=0); db.add(quote); await db.flush(); quote.quote_number=f"COM-{quote.id:06d}"; await _replace_items(db,quote,payload); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
+    data=payload.model_dump(exclude={"items"}); quote=CommercialQuote(**data,created_by=user.id,status="draft",revision=0,total=0); db.add(quote); await db.flush(); quote.quote_number=f"COM-{quote.id:06d}"; await _replace_items(db,quote,payload); await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_created",
+        title=f"Orçamento comercial criado · {quote.quote_number}", message=f"{user.name} criou o orçamento para {customer.legal_name}.",
+        target=f"/comercial?quote={quote.id}", entity_type="commercial_quote", entity_id=quote.id)
+    await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
 
 
 @router.put("/quotes/{quote_id}", response_model=CommercialQuoteOutput)
@@ -527,7 +530,10 @@ async def update_quote(quote_id:int,payload:CommercialQuoteInput,user:CurrentUse
     _require_quote(user); quote=await _quote_or_404(db,quote_id)
     if quote.status!="draft": raise HTTPException(409,"Somente rascunhos podem ser editados. Crie uma revisão formal para alterar um orçamento emitido.")
     for k,v in payload.model_dump(exclude={"items"}).items(): setattr(quote,k,v)
-    await _replace_items(db,quote,payload); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
+    await _replace_items(db,quote,payload); await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_updated",
+        title=f"Orçamento comercial atualizado · {quote.quote_number}", message=f"{user.name} editou este orçamento comercial.",
+        target=f"/comercial?quote={quote.id}", entity_type="commercial_quote", entity_id=quote.id)
+    await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
 
 
 @router.post("/quotes/{quote_id}/issue", response_model=CommercialQuoteOutput)
@@ -535,7 +541,10 @@ async def issue_quote(quote_id:int,user:CurrentUser,db:DbSession):
     _require_quote(user); quote=await _quote_or_404(db,quote_id)
     if quote.status!="draft": raise HTTPException(409,"Apenas rascunhos podem ser emitidos.")
     from datetime import datetime, timezone
-    quote.status="issued"; quote.revision=max(1,quote.revision or 0); quote.issued_at=datetime.now(timezone.utc); await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
+    quote.status="issued"; quote.revision=max(1,quote.revision or 0); quote.issued_at=datetime.now(timezone.utc); await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_issued",
+        title=f"Orçamento comercial emitido · {quote.quote_number}", message=f"{user.name} emitiu o orçamento comercial.",
+        target=f"/comercial?quote={quote.id}", entity_type="commercial_quote", entity_id=quote.id)
+    await db.commit(); await db.refresh(quote); return await _quote_output(db,quote,user)
 
 
 @router.post("/quotes/{quote_id}/revision", response_model=CommercialQuoteOutput, status_code=201)
@@ -547,6 +556,9 @@ async def revise_quote(quote_id:int,user:CurrentUser,db:DbSession):
     copy=CommercialQuote(**data,quote_number=source.quote_number,revision=source.revision+1,status="draft",issued_at=None,created_by=user.id); db.add(copy); await db.flush()
     for item in source_items:
         vals={c.name:getattr(item,c.name) for c in CommercialQuoteItem.__table__.columns if c.name not in {"id","quote_id"}}; db.add(CommercialQuoteItem(quote_id=copy.id,**vals))
+    await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_revised",
+        title=f"Orçamento comercial revisado · {copy.quote_number}", message=f"{user.name} iniciou a revisão {copy.revision}.",
+        target=f"/comercial?quote={copy.id}", entity_type="commercial_quote", entity_id=copy.id)
     await db.commit(); await db.refresh(copy); return await _quote_output(db,copy,user)
 
 
@@ -561,28 +573,11 @@ async def set_quote_status(quote_id:int,payload:QuoteStatusInput,user:CurrentUse
     if payload.status in {"approved","rejected","cancelled"}: _require_money(user)
     previous_status = quote.status
     quote.status = payload.status
-    if previous_status != "approved" and payload.status == "approved" and quote.quote_type == "sale":
-        customer = await db.get(LaboratoryCustomer, quote.customer_id)
-        items = list((await db.scalars(
-            select(CommercialQuoteItem)
-            .where(CommercialQuoteItem.quote_id == quote.id)
-            .order_by(CommercialQuoteItem.sort_order, CommercialQuoteItem.id)
-        )).all())
-        item_names = ", ".join(item.description for item in items[:3])
-        if len(items) > 3:
-            item_names += f" e mais {len(items) - 3} item(ns)"
-        await notify_modules(
-            db,
-            modules={"compras"},
-            category="commercial_sale_approved",
-            severity="warning",
-            title=f"Venda aprovada · {quote.quote_number}",
-            message=f"{customer.legal_name if customer else 'Cliente'} aprovou a venda. Itens: {item_names or 'não informados'}.",
-            target=f"/comercial?tab=orcamento&quote={quote.id}",
-            entity_type="commercial_quote",
-            entity_id=quote.id,
-            amount=quote.total,
-        )
+    await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_status",
+        title=f"Orçamento comercial {payload.status} · {quote.quote_number}",
+        message=f"{user.name} alterou o status de {previous_status} para {payload.status}.",
+        target=f"/comercial?quote={quote.id}", entity_type="commercial_quote", entity_id=quote.id,
+        severity="success" if payload.status == "approved" else "info")
     await db.commit()
     await db.refresh(quote)
     return await _quote_output(db,quote,user)

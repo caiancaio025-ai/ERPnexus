@@ -21,6 +21,7 @@ from app.auth.access import user_can_view_sensitive_values
 from app.auth.dependencies import require_any_module
 from app.auth.models import User
 from app.auth.router import current_user
+from app.notifications.service import notify_activity
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.file_validation import InvalidUpload
@@ -156,6 +157,10 @@ async def create_customer(
             )
     customer = LaboratoryCustomer(**payload.model_dump(), created_by=user.id)
     db.add(customer)
+    await db.flush()
+    await notify_activity(db, actor=user, activity_module="comercial", action="customer_created",
+        title="Cliente cadastrado", message=f"{user.name} cadastrou {customer.legal_name}.",
+        target=f"/clientes/{customer.id}", entity_type="customer", entity_id=customer.id)
     await db.commit()
     await db.refresh(customer)
     return customer
@@ -304,6 +309,9 @@ async def update_customer(
     customer = await _customer_or_404(db, customer_id)
     for field, value in payload.model_dump().items():
         setattr(customer, field, value)
+    await notify_activity(db, actor=user, activity_module="comercial", action="customer_updated",
+        title="Cadastro de cliente atualizado", message=f"{user.name} atualizou {customer.legal_name}.",
+        target=f"/clientes/{customer.id}", entity_type="customer", entity_id=customer.id)
     await db.commit()
     return await get_customer(customer_id, db, user)
 

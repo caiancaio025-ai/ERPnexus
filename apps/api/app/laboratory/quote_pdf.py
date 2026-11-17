@@ -1,6 +1,7 @@
 # pyright: basic
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from html import escape
 from io import BytesIO
@@ -17,7 +18,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Image as PlatypusImage
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import settings
 
@@ -134,6 +135,7 @@ def quote_pdf(
     customer: LaboratoryCustomer | None = None,
     photo_paths: list[tuple[str, str | None]] | None = None,
     company_profile: dict[str, object | None] | None = None,
+    issued_at: datetime | None = None,
 ) -> bytes:
     """Gera orçamento corporativo com paginação natural e blocos legíveis."""
     buffer = BytesIO()
@@ -189,7 +191,7 @@ def quote_pdf(
     company_address = " - ".join(str(item).strip() for item in address_parts if item)
     if not company_address:
         company_address = "Não informado"
-    emitted = quote.emitted_at or quote.updated_at
+    emitted = issued_at or quote.emitted_at or quote.updated_at
     service_code = _safe(getattr(quote, "service_code", None), "3312102 / 14.01")
     validity_days = _effective_validity_days(quote)
     story: list[object] = []
@@ -404,12 +406,14 @@ def quote_pdf(
             ratio = min(max_width / image.imageWidth, max_height / image.imageHeight)
             image.drawWidth = image.imageWidth * ratio
             image.drawHeight = image.imageHeight * ratio
-            story += [
+            # Legenda e foto seguem juntas. Com dez imagens, a paginação deve
+            # continuar previsível mesmo com legendas e imagens verticais.
+            story.append(KeepTogether([
                 Paragraph(f"<b>Foto {index:02d}</b>{' — ' + _safe(caption) if caption else ''}", body),
                 Spacer(1, 4),
                 image,
                 Spacer(1, 10),
-            ]
+            ]))
 
     def draw_watermark(canvas: Canvas, _doc: SimpleDocTemplate) -> None:
         if not GEAR_WATERMARK.exists():
@@ -464,7 +468,7 @@ def _wrap_text(
 STATUS_LABELS_PT: dict[str, str] = {
     "received": "Recebido",
     "awaiting_analysis": "Aguardando análise",
-    "in_analysis": "Em análise",
+    "in_analysis": "Analisado",
     "awaiting_quote": "Aguardando orçamento",
     "quote_sent": "Orçamento enviado",
     "awaiting_approval": "Aguardando aprovação",
