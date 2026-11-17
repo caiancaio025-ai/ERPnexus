@@ -35,8 +35,14 @@ if not exist ".env.dev" (
   echo [2/5] .env.dev ja existe, mantendo.
 )
 
+REM --- 3b. Criar os volumes externos (idempotente; na primeira vez nao existem) ---
+echo [3/5] Garantindo os volumes locais isolados...
+docker volume create sentico_v14_local_pgdata >nul 2>&1
+docker volume create sentico_v14_local_uploads >nul 2>&1
+docker volume create sentico_v14_local_node_modules >nul 2>&1
+
 REM --- 4. Subir o ambiente ---
-echo [3/5] Subindo containers (pode demorar na primeira vez)...
+echo       Subindo containers (pode demorar na primeira vez)...
 docker compose -f compose.dev.yml --env-file .env.dev up -d --build || goto :erro
 
 REM --- 5. Esperar a API responder ---

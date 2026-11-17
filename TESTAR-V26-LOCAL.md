@@ -33,7 +33,12 @@ git pull
 echo SENTICO_V14_PASSWORD=senticolocaldev2026> .env.dev
 echo SENTICO_DB_NAME=postgres>> .env.dev
 
-:: 3. subir o ambiente isolado
+:: 3. criar os volumes locais isolados (so na primeira vez; idempotente)
+docker volume create sentico_v14_local_pgdata
+docker volume create sentico_v14_local_uploads
+docker volume create sentico_v14_local_node_modules
+
+:: 3b. subir o ambiente isolado
 docker compose -f compose.dev.yml --env-file .env.dev up -d --build
 
 :: 4. BOOTSTRAP (só na primeira vez): migra, cria admin, migra o resto
