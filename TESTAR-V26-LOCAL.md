@@ -15,8 +15,11 @@ Sim. Este ambiente usa o projeto Compose **`sentico-v14-local-fixo`** e volumes 
 
 1. Abra o **Docker Desktop** (containers Linux).
 2. Na pasta do repositório, dê duplo clique em **`TESTAR-V26-LOCAL.cmd`**.
-3. Na primeira vez ele vai pedir pra você criar um **administrador** (nome, e-mail e senha de 12+ caracteres) — é o login do ERP local.
-4. Quando terminar, abra **http://127.0.0.1:5284/** e entre com esse admin.
+3. Ele cria um **admin padrão** sozinho (só na primeira vez, quando o banco está vazio).
+4. Quando terminar, abra **http://127.0.0.1:5284/** e entre com:
+   - **usuário:** `admin`
+   - **senha:** `senticolocal2026`
+   - (troque depois de entrar — vale só neste ambiente local isolado)
 
 Pra **parar**: `docker compose -f compose.dev.yml down` (mantém o banco local pra próxima vez).
 Pra **zerar** o banco local: `docker compose -f compose.dev.yml down -v`.
@@ -41,18 +44,17 @@ docker volume create sentico_v14_local_node_modules
 :: 3b. subir o ambiente isolado
 docker compose -f compose.dev.yml --env-file .env.dev up -d --build
 
-:: 4. BOOTSTRAP (só na primeira vez): migra, cria admin, migra o resto
+:: 4. BOOTSTRAP (idempotente): migra, cria admin padrao se o banco estiver vazio, migra o resto
 docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade 20261009_01
-docker compose -f compose.dev.yml --env-file .env.dev exec api python -m app.cli create-admin
+docker compose -f compose.dev.yml --env-file .env.dev exec -T api python scripts/criar_admin_padrao.py
 docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade head
 ```
 
-Nas próximas vezes, só os passos 1 e 3, mais:
-```bat
-docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade head
-```
+Pode rodar esses 3 comandos quantas vezes quiser — o admin só é criado quando não existe nenhum usuário.
 
-> **Por que esse bootstrap?** A migration `20261009_02` exige um usuário já cadastrado. Então a ordem é: migrar até `20261009_01`, criar o admin, e só então ir até o `head` (que inclui as 2 migrations novas da V26: notificações web push e histórico de atividade).
+> **Por que esse bootstrap?** A migration `20261009_02` exige um usuário já cadastrado. Então a ordem é: migrar até `20261009_01`, criar o admin padrão, e só então ir até o `head` (que inclui as 2 migrations novas da V26: notificações web push e histórico de atividade).
+>
+> **Login padrão:** `admin` / `senticolocal2026` (troque depois; vale só neste ambiente local).
 
 ## O que testar na V26
 

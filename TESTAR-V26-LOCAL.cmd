@@ -61,25 +61,24 @@ timeout /t 3 >nul
 goto :espera
 :pronta
 
-REM --- 6. Bootstrap do banco ---
-if "%PRIMEIRA%"=="1" (
-  echo [5/5] Primeira vez: preparando o banco...
-  echo   - migrando ate 20261009_01
-  docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade 20261009_01 || goto :erro
-  echo.
-  echo   ====== CRIE O ADMINISTRADOR DO ERP LOCAL ======
-  echo   (nome, e-mail e uma senha de 12+ caracteres)
-  docker compose -f compose.dev.yml --env-file .env.dev exec api python -m app.cli create-admin || goto :erro
-  echo   - migrando ate o head (inclui as migrations novas da V26)
-  docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade head || goto :erro
-) else (
-  echo [5/5] Aplicando migrations pendentes (ate o head)...
-  docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade head || goto :erro
-)
+REM --- 6. Bootstrap do banco (idempotente: pode rodar quantas vezes quiser) ---
+echo [5/5] Preparando o banco (migrations + admin padrao)...
+echo   - migrando ate 20261009_01
+docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade 20261009_01 || goto :erro
+echo   - garantindo o admin padrao (so cria se o banco estiver vazio)
+docker compose -f compose.dev.yml --env-file .env.dev exec -T api python scripts/criar_admin_padrao.py || goto :erro
+echo   - migrando ate o head (inclui as migrations novas da V26)
+docker compose -f compose.dev.yml --env-file .env.dev exec -T api alembic upgrade head || goto :erro
 
 echo.
 echo ============================================================
 echo  PRONTO! Abra:  http://127.0.0.1:5284/
+echo.
+echo  Login padrao de teste:
+echo     usuario: admin
+echo     senha:   senticolocal2026
+echo  (troque depois de entrar; vale so neste ambiente local)
+echo.
 echo  Para parar:    docker compose -f compose.dev.yml down
 echo ============================================================
 start "" "http://127.0.0.1:5284/"
