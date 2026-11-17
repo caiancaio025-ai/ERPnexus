@@ -938,10 +938,10 @@ function OrderReceivablesPanel({ workOrderId, onOpenReceivables, onOpenEntry }: 
     {data && <>
       <div className="lab-order-receivables-totals"><span>Lançado<strong>{currency(String(data.total_registered))}</strong></span><span>Recebido<strong>{currency(String(data.total_received))}</strong></span><span>A receber<strong>{currency(String(data.total_pending))}</strong></span><span>Falta lançar<strong>{data.remaining_to_issue == null ? "Sem valor aprovado" : currency(String(data.remaining_to_issue))}</strong></span></div>
       <div className="lab-order-receivables-items">
-        {data.installments.map((item) => <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)}><b>{item.obligation_id ? `Parcela ${item.installment_number}` : "Receita avulsa"}</b><span>Vence {new Date(`${item.due_date}T12:00:00`).toLocaleDateString("pt-BR")}</span><strong>{currency(item.amount)}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? "Recebido" : "Pendente"}</em></button>)}
+        {data.installments.map((item) => <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)}><b>{item.obligation_id ? `Parcela ${item.installment_number}` : "Receita avulsa"}</b><span>Vence {new Date(`${item.due_date}T12:00:00`).toLocaleDateString("pt-BR")}</span><strong>{currency(String(item.amount))}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? "Recebido" : "Pendente"}</em></button>)}
         {!data.installments.length && <p>Nenhuma receita cadastrada para esta OS.</p>}
       </div>
-      {data.remaining_to_issue !== null && data.remaining_to_issue < 0 && <p className="lab-order-receivables-error">O total lançado supera o valor aprovado. Confira os títulos vinculados antes de criar novos.</p>}
+      {data.remaining_to_issue !== null && Number(data.remaining_to_issue) < 0 && <p className="lab-order-receivables-error">O total lançado supera o valor aprovado. Confira os títulos vinculados antes de criar novos.</p>}
     </>}
   </section>;
 }
