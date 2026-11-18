@@ -18,3 +18,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.log
+
+.venv/
+__pycache__/
+*.pyc
+
+*.tsbuildinfo

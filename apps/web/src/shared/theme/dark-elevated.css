@@ -1,0 +1,392 @@
+/* SÊNTICO V22 — refinamento visual do tema escuro.
+ * Somente apresentação: não muda estado, navegação, permissões nem mensagens.
+ * Cores semânticas (não apenas cor), contraste e estados de foco preservados.
+ * A folha é carregada DEPOIS dos temas V19/V20 para consolidar a aparência.
+ */
+html[data-sentico-theme="escuro"] {
+  color-scheme: dark;
+  --sentico-bg: #071520;
+  --sentico-surface: #102838;
+  --sentico-surface-strong: #17364a;
+  --sentico-line: #31536a;
+  --sentico-text: #f0f8ff;
+  --sentico-muted: #adc4d4;
+  --sentico-accent: #69d2f6;
+  --sentico-accent-strong: #2ca8d6;
+  --sentico-shadow: 0 13px 35px rgba(0, 7, 18, .3), inset 0 1px 0 rgba(255,255,255,.035);
+  --s22-card: linear-gradient(150deg, #153447 0%, #0e2637 58%, #0c2232 100%);
+  --s22-card-raised: linear-gradient(145deg, #19394d 0%, #112d41 62%, #10283a 100%);
+  --s22-divider: rgba(126,192,225,.22);
+  --s22-blue: #83d4ff;
+  --s22-teal: #70dfd4;
+  --s22-green: #83e7b2;
+  --s22-amber: #ffd185;
+  --s22-red: #ff9ca8;
+  --s22-purple: #d1b4ff;
+}
+html[data-sentico-theme="escuro"] body {
+  background: #071520;
+  color: #f0f8ff;
+}
+html[data-sentico-theme="escuro"] :is(.dashboard-shell,.sentico-notifications) {
+  --page: #071520;
+  --surface: #102838;
+  --surface-2: #153245;
+  --line: #2c4c61;
+  --muted: #aac3d4;
+  --text: #f0f8ff;
+  --accent: #75d7fa;
+  background: radial-gradient(ellipse 60% 420px at 80% 0,rgba(38,132,173,.12),transparent 82%),#071520;
+}
+/* Navegação escura com acento equivalente ao destaque do tema claro. */
+html[data-sentico-theme="escuro"] .sentico-shell > .sentico-sidebar {
+  background: linear-gradient(170deg,#102b3c 0%,#081c2a 68%,#071622 100%);
+  border-right-color: #315468;
+  box-shadow: 9px 0 28px rgba(0,8,18,.19);
+}
+html[data-sentico-theme="escuro"] .sentico-shell .sentico-sidebar__item {
+  color: #b8d1e0;
+}
+html[data-sentico-theme="escuro"] .sentico-shell .sentico-sidebar__item:hover {
+  color: #f7fcff;
+  border-color: rgba(103,199,242,.28);
+  background: linear-gradient(90deg,rgba(43,132,176,.23),rgba(25,79,111,.09));
+}
+html[data-sentico-theme="escuro"] .sentico-shell .sentico-sidebar__item.is-active {
+  color: #fff;
+  border-color: rgba(123,218,255,.42);
+  background: linear-gradient(96deg,#205b74 0%,#17415c 63%,#112f45 100%);
+  box-shadow: inset 3px 0 0 #76d8ff,0 3px 13px rgba(0,5,14,.19);
+}
+html[data-sentico-theme="escuro"] .sentico-tema__opcoes {
+  border-color: #3a637a;
+  background: linear-gradient(160deg,#091d2c,#102c3f);
+}
+html[data-sentico-theme="escuro"] .sentico-tema__opcoes button.is-active {
+  color: #fff;
+  border-color: #57b9e3;
+  background: linear-gradient(135deg,#217da6,#185679);
+  box-shadow: inset 0 1px rgba(255,255,255,.16), 0 3px 10px rgba(1,10,25,.2);
+}
+html[data-sentico-theme="escuro"] .sentico-tema__opcoes button:not(.is-active) { color: #b8d1e0; }
+
+/* Superfícies elevadas: os cartões têm profundidade, não apenas fundo uniforme. */
+html[data-sentico-theme="escuro"] :where(.overview-card,.purchase-center,.quick-panel,.work-queue,
+  .sentico-notifications__filters,.sentico-notifications__results,
+  .sentico-notifications__overview > *, .purchase-panel,
+  .employees-card,.employees-panel,.employee-card,
+  .finance-panel,.finance-card,.lab-priority-kpis button,
+  .inv-app .inv-panel,.inv-app .inv-item,.material-request-kpis article) {
+  background: var(--s22-card);
+  border-color: #31556b;
+  box-shadow: var(--sentico-shadow);
+}
+html[data-sentico-theme="escuro"] :is(.overview-card,.work-queue,.purchase-center,.quick-panel) {
+  box-shadow: 0 12px 33px rgba(0,8,20,.23), inset 0 1px 0 rgba(194,232,252,.045);
+}
+html[data-sentico-theme="escuro"] .overview-card { transition: transform 180ms ease,border-color 180ms ease,box-shadow 180ms ease; }
+html[data-sentico-theme="escuro"] .overview-card:hover {
+  transform: translateY(-2px);
+  border-color: #4c90ad;
+  box-shadow: 0 16px 35px rgba(0,7,16,.3),inset 0 1px rgba(215,245,255,.075);
+}
+html[data-sentico-theme="escuro"] .overview-card--danger { border-color: #854854; background: linear-gradient(145deg,#352b3a,#152939 62%,#102638); }
+html[data-sentico-theme="escuro"] .overview-card--warning { border-color: #82704a; background: linear-gradient(145deg,#35342c,#162c3a 62%,#102638); }
+html[data-sentico-theme="escuro"] .overview-card--info { border-color: #376f89; background: linear-gradient(145deg,#163b50,#112b3c 68%,#102638); }
+html[data-sentico-theme="escuro"] .overview-card__glow { opacity: .19; filter: blur(29px); }
+html[data-sentico-theme="escuro"] .overview-card:hover .overview-card__glow { opacity: .3; }
+html[data-sentico-theme="escuro"] .overview-card__label { color: #c3d9e7; }
+html[data-sentico-theme="escuro"] .overview-card__detail { color: #afc9db; }
+
+/* Painel por função V21: cores distintivas e linha de progresso em cada fila. */
+html[data-sentico-theme="escuro"] .work-queue {
+  border-top-color: var(--queue-accent);
+  background: linear-gradient(160deg,var(--queue-soft) 0%,rgba(19,49,66,.94) 28%,#102838 100%);
+}
+html[data-sentico-theme="escuro"] .work-queue--warning { --queue-accent:#ffd08a; --queue-soft:rgba(237,168,64,.15); }
+html[data-sentico-theme="escuro"] .work-queue--danger { --queue-accent:#ff9ba7; --queue-soft:rgba(241,100,127,.15); }
+html[data-sentico-theme="escuro"] .work-queue--success { --queue-accent:#83e7b2; --queue-soft:rgba(64,192,139,.13); }
+html[data-sentico-theme="escuro"] .work-queue__count {
+  border: 1px solid color-mix(in srgb,var(--queue-accent) 35%,transparent);
+  box-shadow: inset 0 1px rgba(255,255,255,.05);
+}
+html[data-sentico-theme="escuro"] .work-queue__footer {
+  background: linear-gradient(100deg,var(--queue-soft),rgba(26,70,90,.18));
+}
+html[data-sentico-theme="escuro"] .work-queue__footer:hover { background: var(--queue-soft); }
+html[data-sentico-theme="escuro"] .work-queue__item:hover {
+  background: linear-gradient(90deg,var(--queue-soft),rgba(25,64,83,.24));
+}
+html[data-sentico-theme="escuro"] .work-queue__info small,
+html[data-sentico-theme="escuro"] .work-queue__info em { color: #abc4d5; }
+
+/* Centro de compras do dashboard e botões com fade. */
+html[data-sentico-theme="escuro"] .event-filters {
+  border-color: #386178;
+  background: linear-gradient(160deg,#0a2030,#143448);
+}
+html[data-sentico-theme="escuro"] .event-filters button { color: #b7ccdb; }
+html[data-sentico-theme="escuro"] .event-filters button.active {
+  color: #fff;
+  background: linear-gradient(135deg,#267aa2,#1a5274);
+  box-shadow: 0 4px 13px rgba(0,7,17,.32),inset 0 1px rgba(255,255,255,.16);
+}
+html[data-sentico-theme="escuro"] .purchase-event {
+  border-color: #2e5269;
+  background: linear-gradient(140deg,#173246,#0d2638);
+}
+html[data-sentico-theme="escuro"] .purchase-event--overdue { border-color: #754956; }
+html[data-sentico-theme="escuro"] .purchase-event--due_soon { border-color: #3a6880; }
+html[data-sentico-theme="escuro"] .round-button,
+html[data-sentico-theme="escuro"] .user-button,
+html[data-sentico-theme="escuro"] .global-search {
+  border-color: #376078;
+  background: linear-gradient(155deg,#193749,#0e2535);
+  color: #e3f3ff;
+}
+html[data-sentico-theme="escuro"] .global-search input { color: #f4fbff; }
+html[data-sentico-theme="escuro"] .global-search input::placeholder { color: #aac4d3; }
+html[data-sentico-theme="escuro"] :is(.notification-expand,.dashboard-notification-feed .feed-expand) {
+  border: 1px solid #4184a5;
+  background: linear-gradient(115deg,#1b5372,#17354c);
+  color: #e8faff;
+  box-shadow: inset 0 1px rgba(240,255,255,.07);
+}
+html[data-sentico-theme="escuro"] :is(.notification-expand,.dashboard-notification-feed .feed-expand):hover {
+  border-color: #6ccaf2;
+  background: linear-gradient(115deg,#236b91,#1c4d68);
+}
+
+/* Central de notificações: leitura confortável e pequenas marcas por setor. */
+html[data-sentico-theme="escuro"] .sentico-notifications {
+  --nt-bg:#071520;
+  --nt-surface:#102b3d;
+  --nt-panel:#19384d;
+  --nt-item:#132f42;
+  --nt-item-new:#163c52;
+  --nt-border:#31596e;
+  --nt-text:#f1f9ff;
+  --nt-muted:#bdd1df;
+  --nt-subtle:#a1bbce;
+  --nt-primary:#81d9ff;
+  --nt-primary-bg:#1b4863;
+  --nt-input:#0d2637;
+  --nt-shadow:0 12px 30px rgba(0,8,20,.22),inset 0 1px rgba(255,255,255,.04);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__overview > * {
+  background: linear-gradient(150deg,#1b3c50,#102b3e);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__overview button.is-selected,
+html[data-sentico-theme="escuro"] .sentico-notifications__overview button:hover {
+  border-color: #80d8fc;
+  background: linear-gradient(145deg,#245671,#174059);
+  color: #fff;
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__item {
+  border: 1px solid #345a70;
+  border-left: 4px solid var(--nt-mod,#55bee9);
+  background: linear-gradient(105deg,rgba(31,83,105,.15),#123044 30%,#112b3d);
+  box-shadow: 0 5px 15px rgba(0,10,23,.13);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__item.is-unread {
+  border-color: var(--nt-mod-border,#4b8cae);
+  border-left-color: var(--nt-mod,#77d4f9);
+  background: linear-gradient(90deg,var(--nt-mod-bg,#204459),#153449 49%,#122d3f);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__item-icon,
+html[data-sentico-theme="escuro"] .sentico-notifications__module {
+  color: var(--nt-mod,#93ddff);
+  background: var(--nt-mod-bg,#1c4863);
+  border: 1px solid var(--nt-mod-border,#375f75);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__item-actions button:last-child { color: #c2ebff; }
+html[data-sentico-theme="escuro"] .sentico-notifications__filter-actions > button:first-child {
+  border-color: #4baedb;
+  color: #fff;
+  background: linear-gradient(125deg,#2385b5,#16618b);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__filter-actions > button:first-child:hover {
+  background: linear-gradient(125deg,#2b9ccc,#1c739e);
+}
+html[data-sentico-theme="escuro"] .sentico-notifications__main :is(input,select):focus-visible { outline: 2px solid #80d8fc; outline-offset: 2px; }
+
+/* A mesma sinalização modular do tema claro, adaptada ao fundo escuro. */
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="laboratorio"] { --nt-mod:#80e4d9; --nt-mod-bg:#164c4d; --nt-mod-border:#387d78; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="orcamentos"] { --nt-mod:#87d0ff; --nt-mod-bg:#183f61; --nt-mod-border:#3c7498; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="compras"] { --nt-mod:#ffd58f; --nt-mod-bg:#4a3b22; --nt-mod-border:#866a3c; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="estoque"] { --nt-mod:#d7baff; --nt-mod-bg:#3b315e; --nt-mod-border:#73609b; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="financeiro"] { --nt-mod:#8ae8bc; --nt-mod-bg:#1a4b3b; --nt-mod-border:#3c8060; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="comercial"] { --nt-mod:#ffb4db; --nt-mod-bg:#50304b; --nt-mod-border:#885f80; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="colaboradores"] { --nt-mod:#bac8ff; --nt-mod-bg:#343e66; --nt-mod-border:#6674a7; }
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.notification-item,.dashboard-notification-feed > button)[data-modulo="configuracoes"] { --nt-mod:#bdd1e1; --nt-mod-bg:#304555; --nt-mod-border:#587285; }
+html[data-sentico-theme="escuro"] .dashboard-notification-feed > button[data-modulo] {
+  border-left: 3px solid var(--nt-mod);
+  background: linear-gradient(95deg,var(--nt-mod-bg),rgba(19,45,61,.83) 42%);
+}
+html[data-sentico-theme="escuro"] .notification-item[data-modulo] {
+  border-left: 3px solid var(--nt-mod);
+  background: linear-gradient(95deg,var(--nt-mod-bg),rgba(12,35,50,.8) 45%);
+}
+html[data-sentico-theme="escuro"] :is(.notification-item,.dashboard-notification-feed > button).is-read { opacity:.79; }
+
+/* Etiquetas: cor e texto diferenciam os resultados no modo escuro. */
+html[data-sentico-theme="escuro"] :is(.lab-status,.customers-status-pill,.com-tag,.material-request-status,.status-pill) {
+  font-weight: 800;
+  border: 1px solid #3c7692;
+  background: #163c55;
+  color: #aee2ff;
+}
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag).in_analysis,
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag).in_testing,
+html[data-sentico-theme="escuro"] .customers-status-in_analysis {
+  color: #9af1e8 !important; background: #174b4c !important; border-color: #378b87 !important;
+}
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag).no_repair,
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag).rejected,
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag).cancelled,
+html[data-sentico-theme="escuro"] :is(.customers-status-no_repair,.customers-status-cancelled,.customers-status-rejected),
+html[data-sentico-theme="escuro"] :is(.material-request-status,.status-pill):is(.rejected,.cancelled,.overdue) {
+  color: #ffb5bd !important; background: #512732 !important; border-color: #a85b67 !important;
+}
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag):is(.approved,.completed,.delivered,.awaiting_pickup,.available),
+html[data-sentico-theme="escuro"] :is(.customers-status-approved,.customers-status-completed,.customers-status-delivered),
+html[data-sentico-theme="escuro"] :is(.material-request-status,.status-pill):is(.approved,.received,.delivered_to_lab,.paid,.settled,.delivered,.completed) {
+  color: #a7f2c8 !important; background: #194737 !important; border-color: #448d70 !important;
+}
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag):is(.awaiting_analysis,.awaiting_quote,.awaiting_approval,.awaiting_parts,.in_repair,.draft),
+html[data-sentico-theme="escuro"] :is(.customers-status-awaiting_analysis,.customers-status-awaiting_quote_approval,.customers-status-awaiting_parts,.customers-status-in_repair,.customers-status-draft),
+html[data-sentico-theme="escuro"] :is(.material-request-status,.status-pill):is(.awaiting_approval,.purchasing,.requested,.pending,.due) {
+  color: #ffe09f !important; background: #4c3b23 !important; border-color: #9a753f !important;
+}
+html[data-sentico-theme="escuro"] :is(.lab-status,.com-tag):is(.warranty,.invoiced),
+html[data-sentico-theme="escuro"] .customers-status-invoiced {
+  color: #dfc5ff !important; background: #3d305d !important; border-color: #7962aa !important;
+}
+html[data-sentico-theme="escuro"] .lab-priority.urgent {
+  color: #ffb5bd !important; background: #512732 !important; border-color: #a85b67 !important;
+}
+html[data-sentico-theme="escuro"] .lab-priority.high {
+  color: #ffe09f !important; background: #4c3b23 !important; border-color: #9a753f !important;
+}
+
+/* Botões: gradiente sutil, texto sempre branco nos botões preenchidos. */
+html[data-sentico-theme="escuro"] :is(
+  .employees-primary,.finance-primary,.customers-primary,.inv-primary,
+  .com-btn.primary,.save-button,.purchase-report-generate,
+  .primary-action,.primary-button,.lab-action-button.primary,
+  .inv-app .inv-panel > button.primary,
+  .inv-app .inv-dialog footer button:last-child
+) {
+  color: #fff !important;
+  border-color: #4ab4e3 !important;
+  background: linear-gradient(125deg,#2187b9 0%,#1b6895 55%,#155476 100%) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.18),0 5px 14px rgba(0,13,30,.18);
+  text-shadow: 0 1px 1px rgba(0,0,0,.17);
+}
+html[data-sentico-theme="escuro"] :is(
+  .employees-primary,.finance-primary,.customers-primary,.inv-primary,
+  .com-btn.primary,.save-button,.purchase-report-generate,
+  .primary-action,.primary-button,.lab-action-button.primary,
+  .inv-app .inv-panel > button.primary,
+  .inv-app .inv-dialog footer button:last-child
+):hover:not(:disabled) {
+  background: linear-gradient(125deg,#2ca0cc,#2180ab 60%,#19648b) !important;
+  border-color: #8cdbfb !important;
+}
+/* Colaboradores: botões selecionados precisam contrastar, sem verde sobre verde. */
+html[data-sentico-theme="escuro"] .employees-shell :is(button.active,button.is-active):not(.employees-primary):not(.sentico-sidebar__item) {
+  color: #effffb !important;
+  background: linear-gradient(125deg,#1e706b,#174e57) !important;
+  border-color: #59b9a7 !important;
+}
+html[data-sentico-theme="escuro"] .employees-shell :is(button.active,button.is-active) :is(span,strong,svg) { color: inherit !important; }
+
+/* Comandos de seleção e navegação: manter a mesma linguagem do tema branco. */
+html[data-sentico-theme="escuro"] .inv-app :is(.inv-tabs button.active,.inv-quick-filters button.active,.inv-map-kinds button.active),
+html[data-sentico-theme="escuro"] .lab-priority-kpis button.active {
+  color: #fff !important;
+  background: linear-gradient(120deg,#226f91,#174c6b) !important;
+  border-color: #63c4e9 !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.12),0 4px 12px rgba(0,6,17,.17);
+}
+html[data-sentico-theme="escuro"] .inv-app :is(.inv-tabs button.active,.inv-quick-filters button.active,.inv-map-kinds button.active) :is(span,strong) { color:inherit !important; }
+
+/* Campos e foco visíveis em todos os formulários; sem efeitos nas fotos. */
+html[data-sentico-theme="escuro"] :is(.finance-shell,.lab-layout,.purchasing-shell,.com-layout,.inv-app,.customers-shell,.employees-shell) :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select) {
+  color-scheme: dark;
+}
+html[data-sentico-theme="escuro"] :is(.finance-shell,.lab-layout,.purchasing-shell,.com-layout,.inv-app,.customers-shell,.employees-shell) :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select):focus-visible,
+html[data-sentico-theme="escuro"] :is(.dashboard-shell,.sentico-notifications) :is(button,input,select,textarea):focus-visible {
+  outline: 2px solid #85dbff;
+  outline-offset: 2px;
+}
+html[data-sentico-theme="escuro"] :is(button,textarea,input,select):disabled { filter: none; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-sentico-theme="escuro"] .overview-card { transition: none; }
+  html[data-sentico-theme="escuro"] .overview-card:hover { transform: none; }
+}
+
+/* Cartões e abas reais dos módulos — sem modificar suas dimensões no desktop/mobile. */
+html[data-sentico-theme="escuro"] :is(
+  .finance-kpi,.finance-panel,.balance-cards article,.balance-visual,
+  .purchase-kpis article,.purchase-report-card,
+  .lab-table-card,.lab-history-card,.lab-secondary-kpis article,
+  .customers-list,.customer-detail,.overview-metrics article,.overview-wide,
+  .employees-panel,.inv-app .inv-stats article
+) {
+  border-color: #31566b;
+  background: linear-gradient(150deg,#193849 0%,#102b3d 68%,#0c2536 100%);
+  box-shadow: 0 12px 30px rgba(0,8,20,.2),inset 0 1px rgba(255,255,255,.035);
+}
+html[data-sentico-theme="escuro"] .finance-kpi--positive { border-top: 3px solid #73dfb1; }
+html[data-sentico-theme="escuro"] .finance-kpi--negative { border-top: 3px solid #fa9aaa; }
+html[data-sentico-theme="escuro"] .finance-kpi--warning { border-top: 3px solid #f7c77c; }
+html[data-sentico-theme="escuro"] .finance-kpi--neutral { border-top: 3px solid #83d7fd; }
+html[data-sentico-theme="escuro"] .finance-kpi div,
+html[data-sentico-theme="escuro"] .finance-kpi small,
+html[data-sentico-theme="escuro"] .balance-cards span,
+html[data-sentico-theme="escuro"] .balance-cards small { color: #b5ccda; }
+html[data-sentico-theme="escuro"] .balance-hero {
+  border-color: #715b9b;
+  background: radial-gradient(circle at 90% 20%,rgba(158,115,229,.19),transparent 45%),linear-gradient(135deg,#24384f,#12273a);
+}
+html[data-sentico-theme="escuro"] .customer-kpis > span {
+  border-color: #3d6780;
+  background: linear-gradient(155deg,#1b4155,#122e40);
+}
+html[data-sentico-theme="escuro"] .customers-list-scroll > button.active {
+  color: #fff;
+  background: linear-gradient(90deg,#20516c,#14364c);
+  box-shadow: inset 3px 0 #80dbff;
+}
+html[data-sentico-theme="escuro"] :is(
+  .finance-filters button.active,.invoice-tabs button.active,
+  .customer-tabs button.active,.lab-tab-button.active,
+  .lab-detail-tabs button.active
+) {
+  color: #fff !important;
+  border-color: #65bfe7 !important;
+  background: linear-gradient(125deg,#247ba2,#1a4e71) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.13),0 3px 12px rgba(0,8,19,.19);
+}
+html[data-sentico-theme="escuro"] :is(.finance-filters button,.customer-tabs button,.lab-tab-button):not(.active):hover {
+  color: #f6fcff;
+  background: linear-gradient(120deg,#1b4e68,#133246);
+}
+html[data-sentico-theme="escuro"] :is(.secondary-button,.supplier-manager,.purchase-panel .secondary-button) {
+  border-color: #47718b;
+  color: #e5f5ff;
+  background: linear-gradient(145deg,#21445b,#142e42);
+}
+html[data-sentico-theme="escuro"] :is(.secondary-button,.supplier-manager):hover:not(:disabled) {
+  border-color: #75c7e8;
+  background: linear-gradient(145deg,#2a5b75,#194059);
+}
+/* Listas operacionais: hover discretamente iluminado, sem perder contexto. */
+html[data-sentico-theme="escuro"] .employees-panel tbody tr:hover,
+html[data-sentico-theme="escuro"] .order-row:not(.order-head):hover {
+  background: rgba(89,179,216,.12);
+}
+html[data-sentico-theme="escuro"] :is(.sentico-notifications__item,.work-queue,.finance-panel,.purchase-center,.quick-panel) {
+  color: #f0f8ff;
+}

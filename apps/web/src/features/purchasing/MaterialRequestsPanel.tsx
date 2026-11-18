@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CheckCircle2, ExternalLink, PackageCheck, PackagePlus, Search, ShoppingCart, Truck, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../shared/api/apiClient";
@@ -27,6 +27,7 @@ export function MaterialRequestsPanel({ canViewValues }: { canViewValues: boolea
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<MaterialRequestStatus | "all">("all");
   const [editing, setEditing] = useState<MaterialRequest | null>(null);
+  const openedFromPanelLink = useRef<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,6 +39,14 @@ export function MaterialRequestsPanel({ canViewValues }: { canViewValues: boolea
     catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao carregar solicitações."); }
   }
   useEffect(() => { void load(); }, [status]);
+  // Link da página inicial abre a solicitação exata, sem pesquisar manualmente.
+  useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("solicitacao"));
+    if (Number.isInteger(id) && id > 0 && openedFromPanelLink.current !== id && items.length > 0) {
+      const found = items.find((row) => row.id === id);
+      if (found) { openedFromPanelLink.current = id; setEditing(found); }
+    }
+  }, [items]);
   const stats = useMemo(() => ({
     approval: items.filter((i) => i.status === "awaiting_approval").length,
     buying: items.filter((i) => ["approved", "purchasing"].includes(i.status)).length,

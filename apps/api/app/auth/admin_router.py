@@ -10,6 +10,7 @@ from app.auth.models import User, UserSession
 from app.auth.schemas import AdminUserCreate, AdminUserUpdate, UserOutput
 from app.auth.security import hash_password
 from app.core.db import get_db
+from app.notifications.service import notify_activity
 
 router = APIRouter(prefix="/admin/users")
 
@@ -75,6 +76,10 @@ async def create_user(
         is_active=payload.is_active,
     )
     db.add(user)
+    await db.flush()
+    await notify_activity(db, actor=actor, activity_module="configuracoes", action="user_created",
+        title="Usuário criado", message=f"{actor.name} cadastrou o usuário {user.name}.",
+        target="/colaboradores", entity_type="user", entity_id=user.id)
     await db.commit()
     await db.refresh(user)
     return user
@@ -118,6 +123,9 @@ async def update_user(
     if not target.is_active:
         await db.execute(UserSession.__table__.delete().where(UserSession.user_id == target.id))
 
+    await notify_activity(db, actor=actor, activity_module="configuracoes", action="user_updated",
+        title="Usuário atualizado", message=f"{actor.name} atualizou a conta de {target.name}.",
+        target="/colaboradores", entity_type="user", entity_id=target.id)
     await db.commit()
     await db.refresh(target)
     return target
@@ -135,5 +143,8 @@ async def deactivate_user(
         raise HTTPException(status_code=400, detail="Você não pode desativar seu próprio usuário.")
     target.is_active = False
     await db.execute(UserSession.__table__.delete().where(UserSession.user_id == target.id))
+    await notify_activity(db, actor=actor, activity_module="configuracoes", action="user_deactivated",
+        title="Usuário desativado", message=f"{actor.name} desativou a conta de {target.name}.",
+        target="/colaboradores", entity_type="user", entity_id=target.id)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     tracking_base_url: str = "http://localhost:8000/e"
     gemini_api_key: str | None = None
 
+    # Web Push: nenhum segredo é incluído no pacote. Configure após a instalação.
+    push_vapid_public_key: str = ""
+    push_vapid_private_key: str = ""
+    push_vapid_private_key_file: str = ""
+    push_vapid_subject: str = ""
+
     model_config = SettingsConfigDict(
         env_file=find_env_file(),
         env_file_encoding="utf-8",

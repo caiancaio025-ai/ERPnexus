@@ -27,6 +27,8 @@ from app.inventory.models import (
 )
 from app.inventory.schemas import AreaInput, CategoryInput, ContainerInput, ContainerUpdate, FormatInput, ItemInput, ItemUpdate, MovementInput, SubtypeInput, TypeInput
 from app.inventory.service import move_stock
+from app.notifications.service import notify_activity
+from app.laboratory.models import LaboratoryWorkOrder
 from app.inventory.drawer_batch import missing_drawer_numbers
 
 router = APIRouter(prefix="/inventory", dependencies=[Depends(require_any_module("estoque", "laboratorio"))])
@@ -499,6 +501,10 @@ async def create_item(payload: ItemInput, db: AsyncSession = DB, user: User = De
             db.add(InventoryLocationHistory(item_id=item.id, new_slot_id=item.slot_id,
                 new_slot_code=slot.code if slot else None, moved_by=user.id))
         db.add(InventoryMovement(item_id=item.id, kind="receipt", quantity=item.quantity, unit_cost=item.unit_cost, user_id=user.id, note="Cadastro inicial")) if item.quantity else None
+        await notify_activity(db, actor=user, activity_module="estoque", action="inventory_created",
+            title=f"Item cadastrado · {item.stock_code}", message=f"{user.name} cadastrou {item.name} no estoque.", target="/estoque",
+            entity_type="inventory_item", entity_id=item.id, work_order_id=None, work_order_number=None,
+            equipment_name=item.name)
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -541,6 +547,10 @@ async def edit_item(item_id: int, payload: ItemUpdate, db: AsyncSession = DB, us
         ))
     if payload.unit_cost is not None:
         item.unit_cost = payload.unit_cost
+    await notify_activity(db, actor=user, activity_module="estoque", action="inventory_updated",
+        title=f"Item atualizado · {item.stock_code}", message=f"{user.name} alterou cadastro/localização de {item.name}.", target="/estoque",
+        entity_type="inventory_item", entity_id=item.id, work_order_id=None, work_order_number=None,
+        equipment_name=item.name)
     await db.commit()
     return _item_dict(item, user)
 
@@ -556,6 +566,17 @@ async def _change(item_id: int, payload: MovementInput, kind: str, db: AsyncSess
         raise HTTPException(422, "Recebimento não utiliza O.S. nem devolução.")
     movement = await move_stock(db, item_id=item_id, quantity=payload.quantity, kind=kind,
         user_id=user.id, work_order_id=payload.work_order_id, reversal_of_id=payload.reversal_of_id, note=payload.note)
+    item = await db.get(InventoryItem, item_id)
+    order = await db.get(LaboratoryWorkOrder, payload.work_order_id) if payload.work_order_id else None
+    action_label = {"receipt": "Entrada de estoque", "issue": "Peça retirada", "return": "Peça devolvida"}[kind]
+    await notify_activity(db, actor=user, activity_module="estoque", action=f"inventory_{kind}",
+        title=f"{action_label} · {item.stock_code}",
+        message=f"{user.name} movimentou {payload.quantity}x {item.name} ({action_label.lower()}).",
+        target=f"/laboratorio?os={order.id}" if order else "/estoque",
+        entity_type="inventory_item", entity_id=item.id,
+        work_order_id=order.id if order else None,
+        work_order_number=order.number if order else None,
+        equipment_name=item.name)
     await db.commit()
     return {"id": movement.id, "kind": movement.kind, "quantity": movement.quantity, "item_id": item_id}
 

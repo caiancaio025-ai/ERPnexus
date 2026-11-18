@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { AuthUser } from "../features/auth/AuthCard";
 import { apiClient } from "../shared/api/apiClient";
 import { AppRouter } from "./router/AppRouter";
+import { revokeDevicePush } from "../shared/notifications/pushClient";
 
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -34,6 +35,8 @@ export function App() {
 
   async function logout() {
     try {
+      // O computador compartilhado deixa de receber alertas deste usuário após Sair.
+      await revokeDevicePush().catch(() => undefined);
       await apiClient.post<void>("/api/auth/logout", undefined, { redirectOnUnauthorized: false });
     } finally {
       setUser(null);

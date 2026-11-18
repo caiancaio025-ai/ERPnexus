@@ -1,0 +1,65 @@
+/* SÊNTICO V16 – refinamentos EXCLUSIVOS de telas de celular.
+   Não muda a apresentação do desktop e não elimina funcionalidades ou colunas de tabelas. */
+@media (max-width: 767px) {
+  :root { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html, body, #root { min-width: 320px; max-width: 100%; }
+  #root { overflow-wrap: anywhere; }
+
+  /* O iOS não amplia automaticamente controles de formulário com fonte >=16px. */
+  #root input:not([type="checkbox"]):not([type="radio"]),
+  #root select, #root textarea { font-size: 16px; max-width: 100%; }
+  #root input, #root select, #root textarea, #root button { min-width: 0; }
+  #root textarea { resize: vertical; }
+  #root :is(input,select,textarea,button):focus-visible { outline-offset: 2px; }
+
+  /* Alvos de toque utilizáveis, sem mexer nos ícones de ações compactas. */
+  #root :is(.inv-dialog,.com-equipment-modal,.com-editor,.auth-panel) button:not(.inv-icon-btn):not(.com-icon-btn),
+  #root :is(.inv-dialog,.com-equipment-modal,.com-editor,.auth-panel) select,
+  #root :is(.inv-dialog,.com-equipment-modal,.com-editor,.auth-panel) input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+  }
+  #root :is(.inv-form-grid,.com-form-grid,.com-form-row,.com-register-grid) > * { min-width: 0; }
+  #root .inv-app .inv-form-grid,
+  #root .inv-app .inv-form-grid-simple,
+  #root .com-layout .com-form-grid.two,
+  #root .com-layout .com-form-grid.three,
+  #root .com-layout .com-form-grid.four,
+  #root .com-layout .com-form-row { grid-template-columns: minmax(0, 1fr); }
+  #root .inv-app .inv-form-grid .wide,
+  #root .inv-app .inv-form-grid-simple .wide { grid-column: auto; }
+
+  /* Diálogos cabem na altura útil e oferecem rolagem interna. */
+  #root .inv-overlay { padding: 8px; align-items: center; }
+  #root .inv-dialog { width: min(100%, 540px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+  #root .com-modal { padding: 0; }
+  #root .com-equipment-modal, #root .com-editor { width: 100%; max-width: 100%; max-height: 100dvh; border-radius: 0; }
+  #root .inv-dialog footer, #root .com-equipment-modal footer, #root .com-editor-footer { flex-wrap: wrap; gap: 8px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  #root .inv-dialog footer > button, #root .com-equipment-modal footer > button, #root .com-editor-footer > button { flex: 1 1 125px; }
+
+  /* Consulta de posição: resultados tocáveis sem estourar a largura do formulário. */
+  #root .inv-slot-search { width: 100%; }
+  #root .inv-slot-search__results { max-height: min(330px, 47dvh); overscroll-behavior: contain; }
+  #root .inv-slot-search__results button { min-height: 48px; }
+  #root .inv-slot-search__results button > span { overflow-wrap: anywhere; }
+
+  /* Tabelas grandes continuam completas, com rolagem apenas dentro de sua região. */
+  #root :is(.com-table-wrap,.com-items-wrap) { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  #root :is(.dashboard-main,.com-main,.inv-app) { min-width: 0; }
+  #root .push-setup button { width: 100%; min-height: 46px; }
+}
+
+/* V18: fontes e quebra de conteúdo somente nos telefones, desktop preservado. */
+@media (max-width: 767px) {
+  #root .sentico-content { min-width: 0; overflow-wrap: anywhere; }
+  #root :is(.dashboard-heading h1, .com-main h1, .inv-app h1, .lab-main h1, .purchase-main h1) {
+    font-size: clamp(1.3rem, 5.5vw, 1.85rem);
+    line-height: 1.25;
+    max-width: 100%;
+  }
+  #root :is(.dashboard-tools, .dashboard-heading, .section-header, .quick-panel, .overview-grid) { min-width: 0; }
+  #root :is(.dashboard-tools, .section-header) { flex-wrap: wrap; }
+  #root :is(.dashboard-heading p, .section-header p, .quick-panel header p) { font-size: clamp(12px, 3.4vw, 14px); line-height: 1.5; }
+  #root :is(.dashboard-notification-feed, .notification-list) { min-width: 0; }
+  #root :is(.notification-item, .dashboard-notification-feed > button) { overflow-wrap: anywhere; }
+  #root :is(.lab-content, .com-layout, .inv-app, .purchase-content) :is(label, small) { overflow-wrap: anywhere; }
+}

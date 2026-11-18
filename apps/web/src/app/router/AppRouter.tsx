@@ -8,6 +8,9 @@ import { NotFound } from "../NotFound";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicRoute } from "./PublicRoute";
 
+const NotificationCenter = lazy(() =>
+  import("../../features/notifications/NotificationCenter").then((module) => ({ default: module.NotificationCenter })),
+);
 const Dashboard = lazy(() =>
   import("../../features/dashboard/Dashboard").then((module) => ({ default: module.Dashboard })),
 );
@@ -109,6 +112,7 @@ export function AppRouter({ user, onLogin, onLogout }: AppRouterProps) {
 
         <Route element={<ProtectedRoute authenticated={authenticated} />}>
           <Route path="/painel" element={<Dashboard user={user!} onLogout={onLogout} />} />
+          <Route path="/notificacoes" element={<NotificationCenter user={user!} onLogout={onLogout} />} />
           <Route path="/clientes/*" element={<CustomerMaster user={user!} onLogout={onLogout} />} />
           <Route path="/financeiro/*" element={canAccessFinance ? <FinanceDashboard user={user!} onLogout={onLogout} /> : <Navigate to="/painel" replace />} />
           <Route path="/compras/*" element={<PurchasingDashboard user={user!} onLogout={onLogout} />} />

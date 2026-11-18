@@ -1,0 +1,13 @@
+/* Controle permanente de aparência; sem alterar as permissões dos módulos. */
+.sentico-tema { padding: 12px 8px 10px; border-top: 1px solid rgba(109,190,231,.16); }
+.sentico-tema__titulo { display: block; margin: 0 4px 8px; color: #a7bfd2; font-size: 11px; letter-spacing: .04em; font-weight: 700; }
+.sentico-tema__opcoes { display: flex; padding: 4px; gap: 3px; border: 1px solid #284255; border-radius: 11px; background: #081b2b; }
+.sentico-tema__opcoes button { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 4px 6px; border: 1px solid transparent; border-radius: 8px; color: #aac2d4; background: transparent; font-size: 12px; font-weight: 700; }
+.sentico-tema__opcoes button:hover { color: #fff; background: #16364a; }
+.sentico-tema__opcoes button.is-active { color: #fff; background: #215875; border-color: #39728c; }
+.sentico-tema__opcoes button:focus-visible { outline: 2px solid #77caff; outline-offset: 2px; }
+.sentico-tema--compacto { padding-inline: 0; }
+.sentico-tema--compacto .sentico-tema__opcoes { flex-direction: column; }
+.sentico-tema--compacto .sentico-tema__opcoes button { min-height: 34px; }
+.sentico-tema--compacto .sentico-tema__opcoes span { display: none; }
+@media (max-width: 900px) { .sentico-tema__opcoes button { min-height: 43px; } }

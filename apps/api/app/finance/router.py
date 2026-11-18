@@ -38,7 +38,7 @@ from app.finance.models import (
     FinancialTransfer,
 )
 from app.laboratory.models import LaboratoryStatusHistory, LaboratoryWorkOrder
-from app.notifications.service import notify_modules
+from app.notifications.service import notify_modules, notify_activity
 from app.finance.schemas import (
     AuditOutput,
     CompanyCode,
@@ -1314,6 +1314,10 @@ async def create_entry(
             after=_snapshot(entry),
         )
     )
+    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_created",
+        title=f"Lançamento financeiro · {entry.description}", message=f"{user.name} alterou um lançamento financeiro.",
+        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
+        work_order_id=entry.work_order_id)
     await db.commit()
     await db.refresh(entry)
     return entry
@@ -1362,6 +1366,10 @@ async def update_entry(
                 _snapshot(entry),
             )
         )
+    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_updated",
+        title=f"Lançamento financeiro · {entry.description}", message=f"{user.name} alterou um lançamento financeiro.",
+        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
+        work_order_id=entry.work_order_id)
     await db.commit()
     await db.refresh(entry)
     return entry
@@ -1384,6 +1392,10 @@ async def delete_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: AsyncSe
             before=before,
         )
     )
+    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_deleted",
+        title="Lançamento financeiro excluído", message=f"{user.name} excluiu o lançamento: {entry.description}.",
+        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
+        work_order_id=entry.work_order_id)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1410,6 +1422,10 @@ async def settle_entry(
             _snapshot(entry),
         )
     )
+    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_settled",
+        title="Lançamento financeiro baixado", message=f"{user.name} registrou a baixa de {entry.description}.",
+        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
+        work_order_id=entry.work_order_id)
     await db.commit()
     await db.refresh(entry)
     return entry
@@ -1432,6 +1448,10 @@ async def unsettle_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: Async
             _snapshot(entry),
         )
     )
+    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_reopened",
+        title="Baixa financeira desfeita", message=f"{user.name} reabriu o lançamento {entry.description}.",
+        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
+        work_order_id=entry.work_order_id)
     await db.commit()
     await db.refresh(entry)
     return entry

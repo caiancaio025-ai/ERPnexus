@@ -23,6 +23,27 @@ class Notification(Base):
         ForeignKey("laboratory_work_orders.id", ondelete="SET NULL"), nullable=True, index=True
     )
     amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # Retrato da ação. Não depende de alterações futuras no cadastro de usuários/OS.
+    activity_module: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    action: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    work_order_number: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    equipment_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    push_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class PushSubscription(Base):
+    __tablename__ = "notification_push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(String(1800), nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
+    auth: Mapped[str] = mapped_column(String(100), nullable=False)
+    device_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

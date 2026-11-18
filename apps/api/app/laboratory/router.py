@@ -44,6 +44,7 @@ from app.laboratory.models import (
     LaboratoryWorkOrderSubstatus,
 )
 from app.laboratory.quote_pdf import label_pdf, quote_pdf
+from app.laboratory.quote_photos import _sync_quote_photos
 from app.laboratory.storage import (
     commit_laboratory_document,
     delete_laboratory_document as delete_laboratory_document_storage,
@@ -96,7 +97,7 @@ from app.laboratory.schemas import (
     TechnicianProductionReport,
     InactivateWorkOrderInput,
 )
-from app.notifications.service import notify_quote_users, notify_roles
+from app.notifications.events import work_order_activity, material_request_activity
 from app.laboratory.service import (
     TERMINAL_STATUSES,
     apply_work_order_update,
@@ -1532,6 +1533,8 @@ async def create_work_order(
             user_id=user.id,
         )
     )
+    await work_order_activity(db, actor=user, work_order=work_order, action="os_created",
+        title=f"OS {work_order.number} criada", message=f"{user.name} registrou a entrada de {work_order.customer_name}.")
     await db.commit()
     await db.refresh(work_order)
     return _to_work_order_output(
@@ -1600,6 +1603,8 @@ async def update_work_order(
         from app.purchasing.material_service import recalculate_work_order_parts_cost
         await recalculate_work_order_parts_cost(db, work_order_id)
 
+    await work_order_activity(db, actor=user, work_order=work_order, action="os_updated",
+        title=f"OS {work_order.number} atualizada", message=f"{user.name} atualizou os dados técnicos e/ou operacionais da OS.")
     await db.commit()
     return _to_work_order_output(
         await _work_order_or_404(db, work_order.id),
@@ -1659,6 +1664,8 @@ async def inactivate_work_order(
         note="OS inativada: " + reason,
         user_id=user.id,
     ))
+    await work_order_activity(db, actor=user, work_order=work_order, action="os_inactivated",
+        title=f"OS {work_order.number} inativada", message=f"{user.name} inativou esta ordem de serviço.", severity="warning")
     await db.commit()
     return _to_work_order_output(
         await _work_order_or_404(db, work_order.id),
@@ -1743,20 +1750,34 @@ async def change_status(
             )
 
         await _sync_finance_on_status_change(db, work_order, previous, payload.status, user.id)
-        if payload.status == "awaiting_quote" and previous != "awaiting_quote":
-            await notify_roles(
-                db,
-                roles={"super_admin", "admin", "gestao"},
-                category="quote",
-                severity="warning",
-                title=f"OS {work_order.number} · orçamento pendente",
-                message=f"{work_order.customer_name} · {work_order.equipment_name}. A análise técnica foi concluída e a OS está preparando orçamento.",
-                target=f"/laboratorio?os={work_order.id}&aba=quote",
-                entity_type="laboratory_work_order",
-                entity_id=work_order.id,
-                work_order_id=work_order.id,
-                exclude_user_id=user.id,
-            )
+        status_labels = {
+            "received": "Recebido", "awaiting_analysis": "Aguardando análise",
+            "under_analysis": "Analisado", "in_analysis": "Analisado",
+            "awaiting_quote": "Aguardando orçamento", "quote_sent": "Orçamento enviado",
+            "awaiting_approval": "Aguardando aprovação", "approved": "Aprovado",
+            "rejected": "Reprovado", "awaiting_parts": "Aguardando peças",
+            "in_repair": "Em manutenção", "in_testing": "Em testes",
+            "completed": "Serviço concluído", "awaiting_pickup": "Aguardando retirada",
+            "delivered": "Entregue", "warranty": "Garantia", "invoiced": "Faturado",
+            "cancelled": "Cancelado", "no_repair": "Sem conserto",
+        }
+        label = status_labels.get(payload.status, payload.status.replace("_", " ").capitalize())
+        previous_label = status_labels.get(previous, previous.replace("_", " ").capitalize())
+        order_number = str(work_order.number).removeprefix("OS-")
+        await work_order_activity(db, actor=user, work_order=work_order,
+            action="analysis_completed" if payload.status == "awaiting_quote" else "os_status_changed",
+            title=f"OS {order_number} · {label}",
+            message=f"{user.name} alterou o status de {previous_label} para {label}. Cliente: {work_order.customer_name}.",
+            details=payload.note, module="orcamentos" if payload.status == "awaiting_quote" else "laboratorio",
+            severity="warning" if payload.status == "awaiting_quote" else "info")
+        if payload.status == "awaiting_quote":
+            # A gestão vê o mesmo fato na fila de orçamentos; técnicos recebem
+            # um registro de laboratório, sem acesso à fila comercial/valores.
+            await work_order_activity(db, actor=user, work_order=work_order,
+                action="analysis_completed", module="laboratorio",
+                title=f"OS {work_order.number} · Análise técnica concluída",
+                message=f"{user.name} concluiu a análise e encaminhou a OS para orçamento.",
+                details=payload.note, exclude_roles={"gestao", "super_admin"})
         await db.commit()
     return _to_work_order_output(
         await _work_order_or_404(db, work_order.id),
@@ -1813,6 +1834,9 @@ async def toggle_substatus(
             user_id=user.id,
         )
     )
+    await work_order_activity(db, actor=user, work_order=work_order, action="substatus_changed",
+        title=f"OS {work_order.number} · {option.label}",
+        message=f"{user.name} {'ativou' if payload.active else 'desativou'} {option.label}.")
     await db.commit()
     return _to_work_order_output(
         await _work_order_or_404(db, work_order.id),
@@ -1977,6 +2001,9 @@ async def create_mechanics_painting(
         description=f"Controle de saída para pintura externa criado com {len(payload.items)} item(ns).",
         user_id=user.id,
     ))
+    await work_order_activity(db, actor=user, work_order=work_order, action="painting_created",
+        title=f"OS {work_order.number} · Pintura externa preparada",
+        message=f"{user.name} preparou a saída de {len(payload.items)} peça(s) para pintura.")
     await db.commit()
     await db.refresh(dispatch)
     return await _painting_dispatch_output(db, dispatch)
@@ -2123,6 +2150,10 @@ async def send_mechanics_painting(
         description=f"{item_count} peça(s)/parte(s) enviadas para pintura externa.",
         user_id=user.id,
     ))
+    order = await _work_order_or_404(db, dispatch.work_order_id)
+    await work_order_activity(db, actor=user, work_order=order, action="painting_sent",
+        title=f"OS {order.number} · Material enviado para pintura",
+        message=f"{user.name} confirmou o envio de {item_count} peça(s) para pintura externa.")
     await db.commit()
     await db.refresh(dispatch)
     return await _painting_dispatch_output(db, dispatch)
@@ -2198,6 +2229,10 @@ async def return_mechanics_painting(
         description="Retorno da pintura externa conferido integralmente.",
         user_id=user.id,
     ))
+    order = await _work_order_or_404(db, dispatch.work_order_id)
+    await work_order_activity(db, actor=user, work_order=order, action="painting_returned",
+        title=f"OS {order.number} · Pintura retornou",
+        message=f"{user.name} conferiu o retorno da pintura externa.")
     await db.commit()
     await db.refresh(dispatch)
     return await _painting_dispatch_output(db, dispatch)
@@ -2309,6 +2344,10 @@ async def create_quote(
             for index, photo in enumerate(payload.photos)
         ]
     db.add(quote)
+    await db.flush()
+    quote_order = await _work_order_or_404(db, work_order_id)
+    await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_created",
+        title=f"Orçamento da OS {quote_order.number} criado", message=f"{user.name} criou a revisão {quote.revision} do orçamento.")
     await db.commit()
     await db.refresh(quote)
     return _to_quote_output(quote, include_sensitive_values=True)
@@ -2368,6 +2407,9 @@ async def create_quote_revision(
         position=photo.position, document_id=photo.document_id, caption=photo.caption,
     ) for photo in source.photos]
     db.add(clone)
+    quote_order = await _work_order_or_404(db, clone.work_order_id)
+    await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_revision_created",
+        title=f"Nova revisão · OS {quote_order.number}", message=f"{user.name} criou a revisão {clone.revision} do orçamento.")
     await db.commit()
     await db.refresh(clone)
     return _to_quote_output(clone, include_sensitive_values=True)
@@ -2413,10 +2455,10 @@ async def update_quote(
         docs_by_id = {doc.id: doc for doc in docs}
         if len(docs_by_id) != len(set(ids)) or any(not doc.mime_type.startswith("image/") for doc in docs):
             raise HTTPException(status_code=422, detail="Fotos do laudo devem ser imagens desta O.S.")
-    quote.photos = [
-        LaboratoryQuotePhoto(position=index + 1, document_id=photo.document_id, caption=photo.caption)
-        for index, photo in enumerate(payload.photos)
-    ]
+    _sync_quote_photos(quote, payload.photos)
+    quote_order = await _work_order_or_404(db, quote.work_order_id)
+    await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_updated",
+        title=f"Orçamento da OS {quote_order.number} atualizado", message=f"{user.name} salvou alterações na revisão {quote.revision} do orçamento.")
     await db.commit()
     await db.refresh(quote)
     return _to_quote_output(quote, include_sensitive_values=True)
@@ -2438,6 +2480,9 @@ async def delete_quote(
             detail="Orçamento emitido não pode ser excluído. O histórico de revisões deve ser preservado.",
         )
     await db.delete(quote)
+    quote_order = await _work_order_or_404(db, quote.work_order_id)
+    await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_deleted",
+        title=f"Rascunho excluído · OS {quote_order.number}", message=f"{user.name} excluiu um rascunho de orçamento.", severity="warning")
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -2469,30 +2514,11 @@ async def quote_pdf_endpoint(
     if company_profile is None:
         raise HTTPException(status_code=422, detail="Empresa emissora não cadastrada no Config Master.")
 
+    # PDF primeiro, alteração do status depois: falha em uma imagem não pode
+    # bloquear permanentemente uma revisão cuja emissão não foi concluída.
+    issued_at = None
     if not preview and quote.emitted_at is None:
-        quote.company_snapshot = json.dumps(
-            _company_snapshot_payload(company_profile),
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-        quote.emitted_at = datetime.now(UTC)
-        quote.status = "emitted"
-        quote_sent_option = await _workflow_option_by_code(
-            db,
-            kind="substatus",
-            code="quote_sent",
-            active_only=True,
-        )
-        if quote_sent_option is not None:
-            await _set_work_order_substatus(
-                db,
-                work_order=work_order,
-                code="quote_sent",
-                active=True,
-                user_id=user.id,
-            )
-        await db.commit()
-        await db.refresh(quote)
+        issued_at = datetime.now(UTC)
 
     customer = await db.get(LaboratoryCustomer, work_order.customer_id) if work_order.customer_id else None
     photo_payload: list[tuple[str, str | None]] = []
@@ -2508,15 +2534,47 @@ async def quote_pdf_endpoint(
         if quote.company_snapshot
         else _company_snapshot_payload(company_profile)
     )
-    pdf_bytes = await asyncio.to_thread(
-        quote_pdf,
-        work_order,
-        work_order.equipment,
-        quote,
-        customer,
-        photo_payload,
-        company_payload,
-    )
+    try:
+        pdf_bytes = await asyncio.to_thread(
+            quote_pdf,
+            work_order,
+            work_order.equipment,
+            quote,
+            customer,
+            photo_payload,
+            company_payload,
+            issued_at,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=("Não foi possível gerar o PDF. Confira as fotos anexadas. "
+                    "Nenhum rascunho foi bloqueado pela tentativa de emissão."),
+        ) from exc
+
+    if issued_at is not None:
+        quote.company_snapshot = json.dumps(
+            company_payload, ensure_ascii=False, sort_keys=True,
+        )
+        quote.emitted_at = issued_at
+        quote.status = "emitted"
+        quote_sent_option = await _workflow_option_by_code(
+            db, kind="substatus", code="quote_sent", active_only=True,
+        )
+        if quote_sent_option is not None:
+            await _set_work_order_substatus(
+                db,
+                work_order=work_order,
+                code="quote_sent",
+                active=True,
+                user_id=user.id,
+            )
+        await work_order_activity(db, actor=user, work_order=work_order, module="orcamentos", action="quote_issued",
+            title=f"Orçamento emitido · OS {work_order.number}",
+            message=f"{user.name} emitiu a revisão {quote.revision} do orçamento.", severity="success")
+        await db.commit()
+        await db.refresh(quote)
+
     disposition = "inline" if preview else "attachment"
     return Response(
         content=pdf_bytes,
@@ -2721,6 +2779,8 @@ async def create_material_request_for_work_order(
         target="awaiting_approval",
         note="Solicitação criada pelo laboratório.",
     ))
+    await material_request_activity(db, actor=user, request=request, action="material_requested",
+        title=f"Solicitação {request.code} criada", message=f"{user.name} solicitou {request.quantity}x {request.item_name} para esta OS.")
     await db.commit()
     await db.refresh(request)
     return (await output_rows(
