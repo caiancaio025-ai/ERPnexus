@@ -12,7 +12,8 @@ import type { WorkOrderReceivables } from "../finance/types";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
 import type { AuthUser } from "../auth/AuthCard";
 import { ActionButton } from "./components/ActionButton";
-import { QuoteEditor } from "./components/QuoteEditor";
+import { QuoteEditor, type QuoteEditorHandle } from "./components/QuoteEditor";
+import { CustomerSearchSelect } from "./components/CustomerSearchSelect";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { EquipmentDocumentsPanel } from "./components/EquipmentDocumentsPanel";
 import { CameraCapture } from "./components/CameraCapture";
@@ -34,7 +35,7 @@ type DetailTab = "general" | "technical" | "financial" | "materials" | "status" 
 type FormState = {
   company_code: CompanyCode; customer_id: string; customer_name: string; serial_number: string;
   manufacturer: string; model: string; equipment_type: string; power: string; voltage: string;
-  entry_invoice: string; entry_invoice_2: string; entry_invoice_3: string; entry_invoice_access_key: string; exit_invoice: string; exit_invoice_2: string; exit_invoice_3: string; exit_invoice_access_key: string; warranty_invoice: string; warranty_invoice_2: string; warranty_invoice_3: string; warranty_entry_invoice_1: string; warranty_entry_invoice_2: string; warranty_entry_invoice_3: string; warranty_exit_invoice_1: string; warranty_exit_invoice_2: string; warranty_exit_invoice_3: string;
+  entry_invoice: string; entry_invoice_2: string; entry_invoice_3: string; entry_invoice_access_key: string; exit_invoice: string; exit_invoice_2: string; exit_invoice_3: string; exit_invoice_access_key: string; warranty_invoice: string; warranty_invoice_2: string; warranty_invoice_3: string; warranty_entry_invoice_1: string; warranty_entry_invoice_2: string; warranty_entry_invoice_3: string; warranty_exit_invoice_1: string; warranty_exit_invoice_2: string; warranty_exit_invoice_3: string; warranty_entry_invoice_access_key_1: string; warranty_entry_invoice_access_key_2: string; warranty_entry_invoice_access_key_3: string; warranty_exit_invoice_access_key_1: string; warranty_exit_invoice_access_key_2: string; warranty_exit_invoice_access_key_3: string;
   storage_location: string; assigned_technician_id: string; priority: Priority;
   reported_defect: string; entry_condition: string; accessories_received: string; parts_cost: string;
   quoted_value: string; approved_value: string; internal_notes: string; customer_notes: string;
@@ -115,7 +116,7 @@ function detailTabFromQuery(value: string | null): DetailTab {
 const emptyForm = (): FormState => ({
   company_code: "universo_eletronica", customer_id: "", customer_name: "", serial_number: "",
   manufacturer: "", model: "", equipment_type: "", power: "", voltage: "", entry_invoice: "", entry_invoice_2: "", entry_invoice_3: "",
-  entry_invoice_access_key: "", exit_invoice: "", exit_invoice_2: "", exit_invoice_3: "", exit_invoice_access_key: "", warranty_invoice: "", warranty_invoice_2: "", warranty_invoice_3: "", warranty_entry_invoice_1: "", warranty_entry_invoice_2: "", warranty_entry_invoice_3: "", warranty_exit_invoice_1: "", warranty_exit_invoice_2: "", warranty_exit_invoice_3: "", storage_location: "",
+  entry_invoice_access_key: "", exit_invoice: "", exit_invoice_2: "", exit_invoice_3: "", exit_invoice_access_key: "", warranty_invoice: "", warranty_invoice_2: "", warranty_invoice_3: "", warranty_entry_invoice_1: "", warranty_entry_invoice_2: "", warranty_entry_invoice_3: "", warranty_exit_invoice_1: "", warranty_exit_invoice_2: "", warranty_exit_invoice_3: "", warranty_entry_invoice_access_key_1: "", warranty_entry_invoice_access_key_2: "", warranty_entry_invoice_access_key_3: "", warranty_exit_invoice_access_key_1: "", warranty_exit_invoice_access_key_2: "", warranty_exit_invoice_access_key_3: "", storage_location: "",
   assigned_technician_id: "", priority: "normal", reported_defect: "",
   entry_condition: "", accessories_received: "", parts_cost: "", quoted_value: "",
   approved_value: "", internal_notes: "", customer_notes: "",
@@ -129,7 +130,7 @@ function toDetail(order: WorkOrder): DetailState {
     manufacturer: order.manufacturer ?? "", model: order.model ?? "",
     equipment_type: order.equipment_type ?? "", power: order.power ?? "", voltage: order.voltage ?? "",
     entry_invoice: order.entry_invoice ?? "", entry_invoice_2: order.entry_invoice_2 ?? "", entry_invoice_3: order.entry_invoice_3 ?? "", entry_invoice_access_key: order.entry_invoice_access_key ?? "",
-    exit_invoice: order.exit_invoice ?? "", exit_invoice_2: order.exit_invoice_2 ?? "", exit_invoice_3: order.exit_invoice_3 ?? "", exit_invoice_access_key: order.exit_invoice_access_key ?? "", warranty_invoice: order.warranty_invoice ?? "", warranty_invoice_2: order.warranty_invoice_2 ?? "", warranty_invoice_3: order.warranty_invoice_3 ?? "", warranty_entry_invoice_1: order.warranty_entry_invoice_1 ?? "", warranty_entry_invoice_2: order.warranty_entry_invoice_2 ?? "", warranty_entry_invoice_3: order.warranty_entry_invoice_3 ?? "", warranty_exit_invoice_1: order.warranty_exit_invoice_1 ?? "", warranty_exit_invoice_2: order.warranty_exit_invoice_2 ?? "", warranty_exit_invoice_3: order.warranty_exit_invoice_3 ?? "",
+    exit_invoice: order.exit_invoice ?? "", exit_invoice_2: order.exit_invoice_2 ?? "", exit_invoice_3: order.exit_invoice_3 ?? "", exit_invoice_access_key: order.exit_invoice_access_key ?? "", warranty_invoice: order.warranty_invoice ?? "", warranty_invoice_2: order.warranty_invoice_2 ?? "", warranty_invoice_3: order.warranty_invoice_3 ?? "", warranty_entry_invoice_1: order.warranty_entry_invoice_1 ?? "", warranty_entry_invoice_2: order.warranty_entry_invoice_2 ?? "", warranty_entry_invoice_3: order.warranty_entry_invoice_3 ?? "", warranty_exit_invoice_1: order.warranty_exit_invoice_1 ?? "", warranty_exit_invoice_2: order.warranty_exit_invoice_2 ?? "", warranty_exit_invoice_3: order.warranty_exit_invoice_3 ?? "", warranty_entry_invoice_access_key_1: order.warranty_entry_invoice_access_key_1 ?? "", warranty_entry_invoice_access_key_2: order.warranty_entry_invoice_access_key_2 ?? "", warranty_entry_invoice_access_key_3: order.warranty_entry_invoice_access_key_3 ?? "", warranty_exit_invoice_access_key_1: order.warranty_exit_invoice_access_key_1 ?? "", warranty_exit_invoice_access_key_2: order.warranty_exit_invoice_access_key_2 ?? "", warranty_exit_invoice_access_key_3: order.warranty_exit_invoice_access_key_3 ?? "",
     storage_location: order.storage_location ?? "",
     assigned_technician_id: String(order.assigned_technician_id ?? ""), priority: order.priority,
     reported_defect: order.reported_defect, entry_condition: order.entry_condition ?? "",
@@ -243,7 +244,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       const [summaryData, orders, customerData, technicianData, workflowData] = await Promise.all([
         apiClient.get<WorkOrderSummary>(`/laboratory/summary?${summaryParams.toString()}`),
         apiClient.get<WorkOrderPage>(`/laboratory/work-orders?${query}`),
-        apiClient.get<Customer[]>(`/laboratory/customers${companyQuery}`),
+        apiClient.get<Customer[]>("/laboratory/customers?include_inactive=true"),
         apiClient.get<Technician[]>(`/laboratory/technicians${companyQuery}`),
         apiClient.get<WorkflowOption[]>("/laboratory/workflow-options?include_inactive=true"),
       ]);
@@ -573,8 +574,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
           <article><span>Em reparo</span><strong>{summary?.in_repair ?? 0}</strong></article>
           <article><span>Em testes</span><strong>{summary?.in_testing ?? 0}</strong></article>
           <article className="danger"><span>Alta/Urgente</span><strong>{summary?.high_priority ?? 0}</strong></article>
-          {canViewValues && <article><span>Total aprovado</span><strong>{currency(summary?.approved_total ?? "")}</strong></article>}
-          {canViewValues && <article><span>Aguardando aprovação</span><strong>{currency(summary?.awaiting_approval_total ?? "")}</strong></article>}
+          {canViewValues && <article className="lab-kpi-money"><span>Total aprovado</span><strong title={currency(summary?.approved_total ?? "")}>{currency(summary?.approved_total ?? "")}</strong></article>}
+          {canViewValues && <article className="lab-kpi-money"><span>Aguardando aprovação</span><strong title={currency(summary?.awaiting_approval_total ?? "")}>{currency(summary?.awaiting_approval_total ?? "")}</strong></article>}
         </section>
 
         <section className="lab-toolbar">
@@ -802,7 +803,7 @@ function payloadFromForm(form: FormState, includeSensitiveValues: boolean) {
     entry_invoice_access_key: form.entry_invoice_access_key || null, exit_invoice: form.exit_invoice || null,
     exit_invoice_2: form.exit_invoice_2 || null, exit_invoice_3: form.exit_invoice_3 || null,
     exit_invoice_access_key: form.exit_invoice_access_key || null, warranty_invoice: form.warranty_invoice || null,
-    warranty_invoice_2: form.warranty_invoice_2 || null, warranty_invoice_3: form.warranty_invoice_3 || null, warranty_entry_invoice_1: form.warranty_entry_invoice_1 || null, warranty_entry_invoice_2: form.warranty_entry_invoice_2 || null, warranty_entry_invoice_3: form.warranty_entry_invoice_3 || null, warranty_exit_invoice_1: form.warranty_exit_invoice_1 || null, warranty_exit_invoice_2: form.warranty_exit_invoice_2 || null, warranty_exit_invoice_3: form.warranty_exit_invoice_3 || null, storage_location: form.storage_location || null,
+    warranty_invoice_2: form.warranty_invoice_2 || null, warranty_invoice_3: form.warranty_invoice_3 || null, warranty_entry_invoice_1: form.warranty_entry_invoice_1 || null, warranty_entry_invoice_2: form.warranty_entry_invoice_2 || null, warranty_entry_invoice_3: form.warranty_entry_invoice_3 || null, warranty_exit_invoice_1: form.warranty_exit_invoice_1 || null, warranty_exit_invoice_2: form.warranty_exit_invoice_2 || null, warranty_exit_invoice_3: form.warranty_exit_invoice_3 || null, warranty_entry_invoice_access_key_1: form.warranty_entry_invoice_access_key_1 || null, warranty_entry_invoice_access_key_2: form.warranty_entry_invoice_access_key_2 || null, warranty_entry_invoice_access_key_3: form.warranty_entry_invoice_access_key_3 || null, warranty_exit_invoice_access_key_1: form.warranty_exit_invoice_access_key_1 || null, warranty_exit_invoice_access_key_2: form.warranty_exit_invoice_access_key_2 || null, warranty_exit_invoice_access_key_3: form.warranty_exit_invoice_access_key_3 || null, storage_location: form.storage_location || null,
     entry_condition: form.entry_condition || null, accessories_received: form.accessories_received || null,
     internal_notes: form.internal_notes || null, customer_notes: form.customer_notes || null,
     ...(includeSensitiveValues ? {
@@ -819,8 +820,26 @@ function detailFingerprint(detail: DetailState, includeSensitiveValues: boolean)
   return JSON.stringify(payloadFromForm(detail, includeSensitiveValues));
 }
 
-type InvoiceField = "entry_invoice" | "exit_invoice";
-type WarrantyInvoiceField = "warranty_entry_invoice_1" | "warranty_exit_invoice_1" | "warranty_entry_invoice_2" | "warranty_exit_invoice_2" | "warranty_entry_invoice_3" | "warranty_exit_invoice_3";
+type InvoiceField = "entry_invoice" | "exit_invoice" | "entry_invoice_access_key" | "exit_invoice_access_key";
+type WarrantyInvoiceField =
+  | "warranty_entry_invoice_1" | "warranty_exit_invoice_1" | "warranty_entry_invoice_2" | "warranty_exit_invoice_2"
+  | "warranty_entry_invoice_3" | "warranty_exit_invoice_3"
+  | "warranty_entry_invoice_access_key_1" | "warranty_exit_invoice_access_key_1"
+  | "warranty_entry_invoice_access_key_2" | "warranty_exit_invoice_access_key_2"
+  | "warranty_entry_invoice_access_key_3" | "warranty_exit_invoice_access_key_3";
+
+/** Campo opcional de chave da NF-e. Paste de 44 dígitos e apresentação clara no celular. */
+function InvoiceAccessKey({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const digits = value.replace(/\D/g, "").slice(0, 44);
+  return <label className="lab-invoice-key-field">
+    <span>{label} <small>(44 dígitos)</small></span>
+    <input inputMode="numeric" type="text" autoComplete="off" placeholder="Chave de acesso da NF-e" value={value}
+      onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 44))} />
+    {digits.length > 0 && <small className={digits.length === 44 ? "lab-invoice-key-valid" : "lab-invoice-key-hint"}>
+      {digits.length}/44 dígitos{digits.length !== 44 ? " — complete a chave para salvar" : " — chave completa"}
+    </small>}
+  </label>;
+}
 
 function StandardInvoices({ values, onChange }: { values: FormState; onChange: (field: InvoiceField, value: string) => void }) {
   return <section className="lab-standard-invoices" aria-label="Notas fiscais normais da ordem de serviço">
@@ -828,17 +847,19 @@ function StandardInvoices({ values, onChange }: { values: FormState; onChange: (
       <strong>Notas fiscais da OS</strong>
       <small>Entrada e saída do atendimento normal, independentes das notas de garantia.</small>
     </div>
-    <div className="lab-grid">
+    <div className="lab-grid lab-invoice-standard-fields">
       <Input label="NF de entrada" value={values.entry_invoice} onChange={(value) => onChange("entry_invoice", value)} />
       <Input label="NF de saída" value={values.exit_invoice} onChange={(value) => onChange("exit_invoice", value)} />
+      <InvoiceAccessKey label="Chave NF de entrada" value={values.entry_invoice_access_key} onChange={(value) => onChange("entry_invoice_access_key", value)} />
+      <InvoiceAccessKey label="Chave NF de saída" value={values.exit_invoice_access_key} onChange={(value) => onChange("exit_invoice_access_key", value)} />
     </div>
   </section>;
 }
 
-const warrantyCycles: { round: number; entry: WarrantyInvoiceField; exit: WarrantyInvoiceField }[] = [
-  { round: 1, entry: "warranty_entry_invoice_1", exit: "warranty_exit_invoice_1" },
-  { round: 2, entry: "warranty_entry_invoice_2", exit: "warranty_exit_invoice_2" },
-  { round: 3, entry: "warranty_entry_invoice_3", exit: "warranty_exit_invoice_3" },
+const warrantyCycles: { round: number; entry: WarrantyInvoiceField; exit: WarrantyInvoiceField; entryKey: WarrantyInvoiceField; exitKey: WarrantyInvoiceField }[] = [
+  { round: 1, entry: "warranty_entry_invoice_1", exit: "warranty_exit_invoice_1", entryKey: "warranty_entry_invoice_access_key_1", exitKey: "warranty_exit_invoice_access_key_1" },
+  { round: 2, entry: "warranty_entry_invoice_2", exit: "warranty_exit_invoice_2", entryKey: "warranty_entry_invoice_access_key_2", exitKey: "warranty_exit_invoice_access_key_2" },
+  { round: 3, entry: "warranty_entry_invoice_3", exit: "warranty_exit_invoice_3", entryKey: "warranty_entry_invoice_access_key_3", exitKey: "warranty_exit_invoice_access_key_3" },
 ];
 
 function WarrantyInvoices({ values, onChange }: { values: FormState; onChange: (field: WarrantyInvoiceField, value: string) => void }) {
@@ -848,11 +869,13 @@ function WarrantyInvoices({ values, onChange }: { values: FormState; onChange: (
       <small>Registre até três retornos de garantia. Cada entrada e saída pode ser preenchida separadamente, em qualquer data.</small>
     </div>
     <div className="lab-invoice-cycles-grid">
-      {warrantyCycles.map(({ round, entry, exit }) => <div key={round} className="lab-invoice-cycle">
+      {warrantyCycles.map(({ round, entry, exit, entryKey, exitKey }) => <div key={round} className="lab-invoice-cycle">
         <strong>Garantia {round}</strong>
         <div className="lab-grid">
           <Input label={`NF de entrada ${round}`} value={values[entry]} onChange={(value) => onChange(entry, value)} />
+          <InvoiceAccessKey label={`Chave NF de entrada ${round}`} value={values[entryKey]} onChange={(value) => onChange(entryKey, value)} />
           <Input label={`NF de saída ${round}`} value={values[exit]} onChange={(value) => onChange(exit, value)} />
+          <InvoiceAccessKey label={`Chave NF de saída ${round}`} value={values[exitKey]} onChange={(value) => onChange(exitKey, value)} />
         </div>
       </div>)}
     </div>
@@ -884,13 +907,13 @@ function OrderForm({ form, setForm, companies, locations, customers, technicians
   return <><div className="lab-modal"><form className="lab-form lab-form-wide" onSubmit={(event) => onSubmit(event, entryFiles)}>
     <header><div><p>ABERTURA CONTROLADA</p><h2><Plus size={24} /> Nova Ordem de Serviço</h2><small>O número será gerado automaticamente no formato OS-0001.</small></div><button type="button" onClick={onClose}><X /></button></header>
     <SectionTitle title="Identificação" />
-    <div className="lab-grid three"><SelectCompany companies={companies} value={form.company_code} onChange={(value) => setForm({ ...form, company_code: value, customer_id: "", customer_name: "" })} /><label>Cliente *<select required value={form.customer_id} onChange={(e) => { const customer = customers.find((item) => item.id === Number(e.target.value)); setForm({ ...form, customer_id: e.target.value, customer_name: customer?.legal_name ?? "" }); }}><option value="">Selecione...</option>{customers.filter((item) => item.company_code === form.company_code).map((item) => <option key={item.id} value={item.id}>{item.legal_name}</option>)}</select></label><label>Técnico responsável<select value={form.assigned_technician_id} onChange={(e) => setForm({ ...form, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
+    <div className="lab-grid three"><SelectCompany companies={companies} value={form.company_code} onChange={(value) => setForm({ ...form, company_code: value, customer_id: "", customer_name: "" })} /><CustomerSearchSelect required customers={customers} companyCode={form.company_code} value={form.customer_id} customerName={form.customer_name} onChange={(customer) => setForm({ ...form, customer_id: String(customer.id), customer_name: customer.legal_name })} /><label>Técnico responsável<select value={form.assigned_technician_id} onChange={(e) => setForm({ ...form, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
     <SectionTitle title="Equipamento" />
     <div className="lab-grid three"><Input label="Equipamento *" value={form.equipment_type} onChange={(value) => setForm({ ...form, equipment_type: value })} required /><Input label="Fabricante" value={form.manufacturer} onChange={(value) => setForm({ ...form, manufacturer: value })} /><Input label="Modelo" value={form.model} onChange={(value) => setForm({ ...form, model: value })} /><Input label="Número de série" value={form.serial_number} onChange={(value) => setForm({ ...form, serial_number: value })} /><Input label="Potência" value={form.power} onChange={(value) => setForm({ ...form, power: value })} /><Input label="Tensão" value={form.voltage} onChange={(value) => setForm({ ...form, voltage: value })} /></div>
     <SectionTitle title="Entrada e operação" />
     <StandardInvoices values={form} onChange={(field, value) => setForm({ ...form, [field]: value })} />
     <WarrantyInvoices values={form} onChange={(field, value) => setForm({ ...form, [field]: value })} />
-    <div className="lab-grid three"><Input label="Chave NF entrada (44 dígitos)" value={form.entry_invoice_access_key} onChange={(value) => setForm({ ...form, entry_invoice_access_key: value })} /><Input label="Chave NF saída (44 dígitos)" value={form.exit_invoice_access_key} onChange={(value) => setForm({ ...form, exit_invoice_access_key: value })} /><Input label="Localização física (A1...F6)" value={form.storage_location} onChange={(value) => setForm({ ...form, storage_location: value.toUpperCase() })} /><label>Prioridade<select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+    <div className="lab-grid three"><Input label="Localização física (A1...F6)" value={form.storage_location} onChange={(value) => setForm({ ...form, storage_location: value.toUpperCase() })} /><label>Prioridade<select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
     <label>Defeito informado *<textarea required rows={3} value={form.reported_defect} onChange={(e) => setForm({ ...form, reported_defect: e.target.value })} /></label>
     <div className="lab-grid"><label>Condição de entrada<textarea rows={3} value={form.entry_condition} onChange={(e) => setForm({ ...form, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={3} value={form.accessories_received} onChange={(e) => setForm({ ...form, accessories_received: e.target.value })} /></label></div>
     <div className="lab-entry-upload-actions">
@@ -950,6 +973,7 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const [showMobileActions, setShowMobileActions] = useState(false);
   const tabsRef = useRef<HTMLElement>(null);
+  const quoteSaveRef = useRef<QuoteEditorHandle>(null);
   const configuredBusinessStatuses = workflowOptions
     .filter((item) => item.kind === "status" && item.is_active)
     .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
@@ -1018,13 +1042,14 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
     </nav>
     <fieldset className="lab-detail-body-scroll" disabled={loading || detail.is_inactive} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
     <div className="lab-detail-content">
-      {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><label>Cliente<select value={detail.customer_id} onChange={(e) => { const customer = customers.find((item) => item.id === Number(e.target.value)); setDetail({ ...detail, customer_id: e.target.value, customer_name: customer?.legal_name ?? detail.customer_name }); }}><option value="">Selecione...</option>{customers.filter((item) => item.company_code === detail.company_code).map((item) => <option key={item.id} value={item.id}>{item.legal_name}</option>)}</select></label><SelectCompany companies={companies} value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value, customer_id: "", customer_name: "" })} /></div><StandardInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><WarrantyInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><HistoricalInvoiceNotes values={detail} /><div className="lab-grid"><Input label="Chave NF entrada (44 dígitos)" value={detail.entry_invoice_access_key} onChange={(value) => setDetail({ ...detail, entry_invoice_access_key: value })} /><Input label="Chave NF saída (44 dígitos)" value={detail.exit_invoice_access_key} onChange={(value) => setDetail({ ...detail, exit_invoice_access_key: value })} /></div><div className="lab-location-editor"><div className="lab-location-field"><SelectLocation locations={locations} value={detail.storage_location} onChange={(value) => setDetail({ ...detail, storage_location: value })} />{detail.storage_location && <button type="button" className="lab-location-current lab-location-current-button" onClick={() => onLocationPreview(detail.storage_location)} title="Mostrar esta posição no mapa"><MapPin size={15} /> Posição atual: <strong>{detail.storage_location}</strong><span>Ver no mapa</span></button>}</div><div className="lab-location-actions"><button type="button" className="lab-location-suggest" onClick={async()=>{const result=await apiClient.get<{location:string}>("/laboratory/locations/next");setDetail({...detail,storage_location:result.location});}}>Sugerir melhor posição</button><button type="button" className="lab-location-release" disabled={!detail.storage_location} onClick={()=>setDetail({...detail,storage_location:""})}>Liberar posição</button></div><small className="lab-location-help">A localização é física e independente do status. Mais de uma O.S. pode compartilhar a mesma posição; a sugestão prioriza os espaços menos carregados.</small></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
+      {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><CustomerSearchSelect customers={customers} companyCode={detail.company_code} value={detail.customer_id} customerName={detail.customer_name} onChange={(customer) => setDetail({ ...detail, customer_id: String(customer.id), customer_name: customer.legal_name })} /><SelectCompany companies={companies} value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value, customer_id: "", customer_name: "" })} /></div><StandardInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><WarrantyInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><HistoricalInvoiceNotes values={detail} /><div className="lab-location-editor"><div className="lab-location-field"><SelectLocation locations={locations} value={detail.storage_location} onChange={(value) => setDetail({ ...detail, storage_location: value })} />{detail.storage_location && <button type="button" className="lab-location-current lab-location-current-button" onClick={() => onLocationPreview(detail.storage_location)} title="Mostrar esta posição no mapa"><MapPin size={15} /> Posição atual: <strong>{detail.storage_location}</strong><span>Ver no mapa</span></button>}</div><div className="lab-location-actions"><button type="button" className="lab-location-suggest" onClick={async()=>{const result=await apiClient.get<{location:string}>("/laboratory/locations/next");setDetail({...detail,storage_location:result.location});}}>Sugerir melhor posição</button><button type="button" className="lab-location-release" disabled={!detail.storage_location} onClick={()=>setDetail({...detail,storage_location:""})}>Liberar posição</button></div><small className="lab-location-help">A localização é física e independente do status. Mais de uma O.S. pode compartilhar a mesma posição; a sugestão prioriza os espaços menos carregados.</small></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
       {tab === "technical" && <><SectionTitle title="Informações do equipamento" /><div className="lab-grid three"><Input label="Equipamento" value={detail.equipment_type} onChange={(value) => setDetail({ ...detail, equipment_type: value })} /><Input label="Fabricante" value={detail.manufacturer} onChange={(value) => setDetail({ ...detail, manufacturer: value })} /><Input label="Modelo" value={detail.model} onChange={(value) => setDetail({ ...detail, model: value })} /><Input label="Número de série" value={detail.serial_number} onChange={(value) => setDetail({ ...detail, serial_number: value })} /><Input label="Potência" value={detail.power} onChange={(value) => setDetail({ ...detail, power: value })} /><Input label="Tensão" value={detail.voltage} onChange={(value) => setDetail({ ...detail, voltage: value })} /></div><label>Observações internas<textarea rows={6} value={detail.internal_notes} onChange={(e) => setDetail({ ...detail, internal_notes: e.target.value })} /></label></>}
       {canViewValues && tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div><OrderReceivablesPanel workOrderId={detail.id} onOpenReceivables={onOpenReceivables} onOpenEntry={onOpenReceivableEntry} /></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} onInventoryChange={onInventoryChange} />}
       {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabel(detail.status, workflowOptions)}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option>{visibleBusinessStatuses.length > 0 && <optgroup label="Status principais">{visibleBusinessStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}{visibleOperationalStatuses.length > 0 && <optgroup label="Etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status livre para a operação: qualquer usuário do Laboratório pode alterar para qualquer status ativo. Toda mudança continua registrada no histórico.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus, `Status alterado manualmente de ${statusLabel(detail.status, workflowOptions)} para ${statusLabel(targetStatus, workflowOptions)}.`); }}>Aplicar status</ActionButton></div>{substatusOptions.length > 0 && <div className="lab-substatus-box"><div><strong>Sinalizadores / substatus</strong><span>Marque informações complementares sem criar novos status principais.</span></div><div className="lab-substatus-grid">{substatusOptions.map((item) => { const checked = detail.substatuses.includes(item.code); return <label key={item.id} className={checked ? "active" : ""}><input type="checkbox" checked={checked} disabled={loading} onChange={(event) => onSubstatus(item.code, event.target.checked)} /><span>{item.label}</span></label>; })}</div></div>}</>}
       {tab === "documents" && <EquipmentDocumentsPanel workOrderId={detail.id} />}
       {tab === "quote" && <QuoteEditor
+        saveRef={quoteSaveRef}
         workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
         equipmentType={detail.equipment_type} manufacturer={detail.manufacturer} model={detail.model}
         serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
@@ -1046,7 +1071,7 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
       </div>}
     </div>
     </fieldset>
-    <footer className="lab-detail-footer"><ActionButton disabled={loading} variant="secondary" icon={<X size={17} />} onClick={onClose}>Fechar</ActionButton><ActionButton loading={loading} success={saved} icon={<Save size={17} />} onClick={onSave}>{saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>
+    <footer className="lab-detail-footer"><ActionButton disabled={loading} variant="secondary" icon={<X size={17} />} onClick={onClose}>Fechar</ActionButton><ActionButton loading={tab === "quote" ? false : loading} success={tab === "quote" ? false : saved} disabled={tab === "quote" && !canManageQuote} icon={<Save size={17} />} onClick={tab === "quote" ? () => { void quoteSaveRef.current?.save(); } : onSave}>{tab === "quote" ? "Salvar orçamento" : saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>
   </section></div>;
 }
 

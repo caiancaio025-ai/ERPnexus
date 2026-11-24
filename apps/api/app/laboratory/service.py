@@ -189,6 +189,12 @@ def apply_work_order_update(
     work_order.warranty_exit_invoice_1 = payload.warranty_exit_invoice_1
     work_order.warranty_exit_invoice_2 = payload.warranty_exit_invoice_2
     work_order.warranty_exit_invoice_3 = payload.warranty_exit_invoice_3
+    work_order.warranty_entry_invoice_access_key_1 = payload.warranty_entry_invoice_access_key_1
+    work_order.warranty_entry_invoice_access_key_2 = payload.warranty_entry_invoice_access_key_2
+    work_order.warranty_entry_invoice_access_key_3 = payload.warranty_entry_invoice_access_key_3
+    work_order.warranty_exit_invoice_access_key_1 = payload.warranty_exit_invoice_access_key_1
+    work_order.warranty_exit_invoice_access_key_2 = payload.warranty_exit_invoice_access_key_2
+    work_order.warranty_exit_invoice_access_key_3 = payload.warranty_exit_invoice_access_key_3
     if include_sensitive_values:
         work_order.parts_cost = payload.parts_cost or None
         work_order.quoted_value = payload.quoted_value or None
@@ -332,6 +338,12 @@ async def list_work_orders_page(
                 LaboratoryWorkOrder.warranty_exit_invoice_1.ilike(term),
                 LaboratoryWorkOrder.warranty_exit_invoice_2.ilike(term),
                 LaboratoryWorkOrder.warranty_exit_invoice_3.ilike(term),
+                LaboratoryWorkOrder.warranty_entry_invoice_access_key_1.ilike(term),
+                LaboratoryWorkOrder.warranty_entry_invoice_access_key_2.ilike(term),
+                LaboratoryWorkOrder.warranty_entry_invoice_access_key_3.ilike(term),
+                LaboratoryWorkOrder.warranty_exit_invoice_access_key_1.ilike(term),
+                LaboratoryWorkOrder.warranty_exit_invoice_access_key_2.ilike(term),
+                LaboratoryWorkOrder.warranty_exit_invoice_access_key_3.ilike(term),
                 LaboratoryWorkOrder.storage_location.ilike(term),
                 LaboratoryWorkOrder.equipment.has(
                     or_(

@@ -11,3 +11,23 @@
 .sentico-tema--compacto .sentico-tema__opcoes button { min-height: 34px; }
 .sentico-tema--compacto .sentico-tema__opcoes span { display: none; }
 @media (max-width: 900px) { .sentico-tema__opcoes button { min-height: 43px; } }
+
+/* V27 — seleção de época festiva integrada aos temas claro/escuro. */
+.sentico-tema__festas { margin:10px 0 0; display:grid; gap:7px; }
+.sentico-tema__festas > label:first-child { font-size:11px; font-weight:700; color:#a7bfd2; letter-spacing:.025em; }
+.sentico-tema__festas select { width:100%; min-width:0; height:38px; padding:6px 29px 6px 10px; border:1px solid #30536c; border-radius:9px; background:#0d2b40; color:#eff8ff; font-size:12px; font-weight:600; cursor:pointer; }
+.sentico-tema__festas select:focus-visible { outline:2px solid #77caff; outline-offset:2px; }
+.sentico-tema__animacoes { display:flex; align-items:center; gap:8px; margin:0; padding:2px 0 0; font-size:11px; line-height:1.3; color:#b9d0de; cursor:pointer; }
+.sentico-tema__animacoes input { flex:0 0 15px; width:15px; height:15px; margin:0; accent-color:#3da9d1; }
+.sentico-tema__temporada-compacto { display:grid; place-items:center; width:100%; height:38px; margin-top:6px; padding:0; border:1px solid #30536c; border-radius:9px; background:#0d2b40; color:#b3d3e9; cursor:pointer; }
+.sentico-tema__temporada-compacto[aria-pressed="true"] { border-color:#5d9aa5; color:#9be1cb; }
+.sentico-tema__temporada-compacto:focus-visible { outline:2px solid #77caff; outline-offset:2px; }
+@media (max-height:730px) and (min-width:901px) {
+  .sentico-sidebar__footer { max-height:47vh; overflow-y:auto; scrollbar-width:thin; }
+}
+@media (max-width:900px) {
+  .sentico-tema__festas select { height:44px; font-size:14px; }
+  .sentico-tema__animacoes { min-height:32px; font-size:12px; }
+}
+
+.sentico-tema__ativo { color:#a7decf; font-size:10px; font-weight:700; line-height:1.35; }

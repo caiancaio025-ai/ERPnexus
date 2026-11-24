@@ -105,6 +105,12 @@ class WorkOrderInput(BaseModel):
     warranty_exit_invoice_1: str | None = Field(default=None, max_length=80)
     warranty_exit_invoice_2: str | None = Field(default=None, max_length=80)
     warranty_exit_invoice_3: str | None = Field(default=None, max_length=80)
+    warranty_entry_invoice_access_key_1: str | None = None
+    warranty_entry_invoice_access_key_2: str | None = None
+    warranty_entry_invoice_access_key_3: str | None = None
+    warranty_exit_invoice_access_key_1: str | None = None
+    warranty_exit_invoice_access_key_2: str | None = None
+    warranty_exit_invoice_access_key_3: str | None = None
     storage_location: str | None = None
     assigned_technician_id: int | None = None
     priority: LaboratoryPriority = "normal"
@@ -117,7 +123,16 @@ class WorkOrderInput(BaseModel):
     internal_notes: str | None = None
     customer_notes: str | None = None
 
-    @field_validator("entry_invoice_access_key", "exit_invoice_access_key", mode="before")
+    @field_validator(
+        "entry_invoice_access_key", "exit_invoice_access_key",
+        "warranty_entry_invoice_access_key_1",
+        "warranty_entry_invoice_access_key_2",
+        "warranty_entry_invoice_access_key_3",
+        "warranty_exit_invoice_access_key_1",
+        "warranty_exit_invoice_access_key_2",
+        "warranty_exit_invoice_access_key_3",
+        mode="before",
+    )
     @classmethod
     def validate_invoice_access_key(cls, value: str | None) -> str | None:
         if value in (None, ""):
@@ -216,6 +231,12 @@ class WorkOrderOutput(BaseModel):
     warranty_exit_invoice_1: str | None
     warranty_exit_invoice_2: str | None
     warranty_exit_invoice_3: str | None
+    warranty_entry_invoice_access_key_1: str | None
+    warranty_entry_invoice_access_key_2: str | None
+    warranty_entry_invoice_access_key_3: str | None
+    warranty_exit_invoice_access_key_1: str | None
+    warranty_exit_invoice_access_key_2: str | None
+    warranty_exit_invoice_access_key_3: str | None
     is_inactive: bool = False
     inactivation_reason: str | None = None
     inactivated_at: datetime | None = None
@@ -492,6 +513,7 @@ class PaintingItemOutput(BaseModel):
 class PaintingPhotoOutput(BaseModel):
     id: int
     document_id: int
+    item_id: int | None = None
     phase: str
     position: int
     caption: str | None
@@ -537,6 +559,20 @@ class QuoteItemInput(BaseModel):
     quantity: Decimal = Decimal("1")
     unit_value: Decimal = Decimal("0")
 
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity_precision(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0 or value.as_tuple().exponent < -3:
+            raise ValueError("A quantidade deve ser positiva e ter no máximo três casas decimais.")
+        return value
+
+    @field_validator("unit_value")
+    @classmethod
+    def validate_price_precision(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value < 0 or value.as_tuple().exponent < -2:
+            raise ValueError("O valor unitário deve ter no máximo duas casas decimais.")
+        return value
+
 
 class QuoteItemOutput(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -580,6 +616,13 @@ class QuoteInput(BaseModel):
     discount_type: Literal["none", "amount", "percent"] = "none"
     discount_value: Decimal = Decimal("0")
     items: list[QuoteItemInput]
+
+    @field_validator("discount_value")
+    @classmethod
+    def validate_discount_precision(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value < 0 or value.as_tuple().exponent < -2:
+            raise ValueError("O desconto deve ter no máximo duas casas decimais.")
+        return value
     # A mesma foto não pode ser vinculada duas vezes à revisão (índice único no banco).
     photos: list[QuotePhotoInput] = Field(default_factory=list, max_length=10)
 

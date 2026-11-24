@@ -13,6 +13,7 @@ import {
   Building2,
   Boxes,
   CalendarClock,
+  CalendarRange,
   ClipboardPlus,
   FileClock,
   Gauge,
@@ -32,6 +33,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SeasonalDashboardBanner } from "../../shared/theme/SeasonalDashboardBanner";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -43,6 +45,11 @@ import {
   dashboardPreferenceKey, readHiddenDashboardAreas, serializeHiddenDashboardAreas,
   type DashboardArea,
 } from "./dashboardPreferences";
+import {
+  dashboardPeriodKey, parseDashboardPeriod, dashboardPeriodError,
+  dashboardPeriodLabel, dashboardPeriodQuery, periodOptions,
+  DEFAULT_DASHBOARD_PERIOD, type DashboardPeriodPreference, type PeriodPreset,
+} from "./dashboardPeriod";
 import { apiClient } from "../../shared/api/apiClient";
 import "./dashboard.css";
 
@@ -69,6 +76,11 @@ const areaIcons = {
   financeiro: WalletCards, estoque: Boxes, notificacoes: Bell,
   atalhos: Gauge, geral: LayoutDashboard,
 };
+
+function readDashboardPeriodPreference(userId: number): DashboardPeriodPreference {
+  try { return parseDashboardPeriod(window.localStorage.getItem(dashboardPeriodKey(userId))); }
+  catch { return { ...DEFAULT_DASHBOARD_PERIOD }; }
+}
 
 function readDashboardPreference(userId: number): DashboardArea[] {
   try { return readHiddenDashboardAreas(window.localStorage.getItem(dashboardPreferenceKey(userId))); }
@@ -179,6 +191,7 @@ function normalizeSummary(payload: unknown): DashboardSummary {
       month_label: String(monthly.month_label ?? currentMonthLabel()),
       count: Number(monthly.count ?? 0),
     },
+    filtered_period: payload.filtered_period === true,
   };
 }
 
@@ -299,6 +312,14 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [savedAreas, setSavedAreas] = useState<{ ownerId: number; hidden: DashboardArea[] }>(
     () => ({ ownerId: user.id, hidden: readDashboardPreference(user.id) }),
   );
+  const [savedPeriod, setSavedPeriod] = useState<{ ownerId: number; value: DashboardPeriodPreference }>(
+    () => ({ ownerId: user.id, value: readDashboardPeriodPreference(user.id) }),
+  );
+  const appliedPeriod = savedPeriod.ownerId === user.id ? savedPeriod.value : readDashboardPeriodPreference(user.id);
+  const [draftPeriod, setDraftPeriod] = useState<DashboardPeriodPreference>(() => readDashboardPeriodPreference(user.id));
+  const [periodError, setPeriodError] = useState("");
+  const periodQuery = useMemo(() => dashboardPeriodQuery(appliedPeriod),
+    [appliedPeriod.preset, appliedPeriod.start, appliedPeriod.end]);
   const hiddenAreas = savedAreas.ownerId === user.id ? savedAreas.hidden : readDashboardPreference(user.id);
   const availableAreas = useMemo(() => summary ? availableDashboardAreas(summary) : [], [summary]);
   const selectedAreasCount = availableAreas.filter((area) => !hiddenAreas.includes(area)).length;
@@ -316,6 +337,21 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     try { window.localStorage.setItem(dashboardPreferenceKey(user.id), serializeHiddenDashboardAreas(clean)); }
     catch { /* Modo de armazenamento privado: seleção mantida nesta sessão. */ }
   }
+
+  function applyDashboardPeriod(next: DashboardPeriodPreference) {
+    const validation = dashboardPeriodError(next);
+    if (validation) { setPeriodError(validation); return; }
+    setPeriodError("");
+    setSavedPeriod({ ownerId: user.id, value: next });
+    setDraftPeriod(next);
+    try { window.localStorage.setItem(dashboardPeriodKey(user.id), JSON.stringify(next)); }
+    catch { /* A preferência continua nesta sessão quando o armazenamento é bloqueado. */ }
+  }
+
+  useEffect(() => {
+    setDraftPeriod(readDashboardPeriodPreference(user.id));
+    setPeriodError("");
+  }, [user.id]);
 
   function toggleDashboardArea(area: DashboardArea) {
     saveHiddenAreas(isAreaVisible(area) ? [...hiddenAreas, area] : hiddenAreas.filter((item) => item !== area));
@@ -338,12 +374,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   useEffect(() => {
     const controller = new AbortController();
 
-    // Histórico e indicadores independentes: falha em um módulo não esconde o outro.
-    apiClient.get<DashboardSummary>("/api/dashboard/summary", { signal: controller.signal })
-      .then((response) => setSummary(normalizeSummary(response)))
-      .catch((requestError: Error) => {
-        if (requestError.name !== "AbortError") setError(requestError.message);
-      });
+    // As notificações em tempo real não são alteradas pelo filtro de indicadores.
     apiClient.get<NotificationSummary>("/api/notifications?limit=10", { signal: controller.signal })
       .then(setNotifications)
       .catch((requestError: Error) => {
@@ -351,19 +382,32 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [user.id]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setSummary(null);
+    setError("");
+    apiClient.get<DashboardSummary>(periodQuery, { signal: controller.signal })
+      .then((response) => setSummary(normalizeSummary(response)))
+      .catch((requestError: Error) => {
+        if (requestError.name !== "AbortError") setError(requestError.message);
+      });
+    return () => controller.abort();
+  }, [periodQuery, user.id]);
+
+  useEffect(() => {
+    let active = true;
     const refreshSummary = () => {
       if (document.visibilityState === "hidden") return;
-      apiClient.get<DashboardSummary>("/api/dashboard/summary")
-        .then((response) => setSummary(normalizeSummary(response)))
+      apiClient.get<DashboardSummary>(periodQuery)
+        .then((response) => { if (active) setSummary(normalizeSummary(response)); })
         .catch(() => { /* Falha momentânea não apaga o painel já exibido. */ });
     };
     const intervalId = window.setInterval(refreshSummary, 60000);
     window.addEventListener("focus", refreshSummary);
-    return () => { window.clearInterval(intervalId); window.removeEventListener("focus", refreshSummary); };
-  }, []);
+    return () => { active = false; window.clearInterval(intervalId); window.removeEventListener("focus", refreshSummary); };
+  }, [periodQuery, user.id]);
 
   useEffect(() => {
     const refresh = () => {
@@ -452,6 +496,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             <button className="user-button" aria-label="Perfil do usuário"><UserRound size={18} /><span>{initials(user.name)}</span></button>
           </div>
         </header>
+        <SeasonalDashboardBanner />
 
         {error && <p className="dashboard-error" role="alert">{error}</p>}
         {!summary && !error && <div className="dashboard-loading"><span />Carregando visão geral...</div>}
@@ -462,6 +507,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
               <span className="dashboard-visibility__eyebrow">SEU PAINEL</span>
               <strong>Escolha o que deseja acompanhar</strong>
               <small>{selectedAreasCount} de {availableAreas.length} áreas visíveis · Sua escolha fica salva neste navegador</small>
+              <span className="dashboard-visibility__period"><CalendarRange size={15}/> {dashboardPeriodLabel(appliedPeriod)}</span>
             </div>
             <div className="dashboard-visibility__actions">
               {selectedAreasCount < availableAreas.length && <button type="button" className="dashboard-visibility__reset" onClick={() => saveHiddenAreas([])}><RotateCcw size={15}/> Mostrar tudo</button>}
@@ -469,6 +515,26 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             </div>
           </div>
           {visibilityOpen && <div id="dashboard-visibility-options" className="dashboard-visibility__options">
+            <section className="dashboard-period" aria-label="Selecionar período do painel">
+              <div className="dashboard-period__heading"><CalendarRange size={19}/><div><strong>Período dos indicadores</strong><p>Escolha quais datas devem entrar nas contagens e pendências do painel.</p></div></div>
+              <div className="dashboard-period__controls">
+                <label>Período de referência
+                  <select value={draftPeriod.preset} onChange={(event) => { setPeriodError(""); setDraftPeriod((current) => ({ ...current, preset: event.target.value as PeriodPreset })); }}>
+                    {periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                {draftPeriod.preset === "personalizado" && <div className="dashboard-period__dates">
+                  <label>Data inicial (opcional)<input type="date" value={draftPeriod.start} onChange={(event) => { setPeriodError(""); setDraftPeriod((current) => ({ ...current, start: event.target.value })); }} /></label>
+                  <label>Data final (opcional)<input type="date" value={draftPeriod.end} onChange={(event) => { setPeriodError(""); setDraftPeriod((current) => ({ ...current, end: event.target.value })); }} /></label>
+                </div>}
+                <div className="dashboard-period__buttons">
+                  <button type="button" className="dashboard-period__apply" onClick={() => applyDashboardPeriod(draftPeriod)}><Check size={16}/> Aplicar período</button>
+                  <button type="button" onClick={() => applyDashboardPeriod({ ...DEFAULT_DASHBOARD_PERIOD })}><RotateCcw size={15}/> Todo o histórico</button>
+                </div>
+              </div>
+              {periodError && <p className="dashboard-period__error" role="alert">{periodError}</p>}
+              <p className="dashboard-period__help">Laboratório e Orçamentos: <strong>entrada da OS</strong> · Compras: <strong>data da solicitação ou compra</strong> · Financeiro: <strong>vencimento ou faturamento</strong>. As notificações continuam em tempo real. Nenhum registro antigo é apagado.</p>
+            </section>
             <div className="dashboard-visibility__hint">Ative ou oculte áreas individualmente. Use <strong>Somente esta</strong> para acompanhar apenas um setor.</div>
             <div className="dashboard-visibility__grid">
               {availableAreas.map((area) => {
@@ -543,7 +609,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             </section>}
 
             {(["gestao", "lab"].includes(summary.audience)) && isAreaVisible("laboratorio") && <footer className="monthly-equipment-bar">
-              <div><span className="monthly-equipment-bar__icon"><PackageOpen size={21} /></span><p>Equipamentos com entrada em <strong>{summary.monthly_equipment_entries.month_label}</strong></p></div>
+              <div><span className="monthly-equipment-bar__icon"><PackageOpen size={21} /></span><p>Equipamentos com entrada {summary.filtered_period ? "·" : "em"} <strong>{summary.monthly_equipment_entries.month_label}</strong></p></div>
               <strong>{summary.monthly_equipment_entries.count}</strong>
             </footer>}
             {selectedAreasCount === 0 && <div className="dashboard-visibility__empty"><EyeOff size={20}/><strong>Você ocultou todas as áreas deste painel.</strong><p>Suas informações continuam disponíveis nos módulos do SÊNTICO.</p><button type="button" onClick={() => saveHiddenAreas([])}>Mostrar tudo novamente</button></div>}

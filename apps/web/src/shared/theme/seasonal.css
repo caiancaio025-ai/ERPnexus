@@ -1,0 +1,189 @@
+/* SÊNTICO V27 — ornamentos sazonais discretos, não-interativos, para ambos os temas.
+   Não altera semântica de status, permissões, valores, formulários ou impressão. */
+html[data-sentico-temporada="ano_novo"] { --festive-accent:#86d6ff; --festive-line:rgba(134,214,255,.42); --festive-glow:rgba(134,214,255,.12); }
+html[data-sentico-temporada="carnaval"] { --festive-accent:#c682dc; --festive-line:rgba(198,130,220,.40); --festive-glow:rgba(198,130,220,.09); }
+html[data-sentico-temporada="pascoa"] { --festive-accent:#9ecf97; --festive-line:rgba(135,195,137,.36); --festive-glow:rgba(135,195,137,.09); }
+html[data-sentico-temporada="junho"] { --festive-accent:#eab15b; --festive-line:rgba(234,177,91,.39); --festive-glow:rgba(234,177,91,.08); }
+html[data-sentico-temporada="halloween"] { --festive-accent:#f5a866; --festive-line:rgba(245,168,102,.40); --festive-glow:rgba(245,168,102,.09); }
+html[data-sentico-temporada="natal"] { --festive-accent:#7ccea8; --festive-line:rgba(124,206,168,.4); --festive-glow:rgba(124,206,168,.09); }
+
+/* A identidade escura ou clara continua dominante. Os acentos não substituem as cores de risco/status. */
+html[data-sentico-temporada] .sentico-shell .sentico-sidebar__item.is-active {
+  box-shadow:inset 3px 0 var(--festive-accent);
+}
+html[data-sentico-temporada] .sentico-shell .sentico-sidebar__header {
+  border-bottom-color:var(--festive-line);
+}
+html[data-sentico-temporada] :is(.dashboard-main,.sentico-notifications,.lab-shell,.purchase-content) :is(.work-queue,.quick-panel,.purchase-center) {
+  border-top:2px solid var(--festive-line);
+}
+html[data-sentico-temporada] :is(.dashboard-main,.lab-shell,.purchase-content) .section-kicker {
+  text-decoration-color:var(--festive-accent);
+}
+html[data-sentico-temporada="natal"] .sentico-sidebar__footer,
+html[data-sentico-temporada="junho"] .sentico-sidebar__footer { border-top-color:var(--festive-line); }
+
+/* Decoração isolada em camada que ignora eventos e não altera a geometria das telas. */
+.sentico-festas { position:fixed; inset:0; z-index:12; pointer-events:none; user-select:none; overflow:hidden; }
+.sentico-festas__ambient { position:absolute; inset:0; opacity:.65; background:radial-gradient(ellipse 46% 25% at 100% 0,var(--festive-glow),transparent 100%); }
+.sentico-festas__particles { position:absolute; inset:0; overflow:hidden; }
+.sentico-festas__snow { position:absolute; top:0; display:block; border-radius:50%; background:#f1fbff; opacity:.4; box-shadow:0 0 8px rgba(223,247,255,.25); }
+.sentico-festas.is-animated .sentico-festas__snow { animation:sentico-nevar linear infinite; }
+.sentico-festas__confetti { position:absolute; top:0; display:block; width:5px; height:12px; border-radius:2px; opacity:.6; }
+.sentico-festas.is-animated .sentico-festas__confetti { animation:sentico-confete linear infinite; }
+.sentico-festas__lights { position:absolute; left:7px; right:7px; top:0; height:27px; display:flex; align-items:flex-start; justify-content:space-around; border-top:2px solid rgba(126,155,130,.35); }
+.sentico-festas__bulb { display:block; position:relative; flex:0 0 8px; height:12px; margin-top:7px; border-radius:45% 45% 50% 50%; background:var(--bulb-color); box-shadow:0 0 7px var(--bulb-color); opacity:.78; }
+.sentico-festas__bulb::before { content:""; position:absolute; top:-5px; left:2px; height:5px; width:4px; border-radius:1px; background:#536963; }
+.sentico-festas.is-animated .sentico-festas__bulb { animation:sentico-piscar 2.7s ease-in-out infinite; animation-delay:var(--phase); }
+.sentico-festas__bunting { display:flex; justify-content:space-around; gap:4px; position:absolute; left:5px; right:5px; top:0; height:22px; border-top:2px solid rgba(178,142,93,.47); }
+.sentico-festas__bunting span { flex:0 1 18px; height:16px; background:var(--bulb-color); opacity:.76; clip-path:polygon(0 0,100% 0,50% 100%); }
+.sentico-festas.is-animated .sentico-festas__bunting span:nth-child(even) { animation:sentico-bandeira 4s ease-in-out infinite alternate; }
+
+.sentico-festas__fireworks { position:absolute; inset:0; }
+.sentico-festas__burst { position:absolute; width:34px; height:34px; margin-left:-17px; margin-top:-17px; opacity:.65; }
+.sentico-festas__burst i { position:absolute; left:50%; top:50%; width:2px; height:16px; margin-left:-1px; margin-top:-14px; border-radius:999px; background:var(--burst-color); box-shadow:0 0 8px var(--burst-color); transform-origin:center 14px; }
+.sentico-festas__burst i:nth-child(1){transform:rotate(0deg)}
+.sentico-festas__burst i:nth-child(2){transform:rotate(45deg)}
+.sentico-festas__burst i:nth-child(3){transform:rotate(90deg)}
+.sentico-festas__burst i:nth-child(4){transform:rotate(135deg)}
+.sentico-festas__burst i:nth-child(5){transform:rotate(22.5deg)}
+.sentico-festas__burst i:nth-child(6){transform:rotate(67.5deg)}
+.sentico-festas__burst i:nth-child(7){transform:rotate(112.5deg)}
+.sentico-festas__burst i:nth-child(8){transform:rotate(157.5deg)}
+.sentico-festas.is-animated .sentico-festas__burst { animation:sentico-fogos var(--dur,3.2s) ease-out infinite; }
+
+.sentico-festas__corners { position:absolute; inset:0; }
+.sentico-festas__corners span { position:absolute; top:10px; font-size:23px; opacity:.27; color:var(--festive-accent); }
+.sentico-festas__corners span:nth-child(1) {left:12%;}
+.sentico-festas__corners span:nth-child(2) {left:48%;}
+.sentico-festas__corners span:nth-child(3) {right:12%;}
+.sentico-festas--pascoa .sentico-festas__corners span:nth-child(2) { width:16px; height:22px; top:5px; border:2px solid rgba(181,153,215,.65); border-radius:50%; color:transparent; background:linear-gradient(155deg,rgba(245,194,169,.35),rgba(187,221,165,.25)); }
+.sentico-festas--halloween .sentico-festas__corners span:nth-child(2) { color:#e5a46a; }
+.sentico-festas.is-animated .sentico-festas__corners span { animation:sentico-suave 5s ease-in-out infinite alternate; }
+
+@keyframes sentico-nevar {
+  from { transform:translate3d(0,-12px,0); opacity:0; }
+  10% { opacity:.36; }
+  90% { opacity:.30; }
+  to { transform:translate3d(32px,105vh,0); opacity:0; }
+}
+@keyframes sentico-confete {
+  from { transform:translate3d(0,-15px,0) rotate(0deg); opacity:0; }
+  12% { opacity:.62; }
+  85% { opacity:.48; }
+  to { transform:translate3d(26px,103vh,0) rotate(650deg); opacity:0; }
+}
+@keyframes sentico-piscar { 0%,100% { opacity:.57; box-shadow:0 0 3px var(--bulb-color); } 50% { opacity:1; box-shadow:0 0 11px var(--bulb-color); } }
+@keyframes sentico-bandeira { from { transform:rotate(-6deg); } to { transform:rotate(5deg); } }
+@keyframes sentico-suave { from { transform:translateY(0); } to { transform:translateY(6px); } }
+@keyframes sentico-fogos {
+  0% { transform:scale(.18); opacity:0; }
+  18% { opacity:.78; }
+  55% { transform:scale(1); opacity:.82; }
+  100% { transform:scale(1.4); opacity:0; }
+}
+
+/* Regras de segurança para acessibilidade, telas compactas e impressão. */
+html[data-sentico-animacoes="desligadas"] .sentico-festas :is(.sentico-festas__snow,.sentico-festas__confetti) { display:none !important; }
+html[data-sentico-animacoes="desligadas"] .sentico-festas *,
+html[data-sentico-animacoes="desligadas"] .sentico-festas *::before,
+html[data-sentico-animacoes="desligadas"] .sentico-festas *::after { animation:none !important; }
+@media (prefers-reduced-motion:reduce) {
+  .sentico-festas :is(.sentico-festas__snow,.sentico-festas__confetti) { display:none !important; }
+  .sentico-festas *, .sentico-festas *::before, .sentico-festas *::after { animation:none !important; }
+}
+@media (max-width:760px) {
+  .sentico-festas__lights { height:18px; }
+  .sentico-festas__bulb { width:6px; height:9px; margin-top:4px; }
+  .sentico-festas__corners span { font-size:16px; }
+  .sentico-festas__bunting { height:15px; }
+  .sentico-festas__bunting span { height:11px; }
+  .sentico-festas__snow:nth-child(n+15),
+  .sentico-festas__confetti:nth-child(n+11),
+  .sentico-festas__burst:nth-child(n+5) { display:none; }
+}
+@media print { .sentico-festas { display:none !important; } }
+
+/* =========================================================
+   V29 — Ornamentação ampliada, integrada ao ERP e ao painel.
+   Todas as camadas decorativas ignoram cliques e impressão.
+   ========================================================= */
+html[data-sentico-temporada="ano_novo"] { --festa-base:#0c1c37; --festa-second:#28304e; --festa-brilho:#e5b957; }
+html[data-sentico-temporada="carnaval"] { --festa-base:#1c1239; --festa-second:#193c56; --festa-brilho:#ec86df; }
+html[data-sentico-temporada="halloween"] { --festa-base:#1b1435; --festa-second:#36213e; --festa-brilho:#f29a43; }
+html[data-sentico-temporada="pascoa"] { --festa-base:#17333d; --festa-second:#372e4e; --festa-brilho:#edabd3; }
+html[data-sentico-temporada="junho"] { --festa-base:#163448; --festa-second:#4b3022; --festa-brilho:#f4be64; }
+html[data-sentico-temporada="natal"] { --festa-base:#103544; --festa-second:#1b3542; --festa-brilho:#a4e6ba; }
+
+/* Cartão de saudação ocupa seu próprio espaço: não cobre dados nem controles. */
+.sentico-banner-festa {
+  position:relative; isolation:isolate; display:flex; align-items:center;
+  min-height:128px; overflow:hidden;
+  margin:-.65rem 0 1.35rem; border-radius:19px;
+  padding:19px clamp(18px,2.8vw,32px);
+  border:1px solid color-mix(in srgb,var(--festa-brilho) 55%,transparent);
+  background:linear-gradient(110deg,var(--festa-base) 12%,var(--festa-second) 80%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 14px 35px rgba(0,0,0,.11);
+  color:#fff;
+}
+.sentico-banner-festa::before {
+  content:""; position:absolute;inset:0;z-index:-1;
+  background:radial-gradient(ellipse at 80% 15%,color-mix(in srgb,var(--festa-brilho) 19%,transparent),transparent 55%);
+}
+.sentico-banner-festa__texto { position:relative;z-index:2;max-width:67%; }
+.sentico-banner-festa__etiqueta { display:inline-block;font-size:10px;letter-spacing:.12em;font-weight:850;color:var(--festa-brilho);text-transform:uppercase; }
+.sentico-banner-festa h2 { margin:5px 0 4px;font-size:clamp(21px,2.3vw,29px);letter-spacing:-.02em;line-height:1.2;color:#fff; }
+.sentico-banner-festa p { margin:0;font-size:clamp(11px,1.05vw,13px);line-height:1.5;color:#d1e0ed; }
+.sentico-banner-festa__arte { position:absolute;z-index:1;right:0;top:0;width:min(46%,470px);height:100%;object-fit:cover;object-position:right bottom;opacity:.98;pointer-events:none; }
+.sentico-banner-festa__brilho {position:absolute;left:0;top:15%;bottom:15%;width:3px;border-radius:10px;background:var(--festa-brilho);box-shadow:0 0 15px var(--festa-brilho);}
+html[data-sentico-theme="claro"] .sentico-banner-festa { background:linear-gradient(110deg,var(--festa-base),var(--festa-second));color:#fff; }
+
+/* Ornamentos laterais e superior: para telas maiores. */
+.sentico-festas__friso {position:absolute;top:0;left:3%;right:3%;height:28px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;z-index:3;overflow:hidden;opacity:.79;}
+.sentico-festas__friso span {font-size:21px;line-height:1.2;display:inline-block;filter:drop-shadow(0 2px 7px rgba(0,0,0,.37));}
+.sentico-festas.is-animated .sentico-festas__friso span {animation:sentico-ornamento 5s ease-in-out infinite alternate;animation-delay:var(--ornament-delay);}
+.sentico-festas__cantos {position:absolute;inset:0;z-index:1;}
+.sentico-festas__canto {position:absolute;bottom:7px;font-size:clamp(22px,3vw,39px);white-space:nowrap;letter-spacing:-9px;opacity:.82;filter:drop-shadow(0 1px 7px rgba(0,0,0,.55));}
+.sentico-festas__canto--esquerdo {left:7px;}
+.sentico-festas__canto--direito {right:15px;}
+.sentico-festas--halloween .sentico-festas__ambient {background:radial-gradient(ellipse 32% 24% at 100% 95%,rgba(162,79,209,.12),transparent),radial-gradient(ellipse 30% 16% at 0 0,rgba(255,143,60,.12),transparent);}
+.sentico-festas--carnaval .sentico-festas__ambient {background:radial-gradient(ellipse 38% 18% at 100% 0,rgba(233,62,223,.11),transparent),radial-gradient(ellipse 35% 18% at 0 100%,rgba(57,190,252,.1),transparent);}
+.sentico-festas--ano_novo .sentico-festas__ambient {background:radial-gradient(ellipse 38% 22% at 100% 0,rgba(255,190,70,.13),transparent);}
+.sentico-festas__teias {position:absolute;top:7px;left:0;right:0;display:flex;justify-content:space-between;padding:0 18px;opacity:.4;font-size:35px;}
+.sentico-festas__morcegos {position:absolute;top:65px;left:0;right:0;display:flex;justify-content:space-around;gap:20%;font-size:20px;opacity:.26;}
+.sentico-festas.is-animated .sentico-festas__morcegos span {animation:sentico-voo 9s ease-in-out infinite alternate;}
+.sentico-festas.is-animated .sentico-festas__morcegos span:nth-child(2){animation-delay:-4s;}
+.sentico-festas__fitas {position:absolute;left:0;right:0;top:0;height:9px;opacity:.85;background:repeating-linear-gradient(105deg,#f24aa6 0 26px,#ffcb53 26px 48px,#61e3c5 48px 69px,#8964e7 69px 92px);}
+.sentico-festas__petalas {position:absolute;inset:0;overflow:hidden;}
+.sentico-festas__petalas span {position:absolute;top:-25px;opacity:.35;font-size:15px;}
+.sentico-festas.is-animated .sentico-festas__petalas span {animation:sentico-nevar linear infinite;}
+.sentico-festas__fireworks {isolation:isolate;}
+.sentico-festas__burst {width:66px;height:66px;margin-left:-33px;margin-top:-33px;opacity:.55;filter:drop-shadow(0 0 8px var(--burst-color));}
+.sentico-festas__burst i {height:23px;margin-top:-21px;transform-origin:center 21px;box-shadow:0 0 7px var(--burst-color);}
+.sentico-festas.is-animated .sentico-festas__burst {animation-name:sentico-fogos;animation-timing-function:ease-out;animation-iteration-count:infinite;}
+.sentico-festas--halloween .sentico-festas__friso {color:#f7b16b;}
+.sentico-festas--ano_novo .sentico-festas__friso {opacity:.65;}
+.sentico-festas--carnaval .sentico-festas__friso {opacity:1;}
+.sentico-festas--natal .sentico-festas__friso {top:14px;opacity:.48;}
+.sentico-festas--natal .sentico-festas__lights {z-index:4;}
+.sentico-festas--junho .sentico-festas__friso {top:18px;opacity:.62;}
+.sentico-festas--junho .sentico-festas__bunting {z-index:4;}
+
+@keyframes sentico-ornamento {from{transform:translateY(1px) rotate(-4deg)}to{transform:translateY(5px) rotate(4deg)}}
+@keyframes sentico-voo {from{transform:translate(0,0) rotate(-6deg)}to{transform:translate(16px,14px) rotate(6deg)}}
+@media (max-width:760px) {
+  .sentico-banner-festa {min-height:112px;margin:-.35rem 0 1rem;padding:14px 16px;border-radius:14px;}
+  .sentico-banner-festa__texto {max-width:86%;}
+  .sentico-banner-festa h2 {font-size:20px;}
+  .sentico-banner-festa p {max-width:25ch;font-size:11px;}
+  .sentico-banner-festa__etiqueta {font-size:9px;}
+  .sentico-banner-festa__arte {width:55%;opacity:.65;}
+  .sentico-festas__friso {left:8px;right:8px;height:20px;}
+  .sentico-festas__friso span {font-size:14px;}
+  .sentico-festas__friso span:nth-child(n+5),.sentico-festas__cantos,.sentico-festas__teias,.sentico-festas__morcegos {display:none;}
+  .sentico-festas__burst:nth-child(n+5),.sentico-festas__confetti:nth-child(n+17) {display:none;}
+}
+@media (max-width:360px) { .sentico-banner-festa__arte {opacity:.36;}.sentico-banner-festa__texto{max-width:94%;} }
+html[data-sentico-animacoes="desligadas"] .sentico-festas__petalas {display:none;}
+@media (prefers-reduced-motion:reduce){.sentico-festas__petalas {display:none;}}
+@media print {.sentico-banner-festa {display:none!important;}}

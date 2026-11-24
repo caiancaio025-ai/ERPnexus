@@ -72,6 +72,15 @@ def _entry_invoice_text(work_order: object) -> str:
     return value or "Não informada"
 
 
+def _company_display_address(company: dict[str, object | None]) -> str:
+    """Formata somente o endereco da emitente, sem recorrer ao cliente."""
+    street = str(company.get("address") or "").strip()
+    city = str(company.get("city") or "").strip()
+    state = str(company.get("state") or "").strip()
+    city_state = "/".join(part for part in (city, state) if part)
+    return " - ".join(part for part in (street, city_state) if part) or "Não informado"
+
+
 def _section_title(text: str, style: ParagraphStyle) -> Table:
     return Table(
         [[Paragraph(_safe(text), style)]],
@@ -157,11 +166,11 @@ def quote_pdf(
         "quote-info", parent=body, fontSize=8.3, leading=11.2,
     )
     company_style = ParagraphStyle(
-        "company", parent=body, fontName="Helvetica-Bold", fontSize=17.5, leading=20,
+        "company", parent=body, fontName="Helvetica-Bold", fontSize=14.8, leading=16.2,
         textColor=colors.white,
     )
     header_right = ParagraphStyle(
-        "header-right", parent=body, fontName="Helvetica-Bold", fontSize=13.3, leading=16,
+        "header-right", parent=body, fontName="Helvetica-Bold", fontSize=12.2, leading=14.4,
         textColor=colors.white, alignment=TA_RIGHT,
     )
     section = ParagraphStyle(
@@ -183,14 +192,8 @@ def quote_pdf(
     cnpj = company.get("document") or "Não informado"
     email = company.get("email") or "Não informado"
     phone = company.get("phone") or "Não informado"
-    address_parts = [
-        company.get("address"),
-        company.get("city"),
-        company.get("state"),
-    ]
-    company_address = " - ".join(str(item).strip() for item in address_parts if item)
-    if not company_address:
-        company_address = "Não informado"
+    # Endereco da emitente vinculada à O.S. ou do snapshot de emissão.
+    company_address = _company_display_address(company)
     emitted = issued_at or quote.emitted_at or quote.updated_at
     service_code = _safe(getattr(quote, "service_code", None), "3312102 / 14.01")
     validity_days = _effective_validity_days(quote)
@@ -198,14 +201,18 @@ def quote_pdf(
 
     # Cabeçalho corporativo com símbolo da engrenagem isolado.
     company_text = Paragraph(
-        f"{_safe(company_name)}<br/>"
-        f"<font name='Helvetica' size='8.2'>CNPJ: {_safe(cnpj)}<br/>"
-        f"{_safe(company_address)}<br/>Tel.: {_safe(phone)} | {_safe(email)}</font>",
+        f"<font name='Helvetica-Bold' size='14.8'>{_safe(company_name)}</font><br/>"
+        f"<font name='Helvetica-Bold' size='9.8' color='white'>CNPJ: {_safe(cnpj)}</font><br/>"
+        f"<font name='Helvetica' size='8.7' color='white'>{_safe(company_address)}</font><br/>"
+        f"<font name='Helvetica-Bold' size='9.8' color='white'>Tel.: {_safe(phone)}</font><br/>"
+        f"<font name='Helvetica-Bold' size='9.8' color='white'>{_safe(email)}</font>",
         company_style,
     )
     if GEAR_LOGO.exists():
         logo = PlatypusImage(str(GEAR_LOGO), width=27 * mm, height=27 * mm)
-        left_header = Table([[logo, company_text]], colWidths=[31 * mm, 76 * mm])
+        # Reservar espaço real aos textos, descontadas as margens do cartão.
+        # A altura externa é automática: endereços maiores não serão cortados.
+        left_header = Table([[logo, company_text]], colWidths=[29 * mm, 68 * mm])
         left_header.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -219,16 +226,19 @@ def quote_pdf(
 
     # Revisão não é exibida no cabeçalho. Validade 0 continua visível.
     right_header = Paragraph(
-        f"ORÇAMENTO PRÉVIO E<br/>ESTIMATIVO<br/>"
-        f"<font name='Helvetica-Bold' size='8.8'>Nº {_safe(work_order.number)}</font><br/>"
-        f"<font name='Helvetica' size='8.2'>Emissão: {emitted.strftime('%d/%m/%Y')}<br/>"
-        f"Validade: {validity_days} dias</font>",
+        f"<font name='Helvetica-Bold' size='12.0' color='white'>ORÇAMENTO PRÉVIO</font><br/>"
+        f"<font name='Helvetica-Bold' size='12.0' color='white'>E ESTIMATIVO</font><br/><br/>"
+        f"<font name='Helvetica-Bold' size='11.6' color='white'>Nº {_safe(work_order.number)}</font><br/>"
+        f"<font name='Helvetica-Bold' size='10.9' color='white'>Emissão: {emitted.strftime('%d/%m/%Y')}</font><br/>"
+        f"<font name='Helvetica-Bold' size='10.9' color='white'>Validade: {validity_days} dias</font>",
         header_right,
     )
-    header = Table([[left_header, right_header]], colWidths=[111 * mm, 63 * mm], rowHeights=[48 * mm])
+    header = Table([[left_header, right_header]], colWidths=[112 * mm, 62 * mm])
     header.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), BLUE),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 14),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
         ("LEFTPADDING", (0, 0), (0, 0), 8),
         ("RIGHTPADDING", (0, 0), (0, 0), 5),
         ("LEFTPADDING", (1, 0), (1, 0), 5),

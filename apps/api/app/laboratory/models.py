@@ -229,6 +229,12 @@ class LaboratoryWorkOrder(Base):
     warranty_exit_invoice_1: Mapped[str | None] = mapped_column(String(80), index=True)
     warranty_exit_invoice_2: Mapped[str | None] = mapped_column(String(80), index=True)
     warranty_exit_invoice_3: Mapped[str | None] = mapped_column(String(80), index=True)
+    warranty_entry_invoice_access_key_1: Mapped[str | None] = mapped_column(String(44), nullable=True)
+    warranty_entry_invoice_access_key_2: Mapped[str | None] = mapped_column(String(44), nullable=True)
+    warranty_entry_invoice_access_key_3: Mapped[str | None] = mapped_column(String(44), nullable=True)
+    warranty_exit_invoice_access_key_1: Mapped[str | None] = mapped_column(String(44), nullable=True)
+    warranty_exit_invoice_access_key_2: Mapped[str | None] = mapped_column(String(44), nullable=True)
+    warranty_exit_invoice_access_key_3: Mapped[str | None] = mapped_column(String(44), nullable=True)
     is_inactive: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     inactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     inactivated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
@@ -395,6 +401,11 @@ class LaboratoryMechanicalPaintingPhoto(Base):
     )
     document_id: Mapped[int] = mapped_column(
         ForeignKey("laboratory_documents.id", ondelete="RESTRICT"), index=True
+    )
+    # Nulo somente para fotos historicas do controle, sem vinculo por peca.
+    item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("laboratory_mechanical_painting_items.id", ondelete="RESTRICT"),
+        nullable=True, index=True,
     )
     phase: Mapped[str] = mapped_column(String(20), default="outbound", index=True)
     position: Mapped[int] = mapped_column(Integer, default=1)

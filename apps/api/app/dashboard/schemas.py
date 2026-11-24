@@ -63,3 +63,4 @@ class DashboardSummary(BaseModel):
     purchase_events: list[PurchaseEvent]
     quick_actions: list[QuickAction]
     monthly_equipment_entries: MonthlyEquipmentEntries
+    filtered_period: bool = False

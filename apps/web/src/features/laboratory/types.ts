@@ -22,6 +22,7 @@ export type PaintingItem = {
 export type PaintingPhoto = {
   id: number;
   document_id: number;
+  item_id: number | null;
   phase: "outbound" | "return";
   position: number;
   caption: string | null;
@@ -109,7 +110,7 @@ export type WorkOrder = {
   equipment_type: string | null; manufacturer: string | null; model: string | null;
   power: string | null; voltage: string | null; equipment_notes: string | null;
   entry_invoice: string | null; entry_invoice_2: string | null; entry_invoice_3: string | null; entry_invoice_access_key: string | null;
-  exit_invoice: string | null; exit_invoice_2: string | null; exit_invoice_3: string | null; exit_invoice_access_key: string | null; warranty_invoice: string | null; warranty_invoice_2: string | null; warranty_invoice_3: string | null; warranty_entry_invoice_1: string | null; warranty_entry_invoice_2: string | null; warranty_entry_invoice_3: string | null; warranty_exit_invoice_1: string | null; warranty_exit_invoice_2: string | null; warranty_exit_invoice_3: string | null;
+  exit_invoice: string | null; exit_invoice_2: string | null; exit_invoice_3: string | null; exit_invoice_access_key: string | null; warranty_invoice: string | null; warranty_invoice_2: string | null; warranty_invoice_3: string | null; warranty_entry_invoice_1: string | null; warranty_entry_invoice_2: string | null; warranty_entry_invoice_3: string | null; warranty_exit_invoice_1: string | null; warranty_exit_invoice_2: string | null; warranty_exit_invoice_3: string | null; warranty_entry_invoice_access_key_1: string | null; warranty_entry_invoice_access_key_2: string | null; warranty_entry_invoice_access_key_3: string | null; warranty_exit_invoice_access_key_1: string | null; warranty_exit_invoice_access_key_2: string | null; warranty_exit_invoice_access_key_3: string | null;
   is_inactive: boolean; inactivation_reason: string | null; inactivated_at: string | null;
   storage_location: string | null; status: WorkOrderStatus;
   priority: Priority; reported_defect: string; entry_condition: string | null;

@@ -100,7 +100,7 @@ def test_new_laboratory_quote_defaults_to_30_days_and_frontend_keeps_it_editable
         WEB_ROOT / "src" / "features" / "laboratory" / "components" / "QuoteEditor.tsx"
     ).read_text(encoding="utf-8")
     assert "validity_days: 30" in source
-    assert "quote.validity_days > 0 ? quote.validity_days : 30" in source
+    assert "validity_days: quote.validity_days" in source
     assert 'label="Validade (dias)" value={form.validity_days}' in source
     assert 'onChange={(v)=>editForm({...form,validity_days:v})}' in source
 

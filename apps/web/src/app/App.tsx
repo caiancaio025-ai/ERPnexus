@@ -5,6 +5,7 @@ import type { AuthUser } from "../features/auth/AuthCard";
 import { apiClient } from "../shared/api/apiClient";
 import { AppRouter } from "./router/AppRouter";
 import { revokeDevicePush } from "../shared/notifications/pushClient";
+import { SeasonalDecorations } from "../shared/theme/SeasonalDecorations";
 
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -46,5 +47,8 @@ export function App() {
 
   if (checking) return <main className="loading-screen">Carregando SÊNTICO...</main>;
 
-  return <AppRouter user={user} onLogin={handleLogin} onLogout={logout} />;
+  return <>
+    <AppRouter user={user} onLogin={handleLogin} onLogout={logout} />
+    {user && <SeasonalDecorations />}
+  </>;
 }

@@ -32,10 +32,14 @@ services:
       ALLOWED_HOSTS: localhost,127.0.0.1,api,gateway,testserver
       CORS_ORIGINS: http://localhost:5283,http://127.0.0.1:5283,http://localhost:5284,http://127.0.0.1:5284
       STORAGE_ROOT: /app/storage
+      PUSH_VAPID_PUBLIC_KEY: ${PUSH_VAPID_PUBLIC_KEY:-}
+      PUSH_VAPID_PRIVATE_KEY_FILE: /app/secrets/sentico-vapid-private.pem
+      PUSH_VAPID_SUBJECT: ${PUSH_VAPID_SUBJECT:-}
       TRACKING_BASE_URL: http://localhost:5284/e
       SESSION_COOKIE_NAME: sentico_v14_local_session
     volumes:
       - ./apps/api:/app
+      - ./secrets:/app/secrets:ro
       - v14_uploads:/app/storage
     ports:
       - "127.0.0.1:8284:8000"

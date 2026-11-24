@@ -4,6 +4,7 @@ import secrets
 import re
 import unicodedata
 from datetime import UTC, date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from urllib.parse import quote
 
@@ -45,6 +46,7 @@ from app.laboratory.models import (
 )
 from app.laboratory.quote_pdf import label_pdf, quote_pdf
 from app.laboratory.quote_photos import _sync_quote_photos
+from app.laboratory.quote_items import sync_quote_items
 from app.laboratory.storage import (
     commit_laboratory_document,
     delete_laboratory_document as delete_laboratory_document_storage,
@@ -397,6 +399,12 @@ def _to_work_order_output(
         warranty_exit_invoice_1=work_order.warranty_exit_invoice_1,
         warranty_exit_invoice_2=work_order.warranty_exit_invoice_2,
         warranty_exit_invoice_3=work_order.warranty_exit_invoice_3,
+        warranty_entry_invoice_access_key_1=work_order.warranty_entry_invoice_access_key_1,
+        warranty_entry_invoice_access_key_2=work_order.warranty_entry_invoice_access_key_2,
+        warranty_entry_invoice_access_key_3=work_order.warranty_entry_invoice_access_key_3,
+        warranty_exit_invoice_access_key_1=work_order.warranty_exit_invoice_access_key_1,
+        warranty_exit_invoice_access_key_2=work_order.warranty_exit_invoice_access_key_2,
+        warranty_exit_invoice_access_key_3=work_order.warranty_exit_invoice_access_key_3,
         is_inactive=work_order.is_inactive,
         inactivation_reason=work_order.inactivation_reason,
         inactivated_at=work_order.inactivated_at,
@@ -519,21 +527,62 @@ async def _sync_finance_on_status_change(
             entry.status = "cancelled"
 
 
-def _quote_totals(payload: QuoteInput) -> tuple:
-    from decimal import Decimal
+def _quote_totals(payload: QuoteInput) -> tuple[Decimal, Decimal]:
+    """Calcula em Decimal e arredonda somente para os centavos gravados no PostgreSQL.
 
-    subtotal = sum(
+    As colunas subtotal/total são NUMERIC(14,2). Deixar a decisão de
+    arredondamento para o banco produzia diferenças entre API e formulário
+    quando uma quantidade possuía três casas decimais.
+    """
+    raw_subtotal = sum(
         (Decimal(item.quantity) * Decimal(item.unit_value) for item in payload.items),
         Decimal("0"),
     )
+    discount_value = Decimal(payload.discount_value)
     if payload.discount_type == "percent":
-        discount = subtotal * (Decimal(payload.discount_value) / 100)
+        discount = raw_subtotal * (discount_value / 100)
     elif payload.discount_type == "amount":
-        discount = Decimal(payload.discount_value)
+        discount = discount_value
     else:
         discount = Decimal("0")
-    total = max(Decimal("0"), subtotal - discount)
+    cent = Decimal("0.01")
+    subtotal = raw_subtotal.quantize(cent, rounding=ROUND_HALF_UP)
+    total = max(Decimal("0"), raw_subtotal - discount).quantize(cent, rounding=ROUND_HALF_UP)
     return subtotal, total
+
+
+async def _check_quote_write(db: AsyncSession, quote: LaboratoryQuote, payload: QuoteInput) -> None:
+    """Verificação no SQL da MESMA transação, antes de autorizar o commit."""
+    if quote.id is None:
+        raise HTTPException(status_code=409, detail="A revisão ainda não recebeu um identificador.")
+    expected_subtotal, expected_total = _quote_totals(payload)
+    stored = (await db.execute(
+        select(LaboratoryQuote.subtotal, LaboratoryQuote.total)
+        .where(LaboratoryQuote.id == quote.id)
+    )).one_or_none()
+    if stored is None or stored[0] != expected_subtotal or stored[1] != expected_total:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "O banco não confirmou os valores do orçamento. "
+                f"Esperado R$ {expected_total:.2f}; confirmado "
+                f"R$ {stored[1]:.2f} se disponível. A alteração não foi concluída."
+            ) if stored is not None else "O rascunho não foi localizado no banco para conferência.",
+        )
+    stored_items = (await db.scalars(
+        select(LaboratoryQuoteItem).where(LaboratoryQuoteItem.quote_id == quote.id)
+        .order_by(LaboratoryQuoteItem.position)
+    )).all()
+    if len(stored_items) != len(payload.items) or any(
+        saved.description != item.description
+        or saved.quantity != Decimal(item.quantity)
+        or saved.unit_value != Decimal(item.unit_value)
+        for saved, item in zip(stored_items, payload.items)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="O banco não confirmou todos os itens e valores da revisão. Nenhum dado foi descartado.",
+        )
 
 
 # --------------------------------------------------------------- summary ---
@@ -707,6 +756,7 @@ async def _painting_dispatch_output(
             PaintingPhotoOutput(
                 id=photo.id,
                 document_id=document.id,
+                item_id=photo.item_id,
                 phase=photo.phase,
                 position=photo.position,
                 caption=photo.caption,
@@ -1512,6 +1562,12 @@ async def create_work_order(
         warranty_exit_invoice_1=payload.warranty_exit_invoice_1,
         warranty_exit_invoice_2=payload.warranty_exit_invoice_2,
         warranty_exit_invoice_3=payload.warranty_exit_invoice_3,
+        warranty_entry_invoice_access_key_1=payload.warranty_entry_invoice_access_key_1,
+        warranty_entry_invoice_access_key_2=payload.warranty_entry_invoice_access_key_2,
+        warranty_entry_invoice_access_key_3=payload.warranty_entry_invoice_access_key_3,
+        warranty_exit_invoice_access_key_1=payload.warranty_exit_invoice_access_key_1,
+        warranty_exit_invoice_access_key_2=payload.warranty_exit_invoice_access_key_2,
+        warranty_exit_invoice_access_key_3=payload.warranty_exit_invoice_access_key_3,
         storage_location=None,
         parts_cost=(payload.parts_cost or None) if user_can_view_sensitive_values(user.role) else None,
         quoted_value=(payload.quoted_value or None) if user_can_view_sensitive_values(user.role) else None,
@@ -2018,6 +2074,7 @@ async def upload_mechanics_painting_photo(
     dispatch_id: int,
     file: UploadFile = REQUIRED_FILE,
     phase: str = QUERY_PAINT_PHASE,
+    item_id: int | None = Query(default=None, gt=0),
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
@@ -2027,6 +2084,13 @@ async def upload_mechanics_painting_photo(
         raise HTTPException(status_code=409, detail="Fotos da saída só podem ser anexadas antes do envio.")
     if phase == "return" and dispatch.status != "sent":
         raise HTTPException(status_code=409, detail="Fotos do retorno só podem ser anexadas enquanto a pintura aguarda retorno.")
+
+    # A foto pertence a uma unica peca; impedir associacao a outro controle/OS.
+    # Item ausente segue aceito para compatibilidade com clientes antigos.
+    if item_id is not None:
+        painting_item = await db.get(LaboratoryMechanicalPaintingItem, item_id)
+        if painting_item is None or painting_item.dispatch_id != dispatch.id:
+            raise HTTPException(status_code=404, detail="Peça de pintura não encontrada neste controle.")
 
     try:
         directory = resolve_laboratory_storage_path(
@@ -2065,39 +2129,44 @@ async def upload_mechanics_painting_photo(
         checksum_sha256=streamed.checksum_sha256,
         uploaded_by=user.id,
     )
-    await commit_laboratory_document(
-        db,
-        document,
-        root=UPLOAD_ROOT,
-        stored_path=streamed.path,
-    )
-    position = int(await db.scalar(
-        select(func.count())
-        .select_from(LaboratoryMechanicalPaintingPhoto)
-        .where(
-            LaboratoryMechanicalPaintingPhoto.dispatch_id == dispatch.id,
-            LaboratoryMechanicalPaintingPhoto.phase == phase,
-        )
-    ) or 0) + 1
-    photo = LaboratoryMechanicalPaintingPhoto(
-        dispatch_id=dispatch.id,
-        document_id=document.id,
-        phase=phase,
-        position=position,
-    )
-    db.add(photo)
+    # Documento + vinculo da foto precisam ser gravados na MESMA transacao.
+    # Antes, salvar o documento e depois o vinculo em commits separados
+    # permitia arquivo salvo sem foto visivel no controle da peca.
     try:
+        db.add(document)
+        await db.flush()
+        position = int(await db.scalar(
+            select(func.count())
+            .select_from(LaboratoryMechanicalPaintingPhoto)
+            .where(
+                LaboratoryMechanicalPaintingPhoto.dispatch_id == dispatch.id,
+                LaboratoryMechanicalPaintingPhoto.phase == phase,
+                LaboratoryMechanicalPaintingPhoto.item_id == item_id,
+            )
+        ) or 0) + 1
+        photo = LaboratoryMechanicalPaintingPhoto(
+            dispatch_id=dispatch.id,
+            item_id=item_id,
+            document_id=document.id,
+            phase=phase,
+            position=position,
+        )
+        db.add(photo)
         await db.commit()
-        await db.refresh(photo)
     except Exception:
         await db.rollback()
-        persisted_document = await db.get(LaboratoryDocument, document.id)
-        if persisted_document is not None:
-            await delete_laboratory_document_storage(db, persisted_document, root=UPLOAD_ROOT)
+        # Arquivo fisico nao deve permanecer sem foto associada no banco.
+        try:
+            streamed.path.unlink(missing_ok=True)
+        except OSError:
+            pass
         raise
+
+    await db.refresh(photo)
     return PaintingPhotoOutput(
         id=photo.id,
         document_id=document.id,
+        item_id=photo.item_id,
         phase=photo.phase,
         position=photo.position,
         caption=photo.caption,
@@ -2241,6 +2310,13 @@ async def return_mechanics_painting(
 # ---------------------------------------------------------------- quotes ---
 
 
+@router.get("/quotes/write-contract")
+async def quote_write_contract(user: User = CURRENT_USER_DEP):
+    """Permite detectar API antiga mesmo quando a interface já foi atualizada."""
+    _require_quote_permission(user)
+    return {"contract": "quote-save-v42", "money_scale": 2, "quantity_scale": 3}
+
+
 @router.get("/work-orders/{work_order_id}/quotes", response_model=list[QuoteOutput])
 async def list_quotes(
     work_order_id: int,
@@ -2282,12 +2358,10 @@ async def create_quote(
         .limit(1)
     )
     if existing_draft is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Já existe um rascunho editável para esta O.S. "
-                "Abra o rascunho existente em vez de criar outra revisão."
-            ),
+        # O cadastro enviado pelo formulário corresponde ao rascunho editável
+        # desta OS. Atualiza os valores sem exigir a exclusão de revisões.
+        return await update_quote(
+            quote_id=existing_draft.id, payload=payload, user=user, db=db,
         )
 
     last_revision = await db.scalar(
@@ -2345,6 +2419,7 @@ async def create_quote(
         ]
     db.add(quote)
     await db.flush()
+    await _check_quote_write(db, quote, payload)
     quote_order = await _work_order_or_404(db, work_order_id)
     await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_created",
         title=f"Orçamento da OS {quote_order.number} criado", message=f"{user.name} criou a revisão {quote.revision} do orçamento.")
@@ -2371,7 +2446,9 @@ async def create_quote_revision(
         LaboratoryQuote.emitted_at.is_(None),
     ))
     if existing_draft is not None:
-        raise HTTPException(status_code=409, detail="Já existe um rascunho editável para esta O.S.")
+        # Uma revisão ainda editável nunca deve exigir apagar rascunhos.
+        # Reabrimos o rascunho existente preservando seus valores e fotografias.
+        return _to_quote_output(existing_draft, include_sensitive_values=True)
     last_revision = await db.scalar(select(func.max(LaboratoryQuote.revision)).where(
         LaboratoryQuote.work_order_id == source.work_order_id
     ))
@@ -2440,10 +2517,7 @@ async def update_quote(
         setattr(quote, field, getattr(payload, field))
     quote.subtotal = subtotal
     quote.total = total
-    quote.items = [
-        LaboratoryQuoteItem(position=index + 1, **item.model_dump())
-        for index, item in enumerate(payload.items)
-    ]
+    sync_quote_items(quote, payload.items)
     ids = [photo.document_id for photo in payload.photos]
     if ids:
         docs = list((await db.scalars(
@@ -2456,6 +2530,8 @@ async def update_quote(
         if len(docs_by_id) != len(set(ids)) or any(not doc.mime_type.startswith("image/") for doc in docs):
             raise HTTPException(status_code=422, detail="Fotos do laudo devem ser imagens desta O.S.")
     _sync_quote_photos(quote, payload.photos)
+    await db.flush()
+    await _check_quote_write(db, quote, payload)
     quote_order = await _work_order_or_404(db, quote.work_order_id)
     await work_order_activity(db, actor=user, work_order=quote_order, module="orcamentos", action="quote_updated",
         title=f"Orçamento da OS {quote_order.number} atualizado", message=f"{user.name} salvou alterações na revisão {quote.revision} do orçamento.")
@@ -2485,6 +2561,16 @@ async def delete_quote(
         title=f"Rascunho excluído · OS {quote_order.number}", message=f"{user.name} excluiu um rascunho de orçamento.", severity="warning")
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/quotes/{quote_id}/emit")
+async def emit_quote_pdf(
+    quote_id: int,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+):
+    """Emissão confirmada em resposta HTTP; evita pop-up silencioso na UI."""
+    return await quote_pdf_endpoint(quote_id=quote_id, preview=False, user=user, db=db)
 
 
 @router.get("/quotes/{quote_id}/pdf")
@@ -2705,6 +2791,16 @@ async def delete_document(
         raise HTTPException(
             status_code=409,
             detail="Esta imagem está vinculada a uma revisão de orçamento e não pode ser excluída.",
+        )
+    linked_painting_photo = await db.scalar(
+        select(LaboratoryMechanicalPaintingPhoto.id)
+        .where(LaboratoryMechanicalPaintingPhoto.document_id == document_id)
+        .limit(1)
+    )
+    if linked_painting_photo is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta imagem pertence ao histórico de envio/retorno da pintura e não pode ser excluída por Documentos.",
         )
     try:
         await delete_laboratory_document_storage(db, document, root=UPLOAD_ROOT)

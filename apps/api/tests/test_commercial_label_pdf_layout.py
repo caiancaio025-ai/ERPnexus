@@ -19,6 +19,7 @@ def _equipment(**changes):
         model="CFW11",
         manufacturer_serial="12345678",
         location="RACK 03",
+        stock_status="available",
     )
     values.update(changes)
     return SimpleNamespace(**values)

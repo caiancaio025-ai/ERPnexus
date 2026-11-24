@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 
 import { apiClient } from "../../../shared/api/apiClient";
-import type { PaintingDispatch, PaintingItem } from "../types";
+import type { PaintingDispatch, PaintingItem, PaintingPhoto } from "../types";
 import { ActionButton } from "./ActionButton";
 import { CameraCapture } from "./CameraCapture";
 
@@ -26,12 +26,18 @@ export function MechanicsPanel({ workOrderId }: Props) {
   const [items, setItems] = useState<string[]>([""]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [cameraTarget, setCameraTarget] = useState<{ dispatchId: number; phase: "outbound" | "return" } | null>(null);
+  const [notice, setNotice] = useState("");
+  const [cameraTarget, setCameraTarget] = useState<{ dispatchId: number; itemId: number; phase: "outbound" | "return" } | null>(null);
+
+  async function refreshRows(): Promise<PaintingDispatch[]> {
+    const current = await apiClient.get<PaintingDispatch[]>(`/laboratory/work-orders/${workOrderId}/mechanics/painting`);
+    setRows(current);
+    return current;
+  }
 
   async function load() {
-    setError("");
     try {
-      setRows(await apiClient.get<PaintingDispatch[]>(`/laboratory/work-orders/${workOrderId}/mechanics/painting`));
+      await refreshRows();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Falha ao carregar controles da Mecânica.");
     }
@@ -68,22 +74,42 @@ export function MechanicsPanel({ workOrderId }: Props) {
     }
   }
 
-  async function upload(dispatchId: number, phase: "outbound" | "return", files: FileList | File[] | null) {
-    if (!files?.length) return;
-    setBusy(true); setError("");
+  async function upload(dispatchId: number, itemId: number, phase: "outbound" | "return", files: FileList | File[] | null) {
+    const selectedFiles = Array.from(files ?? []);
+    if (!selectedFiles.length || busy) return;
+    setBusy(true); setError(""); setNotice("");
+    const uploaded: PaintingPhoto[] = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of selectedFiles) {
+        if (!file.type.startsWith("image/")) throw new Error("Selecione apenas imagens para o registro de pintura.");
+        if (file.size > 15 * 1024 * 1024) throw new Error("Cada foto deve ter no máximo 15 MB.");
         const body = new FormData();
         body.append("file", file);
-        await apiClient.post(`/laboratory/mechanics/painting/${dispatchId}/photos?phase=${phase}`, body);
+        const photo = await apiClient.post<PaintingPhoto>(
+          `/laboratory/mechanics/painting/${dispatchId}/photos?phase=${phase}&item_id=${itemId}`, body,
+        );
+        uploaded.push(photo);
       }
-      await load();
+      // Leitura independente após a gravação: não informar sucesso se a foto
+      // sumir após atualizar ou voltar à OS.
+      const persisted = await refreshRows();
+      const control = persisted.find((row) => row.id === dispatchId);
+      const recordedIds = new Set(control?.photos.filter((photo) =>
+        photo.item_id === itemId && photo.phase === phase,
+      ).map((photo) => photo.id) ?? []);
+      if (uploaded.some((photo) => !recordedIds.has(photo.id))) {
+        throw new Error("O servidor recebeu o arquivo, mas a foto não apareceu no histórico do item. Confira a gravação antes de continuar.");
+      }
+      setNotice(`${uploaded.length} foto(s) de ${phase === "outbound" ? "envio" : "retorno"} salva(s) e vinculada(s) ao item. O histórico permanece disponível após a conferência.`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Falha ao anexar evidência da pintura.");
+      // Lotes parciais também devem aparecer imediatamente, sem apagar fotos.
+      await refreshRows().catch(() => undefined);
+      setError(reason instanceof Error ? reason.message : "Falha ao salvar a foto no item de pintura.");
     } finally {
       setBusy(false);
     }
   }
+
 
   async function send(dispatchId: number) {
     setBusy(true); setError("");
@@ -139,7 +165,8 @@ export function MechanicsPanel({ workOrderId }: Props) {
       </div>
     </header>
 
-    {error && <div className="lab-alert">{error}</div>}
+    {error && <div className="lab-alert" role="alert">{error}</div>}
+    {notice && <div className="lab-mechanics__notice" role="status">{notice}</div>}
 
     <section className="lab-mechanics__new">
       <div className="lab-grid">
@@ -187,7 +214,6 @@ export function MechanicsPanel({ workOrderId }: Props) {
     <div className="lab-mechanics__dispatches">
       {rows.map((row) => {
         const outboundPhotos = row.photos.filter((photo) => photo.phase === "outbound");
-        const returnPhotos = row.photos.filter((photo) => photo.phase === "return");
         const pendingItems = row.items.filter((item) => !item.returned).length;
         return <article key={row.id} className={`lab-paint-card ${row.status}`}>
           <header>
@@ -208,67 +234,97 @@ export function MechanicsPanel({ workOrderId }: Props) {
               <div><PackageCheck size={17} /><strong>Peças / partes</strong></div>
               <small>{row.items.length} item(ns)</small>
             </div>
-            {row.items.map((item) => <div key={item.id} className={`lab-paint-item ${item.returned ? "returned" : ""}`}>
-              {row.status === "sent"
-                ? <input
-                    type="checkbox"
-                    checked={item.returned}
-                    disabled={busy}
-                    onChange={(e) => void patchItem(item, e.target.checked)}
+            {row.items.map((item) => {
+              const outgoing = row.photos.filter((photo) => photo.phase === "outbound" && photo.item_id === item.id);
+              const returning = row.photos.filter((photo) => photo.phase === "return" && photo.item_id === item.id);
+              return <section key={item.id} className={`lab-paint-piece ${item.returned ? "returned" : ""}`}>
+                <div className="lab-paint-item">
+                  {row.status === "sent"
+                    ? <input
+                        type="checkbox"
+                        checked={item.returned}
+                        disabled={busy}
+                        onChange={(e) => void patchItem(item, e.target.checked)}
+                      />
+                    : <CheckCircle2 size={17} className={item.returned ? "ok" : ""} />}
+                  <div>
+                    <strong>{item.position}. {item.description}</strong>
+                    {row.status === "sent" && <input
+                      className="lab-paint-return-note"
+                      defaultValue={item.return_note || ""}
+                      placeholder="Observação no retorno (opcional)"
+                      onBlur={(e) => {
+                        if ((item.return_note || "") !== e.target.value) void patchItem(item, item.returned, e.target.value);
+                      }}
+                    />}
+                    {item.return_note && row.status === "returned" && <small>Observação: {item.return_note}</small>}
+                    {item.returned_at && <small>Conferido em {new Date(item.returned_at).toLocaleString("pt-BR")}</small>}
+                  </div>
+                </div>
+                <div className="lab-paint-piece__photos">
+                  <PhotoBlock
+                    title="Evidência da saída"
+                    photos={outgoing}
+                    previewUrl={previewUrl}
+                    busy={busy}
+                    disabled={row.status !== "draft"}
+                    onFiles={(files) => void upload(row.id, item.id, "outbound", files)}
+                    onCamera={() => setCameraTarget({ dispatchId: row.id, itemId: item.id, phase: "outbound" })}
                   />
-                : <CheckCircle2 size={17} className={item.returned ? "ok" : ""} />}
-              <div>
-                <strong>{item.description}</strong>
-                {row.status === "sent" && <input
-                  className="lab-paint-return-note"
-                  defaultValue={item.return_note || ""}
-                  placeholder="Observação no retorno (opcional)"
-                  onBlur={(e) => {
-                    if ((item.return_note || "") !== e.target.value) void patchItem(item, item.returned, e.target.value);
-                  }}
-                />}
-                {item.returned_at && <small>Conferido em {new Date(item.returned_at).toLocaleString("pt-BR")}</small>}
-              </div>
-            </div>)}
+                  {row.status !== "draft" && <PhotoBlock
+                    title="Foto do retorno (opcional)"
+                    photos={returning}
+                    previewUrl={previewUrl}
+                    busy={busy}
+                    disabled={row.status !== "sent"}
+                    onFiles={(files) => void upload(row.id, item.id, "return", files)}
+                    onCamera={() => setCameraTarget({ dispatchId: row.id, itemId: item.id, phase: "return" })}
+                  />}
+                </div>
+              </section>;
+            })}
           </div>
 
-          <PhotoBlock
-            title="Evidência da saída"
-            photos={outboundPhotos}
-            previewUrl={previewUrl}
-            busy={busy}
-            disabled={row.status !== "draft"}
-            onFiles={(files) => void upload(row.id, "outbound", files)}
-            onCamera={() => setCameraTarget({ dispatchId: row.id, phase: "outbound" })}
-          />
+          {row.photos.some((photo) => photo.item_id == null) && <div className="lab-paint-legacy">
+            <strong>Fotos anteriores deste controle (sem peça individual)</strong>
+            <p>Estas imagens antigas continuam salvas e vinculadas à saída de pintura.</p>
+            <PhotoBlock
+              title="Evidência da saída — histórico"
+              photos={row.photos.filter((photo) => photo.phase === "outbound" && photo.item_id == null)}
+              previewUrl={previewUrl}
+              busy={busy}
+              disabled
+              onFiles={() => undefined}
+              onCamera={() => undefined}
+            />
+            <PhotoBlock
+              title="Foto do retorno — histórico"
+              photos={row.photos.filter((photo) => photo.phase === "return" && photo.item_id == null)}
+              previewUrl={previewUrl}
+              busy={busy}
+              disabled
+              onFiles={() => undefined}
+              onCamera={() => undefined}
+            />
+          </div>}
 
           {row.status !== "draft" && <div className="lab-paint-trace">
             <Send size={16} />
             <span>Enviado em <strong>{row.sent_at ? new Date(row.sent_at).toLocaleString("pt-BR") : "—"}</strong>{row.sent_by_name ? ` · por ${row.sent_by_name}` : ""}</span>
           </div>}
 
-          {row.status === "sent" && <>
-            <PhotoBlock
-              title="Foto do retorno (opcional)"
-              photos={returnPhotos}
-              previewUrl={previewUrl}
-              busy={busy}
-              onFiles={(files) => void upload(row.id, "return", files)}
-              onCamera={() => setCameraTarget({ dispatchId: row.id, phase: "return" })}
-            />
-            <div className="lab-paint-return-actions">
-              <div>
-                <strong>Conferência de retorno</strong>
-                <span>{pendingItems ? `${pendingItems} item(ns) ainda não conferidos.` : "Todos os itens conferidos."}</span>
-              </div>
-              <ActionButton
-                disabled={pendingItems > 0}
-                loading={busy}
-                icon={<RotateCcw size={17} />}
-                onClick={() => void confirmReturn(row.id)}
-              >Confirmar retorno completo</ActionButton>
+          {row.status === "sent" && <div className="lab-paint-return-actions">
+            <div>
+              <strong>Conferência de retorno</strong>
+              <span>{pendingItems ? `${pendingItems} item(ns) ainda não conferidos.` : "Todos os itens conferidos."}</span>
             </div>
-          </>}
+            <ActionButton
+              disabled={pendingItems > 0}
+              loading={busy}
+              icon={<RotateCcw size={17} />}
+              onClick={() => void confirmReturn(row.id)}
+            >Confirmar retorno completo</ActionButton>
+          </div>}
 
           {row.status === "draft" && <div className="lab-paint-send-actions">
             <div>
@@ -301,7 +357,7 @@ export function MechanicsPanel({ workOrderId }: Props) {
       onCapture={(file) => {
         const target = cameraTarget;
         setCameraTarget(null);
-        void upload(target.dispatchId, target.phase, [file]);
+        void upload(target.dispatchId, target.itemId, target.phase, [file]);
       }}
     />}
   </section>;
@@ -321,7 +377,8 @@ function PhotoBlock({
   return <section className="lab-paint-photos">
     <div className="lab-mechanics__section-title">
       <div><Image size={17} /><strong>{title}</strong></div>
-      <div className="lab-paint-photo-actions">
+      <div className="lab-paint-photo-count">{photos.length} foto(s)</div>
+      {!disabled && <div className="lab-paint-photo-actions">
         <label className={`lab-paint-upload ${(busy || disabled) ? "disabled" : ""}`}>
           <UploadCloud size={15} /> Anexar foto
           <input
@@ -329,11 +386,11 @@ function PhotoBlock({
             accept="image/jpeg,image/png,image/webp"
             multiple
             disabled={busy || disabled}
-            onChange={(event) => { onFiles(event.target.files); event.currentTarget.value = ""; }}
+            onChange={(event) => { onFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }}
           />
         </label>
         <button type="button" className="lab-paint-upload" disabled={busy || disabled} onClick={onCamera}><Camera size={15} /> Tirar foto</button>
-      </div>
+      </div>}
     </div>
     {!photos.length && <div className="lab-paint-no-photo">Nenhuma foto anexada.</div>}
     {!!photos.length && <div className="lab-paint-photo-grid">

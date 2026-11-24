@@ -1,0 +1,91 @@
+/* SÊNTICO V47 — cabeçalhos fixos em listagens tabulares.
+   A rolagem vertical acontece dentro da própria tabela; a rolagem horizontal
+   permanece disponível para colunas longas, sem fixar filtros ou ações. */
+@media screen {
+  :is(
+    .lab-table-card,
+    .com-table-wrap,
+    .com-items-wrap,
+    .employees-table-wrap,
+    .purchase-report-table-wrap,
+    .orders-table,
+    .finance-monthly-table,
+    .documents-table,
+    .relation-table
+  ) {
+    max-height: min(70dvh, 760px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :is(
+    .lab-table-card,
+    .com-table-wrap,
+    .com-items-wrap,
+    .employees-table-wrap,
+    .purchase-report-table-wrap
+  ) table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: #112a3e;
+    background-clip: padding-box;
+    box-shadow: inset 0 -1px #34516b;
+  }
+
+  /* Tabelas montadas com CSS Grid em Compras, Financeiro e Clientes. */
+  .orders-table > .order-row.order-head,
+  .finance-monthly-table > .forecast-week-row.forecast-week-head,
+  :is(.documents-table, .relation-table) > header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: #112a3e;
+    box-shadow: inset 0 -1px #34516b;
+  }
+
+  /* Fundo opaco é fundamental para que os registros não apareçam através
+     dos títulos quando a listagem estiver rolando. */
+  html[data-sentico-theme="claro"] :is(
+    .lab-table-card,
+    .com-table-wrap,
+    .com-items-wrap,
+    .employees-table-wrap,
+    .purchase-report-table-wrap
+  ) table thead th,
+  html[data-sentico-theme="claro"] .orders-table > .order-row.order-head,
+  html[data-sentico-theme="claro"] .finance-monthly-table > .forecast-week-row.forecast-week-head,
+  html[data-sentico-theme="claro"] :is(.documents-table, .relation-table) > header {
+    background-color: #eaf2f8 !important;
+    color: #1d3448 !important;
+    box-shadow: inset 0 -1px #b7cad8;
+  }
+}
+
+/* No celular, a lista de OS do Laboratório já usa cartões sem cabeçalho;
+   continuar permitindo rolagem natural da página, sem altura artificial. */
+@media screen and (max-width: 760px) {
+  .lab-work-orders-table {
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
+}
+
+/* Impressões e exportações mantêm todas as linhas e cabeçalhos em fluxo normal. */
+@media print {
+  :is(.lab-table-card, .com-table-wrap, .com-items-wrap, .employees-table-wrap,
+      .purchase-report-table-wrap, .orders-table, .finance-monthly-table,
+      .documents-table, .relation-table) {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  :is(.lab-table-card, .com-table-wrap, .com-items-wrap,
+      .employees-table-wrap, .purchase-report-table-wrap) table thead th,
+  .orders-table > .order-row.order-head,
+  .finance-monthly-table > .forecast-week-row.forecast-week-head,
+  :is(.documents-table, .relation-table) > header {
+    position: static !important;
+  }
+}

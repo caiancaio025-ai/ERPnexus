@@ -1753,3 +1753,37 @@ html[data-sentico-theme="claro"] .dashboard-visibility__option.is-hidden .dashbo
   background:#e7f0f5 !important; color:#38576b !important; border-color:#c4d9e5 !important;
 }
 html[data-sentico-theme="claro"] .dashboard-visibility__icon { color:#165e78 !important; }
+
+/* V37 · Contraste da pesquisa de clientes no tema claro. */
+html[data-sentico-theme="claro"] .lab-form .lab-customer-picker>label,
+html[data-sentico-theme="claro"] .lab-detail .lab-customer-picker>label { color:#20364a!important; }
+html[data-sentico-theme="claro"] .lab-customer-picker-field>svg { color:#496d86; }
+html[data-sentico-theme="claro"] .lab-customer-picker-toggle { color:#365a74; }
+html[data-sentico-theme="claro"] .lab-customer-picker-toggle:hover,
+html[data-sentico-theme="claro"] .lab-customer-picker-toggle:focus-visible { background:#d7e9f4;color:#15394f; }
+html[data-sentico-theme="claro"] .lab-customer-picker-help { color:#526e82; }
+html[data-sentico-theme="claro"] .lab-customer-picker-menu { background:#fff;border-color:#b8cfe0;box-shadow:0 18px 36px rgba(26,53,78,.18); }
+html[data-sentico-theme="claro"] .lab-customer-picker-option { color:#16374e;border-color:#e2edf4; }
+html[data-sentico-theme="claro"] .lab-customer-picker-option:hover,
+html[data-sentico-theme="claro"] .lab-customer-picker-option.is-active { background:#deeffa;color:#092d48; }
+html[data-sentico-theme="claro"] .lab-customer-picker-name small,
+html[data-sentico-theme="claro"] .lab-customer-picker-extra,
+html[data-sentico-theme="claro"] .lab-customer-picker-empty { color:#56748a; }
+
+/* V38: contraste do título da pesquisa de cliente no tema claro. */
+html[data-sentico-theme="claro"] .lab-form .lab-customer-picker-heading>label,
+html[data-sentico-theme="claro"] .lab-detail .lab-customer-picker-heading>label { color:#20364a!important; }
+
+/* V40 — contraste dos dados de endereço da empresa emitente no tema claro. */
+html[data-sentico-theme="claro"] .com-issuer-location {
+  background:#e9f3f9 !important;
+  border-color:#c2d6e3 !important;
+}
+html[data-sentico-theme="claro"] .com-issuer-location > strong,
+html[data-sentico-theme="claro"] .com-company-list .com-issuer-address {
+  color:#125074 !important;
+}
+html[data-sentico-theme="claro"] .com-issuer-hint,
+html[data-sentico-theme="claro"] .com-issuer-location > small {
+  color:#466578 !important;
+}

@@ -24,3 +24,9 @@ __pycache__/
 *.pyc
 
 *.tsbuildinfo
+
+# Chaves privadas e demais arquivos de ambiente
+secrets/
+.env.*
+!.env.example
+!.env.dev.example

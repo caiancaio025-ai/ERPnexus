@@ -26,6 +26,7 @@ export type QuickAction = {
 
 export type DashboardSummary = {
   schema_version: "3";
+  filtered_period: boolean;
   audience: "gestao" | "admin" | "lab" | "compras" | "estoque" | "outros";
   work_queues: WorkQueue[];
   alerts: Alert[];

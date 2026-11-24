@@ -28,6 +28,22 @@ function formatDate(value:string|null|undefined){ if(!value) return "—"; retur
 const blankEquipment = () => ({ company_code:"universo_eletronica" as CompanyCode, purpose:"rental_sale" as CommercialPurpose, equipment_type:"", manufacturer:"", model:"", power:"", voltage:"", manufacturer_serial:"", quantity:1, unit_cost:"", sale_price:"", rental_daily_price:"", rental_monthly_price:"", condition:"Bom", stock_status:"available", rental_customer_id:null as number|null, location:"", asset_location_id:null as number|null, acquisition_date:"", notes:"" });
 const blankCustomer = () => ({ company_code:"universo_eletronica" as CompanyCode, legal_name:"", trade_name:"", document:"", phone:"", email:"", city:"", state:"" });
 const blankCompany = () => ({ company_code:"universo_eletronica" as CompanyCode, legal_name:"", trade_name:"", document:"", state_registration:"", email:"", phone:"", address:"", city:"", state:"" });
+const companyToForm = (company: CommercialCompany) => ({
+  company_code: company.company_code,
+  legal_name: company.legal_name,
+  trade_name: company.trade_name ?? "",
+  document: company.document ?? "",
+  state_registration: company.state_registration ?? "",
+  email: company.email ?? "",
+  phone: company.phone ?? "",
+  address: company.address ?? "",
+  city: company.city ?? "",
+  state: company.state ?? "",
+});
+const companyLocation = (company: CommercialCompany) => {
+  const cityState = [company.city, company.state].filter(Boolean).join("/");
+  return [company.address, cityState].filter(Boolean).join(" · ") || "Endereço não cadastrado";
+};
 
 export function CommercialDashboard({ user, onLogout }: Props) {
   const navigate=useNavigate(); const [tab,setTab]=useState<Tab>("cadastros");
@@ -38,12 +54,25 @@ export function CommercialDashboard({ user, onLogout }: Props) {
   const [customerForm,setCustomerForm]=useState(blankCustomer); const [companyForm,setCompanyForm]=useState(blankCompany);
   const [quoteEditor,setQuoteEditor]=useState<{type:QuoteType;quote:CommercialQuote|null}|null>(null);
   const deepLinkHandled=useRef(false);
+  const issuerFormInitialized=useRef(false);
+  function selectIssuer(companyCode: CompanyCode) {
+    const company = companies.find((candidate) => candidate.company_code === companyCode);
+    if (company) setCompanyForm(companyToForm(company));
+  }
 
   async function loadAll(){ setError(""); try { const [eq,cu,co,qu,po,locations,map]=await Promise.all([
     apiClient.get<CommercialEquipment[]>(`/commercial/equipment${search.trim()?`?search=${encodeURIComponent(search.trim())}`:""}`),
     apiClient.get<CustomerLite[]>("/customers"), apiClient.get<CommercialCompany[]>("/commercial/companies"), apiClient.get<CommercialQuote[]>("/commercial/quotes"), apiClient.get<PreventiveOrder[]>("/commercial/preventive-orders"),
     apiClient.get<CommercialAssetLocationConfig>("/commercial/asset-locations"), apiClient.get<CommercialAssetMap>("/commercial/asset-map")
-  ]); setEquipment(eq); setCustomers(cu); setCompanies(co); setQuotes(qu); setPreventiveOrders(po); setAssetLocations(locations); setAssetMap(map); } catch(reason){ setError(reason instanceof Error?reason.message:"Falha ao carregar o Comercial."); } }
+  ]); setEquipment(eq); setCustomers(cu); setCompanies(co); setQuotes(qu); setPreventiveOrders(po); setAssetLocations(locations); setAssetMap(map);
+    // Carregar os dados atuais da emitente apenas na primeira consulta. Repetir
+    // essa inicialização em buscas/atualizações apagaria campos ainda em edição.
+    if (!issuerFormInitialized.current && co.length > 0) {
+      const first = co.find((company) => company.company_code === "universo_eletronica") ?? co[0];
+      setCompanyForm(companyToForm(first));
+      issuerFormInitialized.current = true;
+    }
+  } catch(reason){ setError(reason instanceof Error?reason.message:"Falha ao carregar o Comercial."); } }
   useEffect(()=>{ void loadAll(); },[search]);
 
   useEffect(()=>{
@@ -73,7 +102,30 @@ export function CommercialDashboard({ user, onLogout }: Props) {
   },[quotes]);
 
   async function saveCustomer(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/customers",{...customerForm, trade_name:customerForm.trade_name||null,document:customerForm.document||null,phone:customerForm.phone||null,email:customerForm.email||null,city:customerForm.city||null,state:customerForm.state||null,state_registration:null,municipal_registration:null,whatsapp:null,website:null,postal_code:null,address:null,address_number:null,complement:null,district:null,notes:null}); setCustomerForm(blankCustomer()); setMessage("Cliente cadastrado e disponível para os orçamentos."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao cadastrar cliente.");} finally{setBusy(false);} }
-  async function saveCompany(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); try { await apiClient.post("/commercial/companies",{...companyForm,trade_name:companyForm.trade_name||null,document:companyForm.document||null,state_registration:companyForm.state_registration||null,email:companyForm.email||null,phone:companyForm.phone||null,address:companyForm.address||null,city:companyForm.city||null,state:companyForm.state||null}); setCompanyForm(blankCompany()); setMessage("Empresa emitente salva."); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar empresa.");} finally{setBusy(false);} }
+  async function saveCompany(event:React.FormEvent){
+    event.preventDefault();
+    const company = companies.find((item) => item.company_code === companyForm.company_code);
+    if (!company) { setError("Selecione uma empresa emitente cadastrada antes de salvar."); return; }
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const savedCompany = await apiClient.post<CommercialCompany>("/commercial/companies", {
+        ...companyForm,
+        legal_name: companyForm.legal_name.trim(),
+        trade_name: companyForm.trade_name.trim() || null,
+        document: companyForm.document.trim() || null,
+        state_registration: companyForm.state_registration.trim() || null,
+        email: companyForm.email.trim() || null,
+        phone: companyForm.phone.trim() || null,
+        address: companyForm.address.trim() || null,
+        city: companyForm.city.trim() || null,
+        state: companyForm.state.trim().toUpperCase() || null,
+      });
+      setCompanyForm(companyToForm(savedCompany));
+      setMessage("Dados da emitente atualizados. O endereço aparecerá em novas emissões de orçamentos desta empresa.");
+      await loadAll();
+    } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar empresa.");}
+    finally{setBusy(false);}
+  }
 
   function editEquipment(item:CommercialEquipment){ setEditingEquipment(item.id); setEquipmentForm({ company_code:item.company_code,purpose:item.purpose,equipment_type:item.equipment_type,manufacturer:item.manufacturer??"",model:item.model??"",power:item.power??"",voltage:item.voltage??"",manufacturer_serial:item.manufacturer_serial??"",quantity:1,unit_cost:item.unit_cost==null?"":String(item.unit_cost),sale_price:item.sale_price==null?"":String(item.sale_price),rental_daily_price:item.rental_daily_price==null?"":String(item.rental_daily_price),rental_monthly_price:item.rental_monthly_price==null?"":String(item.rental_monthly_price),condition:item.condition??"",stock_status:item.stock_status,rental_customer_id:item.rental_customer_id??null,location:item.location??"",asset_location_id:item.asset_location_id,acquisition_date:item.acquisition_date??"",notes:item.notes??"" }); setEquipmentModal(true); }
   async function saveEquipment(event:React.FormEvent){ event.preventDefault(); setBusy(true); setError(""); const payload={...equipmentForm,unit_cost:equipmentForm.unit_cost===""?null:Number(equipmentForm.unit_cost),sale_price:equipmentForm.sale_price===""?null:Number(equipmentForm.sale_price),rental_daily_price:equipmentForm.rental_daily_price===""?null:Number(equipmentForm.rental_daily_price),rental_monthly_price:equipmentForm.rental_monthly_price===""?null:Number(equipmentForm.rental_monthly_price),acquisition_date:equipmentForm.acquisition_date||null,manufacturer:equipmentForm.manufacturer||null,model:equipmentForm.model||null,power:equipmentForm.power||null,voltage:equipmentForm.voltage||null,condition:equipmentForm.condition||null,manufacturer_serial:equipmentForm.manufacturer_serial||null,location:equipmentForm.location||null,asset_location_id:equipmentForm.asset_location_id,rental_customer_id:equipmentForm.stock_status==="rented"?equipmentForm.rental_customer_id:null,notes:equipmentForm.notes||null}; try { if(editingEquipment) await apiClient.put(`/commercial/equipment/${editingEquipment}`,payload); else await apiClient.post("/commercial/equipment",payload); setMessage(editingEquipment?"Patrimônio atualizado.":"Patrimônio criado com etiqueta individual."); setEquipmentModal(false); setEditingEquipment(null); setEquipmentForm(blankEquipment()); await loadAll(); } catch(r){setError(r instanceof Error?r.message:"Falha ao salvar equipamento.");} finally{setBusy(false);} }
@@ -98,7 +150,7 @@ export function CommercialDashboard({ user, onLogout }: Props) {
       <div className="com-tabs">{tabLabels.map(([value,label])=><button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</div>{message&&<div className="com-notice">{message}</div>}{error&&<div className="com-notice danger">{error}</div>}
 
       {tab==="cadastros"&&<div className="com-register-grid">
-        <section className="com-card"><div className="com-section-title"><div><h2><Building2 size={19}/> Empresas emitentes</h2><p>Dados usados no cabeçalho dos orçamentos.</p></div></div><div className="com-company-list">{companies.map(c=><article key={c.id}><strong>{c.trade_name||c.legal_name}</strong><span>{c.document||"Documento não informado"}</span><small>{c.email||"—"} · {c.phone||"—"}</small></article>)}</div><form className="com-form" onSubmit={saveCompany}><label>Empresa<select value={companyForm.company_code} onChange={e=>setCompanyForm({...companyForm,company_code:e.target.value as CompanyCode})}>{companies.map((item)=><option key={item.id} value={item.company_code}>{item.trade_name||item.legal_name}</option>)}</select></label><label>Razão social<input required value={companyForm.legal_name} onChange={e=>setCompanyForm({...companyForm,legal_name:e.target.value})}/></label><div className="com-form-row"><label>Nome fantasia<input value={companyForm.trade_name} onChange={e=>setCompanyForm({...companyForm,trade_name:e.target.value})}/></label><label>CNPJ/CPF<input value={companyForm.document} onChange={e=>setCompanyForm({...companyForm,document:e.target.value})}/></label></div><div className="com-form-row"><label>E-mail<input value={companyForm.email} onChange={e=>setCompanyForm({...companyForm,email:e.target.value})}/></label><label>Telefone<input value={companyForm.phone} onChange={e=>setCompanyForm({...companyForm,phone:e.target.value})}/></label></div><button disabled={busy} className="com-btn primary">Salvar empresa</button></form></section>
+        <section className="com-card"><div className="com-section-title"><div><h2><Building2 size={19}/> Empresas emitentes</h2><p>Endereço, dados fiscais e contato usados no cabeçalho dos orçamentos.</p></div></div><div className="com-company-list">{companies.map(c=><article key={c.id}><strong>{c.trade_name||c.legal_name}</strong><span>{c.document||"Documento não informado"}</span><small>{c.email||"—"} · {c.phone||"—"}</small><small className="com-issuer-address">{companyLocation(c)}</small></article>)}</div><form className="com-form" onSubmit={saveCompany}><label>Empresa emitente<select value={companyForm.company_code} onChange={e=>selectIssuer(e.target.value)}>{companies.map((item)=><option key={item.id} value={item.company_code}>{item.trade_name||item.legal_name}</option>)}</select></label><p className="com-issuer-hint">Selecione a emitente para carregar seus dados antes de editar. Cada empresa terá seu próprio endereço no PDF.</p><label>Razão social<input required value={companyForm.legal_name} onChange={e=>setCompanyForm({...companyForm,legal_name:e.target.value})}/></label><div className="com-form-row"><label>Nome fantasia<input value={companyForm.trade_name} onChange={e=>setCompanyForm({...companyForm,trade_name:e.target.value})}/></label><label>CNPJ/CPF<input value={companyForm.document} onChange={e=>setCompanyForm({...companyForm,document:e.target.value})}/></label></div><div className="com-form-row"><label>E-mail<input type="email" value={companyForm.email} onChange={e=>setCompanyForm({...companyForm,email:e.target.value})}/></label><label>Telefone<input value={companyForm.phone} onChange={e=>setCompanyForm({...companyForm,phone:e.target.value})}/></label></div><div className="com-issuer-location"><strong>Endereço da emitente</strong><label>Endereço completo (rua, número, bairro e complemento)<input maxLength={240} placeholder="Ex.: Rua Industrial, 150, Galpão B, Bairro Centro" value={companyForm.address} onChange={e=>setCompanyForm({...companyForm,address:e.target.value})}/></label><div className="com-form-row"><label>Cidade<input maxLength={120} placeholder="Ex.: Recife" value={companyForm.city} onChange={e=>setCompanyForm({...companyForm,city:e.target.value})}/></label><label>UF<input maxLength={2} placeholder="PE" value={companyForm.state} onChange={e=>setCompanyForm({...companyForm,state:e.target.value.toUpperCase()})}/></label></div><small>Estes dados serão exibidos nos novos orçamentos vinculados à empresa selecionada.</small></div><button disabled={busy || companies.length === 0} className="com-btn primary">Salvar dados da emitente</button></form></section>
         <section className="com-card"><h2>Clientes comerciais</h2><p className="com-muted">O cliente fica no cadastro central do SÊNTICO e pode ser usado no Comercial sem duplicar dados.</p><div className="com-customer-scroll">{customers.slice(0,8).map(c=><article key={c.id}><strong>{c.trade_name||c.legal_name}</strong><span>{c.document||"Sem documento"}</span></article>)}</div><form className="com-form" onSubmit={saveCustomer}><label>Empresa vinculada<select value={customerForm.company_code} onChange={e=>setCustomerForm({...customerForm,company_code:e.target.value as CompanyCode})}>{companies.map((item)=><option key={item.id} value={item.company_code}>{item.trade_name||item.legal_name}</option>)}</select></label><label>Razão social / Nome<input required value={customerForm.legal_name} onChange={e=>setCustomerForm({...customerForm,legal_name:e.target.value})}/></label><div className="com-form-row"><label>Fantasia<input value={customerForm.trade_name} onChange={e=>setCustomerForm({...customerForm,trade_name:e.target.value})}/></label><label>CNPJ/CPF<input value={customerForm.document} onChange={e=>setCustomerForm({...customerForm,document:e.target.value})}/></label></div><div className="com-form-row"><label>E-mail<input value={customerForm.email} onChange={e=>setCustomerForm({...customerForm,email:e.target.value})}/></label><label>Telefone<input value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm,phone:e.target.value})}/></label></div><button disabled={busy} className="com-btn primary">Cadastrar cliente</button></form></section>
       </div>}
 

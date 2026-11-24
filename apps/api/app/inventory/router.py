@@ -1,5 +1,6 @@
 """Endpoints de localização, estoque, fotos, etiquetas e consumo vinculado à OS."""
 import asyncio
+import logging
 from collections import defaultdict
 from pathlib import Path
 from uuid import uuid4
@@ -665,6 +666,39 @@ async def upload_photo(item_id: int, file: UploadFile = File(...), db: AsyncSess
         raise
     await db.refresh(photo)
     return {"id": photo.id, "item_id": item_id}
+
+
+@router.delete("/items/{item_id}/photos/{photo_id}", status_code=204)
+async def delete_photo(
+    item_id: int,
+    photo_id: int,
+    db: AsyncSession = DB,
+    user: User = Depends(require_module("estoque")),
+):
+    """Remove somente a foto selecionada, preservando o cadastro e as demais imagens.
+
+    A exclusão do vínculo no banco é confirmada antes da limpeza do arquivo.
+    O arquivo nunca é excluído quando a transação de banco falha.
+    """
+    item = await db.get(InventoryItem, item_id)
+    if item is None:
+        raise HTTPException(404, "Item do estoque não encontrado.")
+    photo = await db.get(InventoryPhoto, photo_id)
+    if photo is None or photo.item_id != item_id:
+        raise HTTPException(404, "Esta foto não pertence ao item informado.")
+    file_path = STORAGE / str(item_id) / Path(photo.filename).name
+    await db.delete(photo)
+    await db.commit()
+    try:
+        file_path.unlink(missing_ok=True)
+    except OSError:
+        # O vínculo já foi removido. Uma falha no disco não deve induzir
+        # o operador a repetir uma exclusão que foi gravada no banco.
+        logging.getLogger(__name__).warning(
+            "Não foi possível limpar o arquivo físico da foto de estoque %s", photo_id,
+            exc_info=True,
+        )
+    return Response(status_code=204)
 
 
 @router.get("/photos/{photo_id}")

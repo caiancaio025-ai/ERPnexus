@@ -5,7 +5,8 @@ por fila. A escolha das filas e dos links acontece no servidor. Consultas de
 valores financeiros são exclusivas da Gestão, inclusive quando um usuário LAB
 ou ADM possui módulos legados em seu cadastro.
 """
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import exists, func, select
@@ -31,6 +32,68 @@ from app.purchasing.models import PurchaseOrder
 _MONTHS = ("janeiro", "fevereiro", "março", "abril", "maio", "junho",
            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
 _OPEN_PURCHASE_STATUSES = ("awaiting_payment", "ordered", "processing", "shipped", "customs")
+
+
+@dataclass(frozen=True)
+class DashboardPeriod:
+    """Filtro de consulta, separado da regra de autorização de cada perfil."""
+    start: date | None = None
+    end: date | None = None
+    label: str = "Todo o histórico"
+
+    @property
+    def active(self) -> bool:
+        return self.start is not None or self.end is not None
+
+
+def resolve_dashboard_period(
+    preset: str = "todos", start: date | None = None, end: date | None = None,
+    *, today: date | None = None,
+) -> DashboardPeriod:
+    """Resolve datas na região do servidor, sem reescrever dados legados."""
+    if today is None:
+        today = datetime.now(ZoneInfo("America/Recife")).date()
+    if preset == "todos":
+        return DashboardPeriod()
+    if preset == "mes":
+        first_next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return DashboardPeriod(today.replace(day=1), first_next_month - timedelta(days=1), "Este mês")
+    if preset == "30d":
+        return DashboardPeriod(today - timedelta(days=29), today, "Últimos 30 dias")
+    if preset == "90d":
+        return DashboardPeriod(today - timedelta(days=89), today, "Últimos 90 dias")
+    if preset == "ano":
+        return DashboardPeriod(today.replace(month=1, day=1), today.replace(month=12, day=31), "Este ano")
+    if preset == "personalizado":
+        if start is None and end is None:
+            raise ValueError("Informe pelo menos uma data para o período personalizado.")
+        if start is not None and end is not None and start > end:
+            raise ValueError("A data inicial não pode ser posterior à data final.")
+        if start and end:
+            label = f"De {start:%d/%m/%Y} até {end:%d/%m/%Y}"
+        elif start:
+            label = f"A partir de {start:%d/%m/%Y}"
+        else:
+            label = f"Até {end:%d/%m/%Y}"
+        return DashboardPeriod(start, end, label)
+    raise ValueError("Período inválido.")
+
+
+def period_criteria(column, period: DashboardPeriod, *, timestamp: bool = False) -> list:
+    """Para timestamps, o final é exclusivo à meia-noite do dia seguinte."""
+    criteria = []
+    tz = ZoneInfo("America/Recife")
+    if period.start is not None:
+        beginning = datetime.combine(period.start, time.min, tzinfo=tz) if timestamp else period.start
+        criteria.append(column >= beginning)
+    if period.end is not None:
+        if timestamp and period.end == date.max:
+            criteria.append(column <= datetime.max.replace(tzinfo=tz))
+        else:
+            ending = (datetime.combine(period.end + timedelta(days=1), time.min, tzinfo=tz)
+                      if timestamp else period.end)
+            criteria.append(column < ending if timestamp else column <= ending)
+    return criteria
 
 
 def dashboard_audience(user: User) -> str:
@@ -85,10 +148,12 @@ def _os_item(order: LaboratoryWorkOrder, status_label: str, tab: str = "general"
 
 async def _os_queue(db: AsyncSession, *, key: str, title: str, description: str,
                     tone: str, statuses: tuple[str, ...], status_label: str,
-                    tab: str = "general", require_unquoted: bool = False) -> WorkQueue:
+                    tab: str = "general", require_unquoted: bool = False,
+                    period: DashboardPeriod | None = None) -> WorkQueue:
     criteria = [LaboratoryWorkOrder.is_cancelled.is_(False),
                 LaboratoryWorkOrder.is_inactive.is_(False),
                 LaboratoryWorkOrder.status.in_(statuses)]
+    criteria.extend(period_criteria(LaboratoryWorkOrder.opened_at, period or DashboardPeriod()))
     if require_unquoted:
         # Um orçamento já emitido não deve aparecer como "falta fazer".
         criteria.append(~exists(select(LaboratoryQuote.id).where(
@@ -116,10 +181,12 @@ _REQUEST_LABELS = {
 
 async def _materials_queue(db: AsyncSession, *, key: str, title: str,
                            description: str, statuses: tuple[str, ...], tone: str,
-                           target: str = "/compras?view=requests") -> WorkQueue:
-    where = MaterialRequest.status.in_(statuses)
-    total = int(await db.scalar(select(func.count(MaterialRequest.id)).where(where)) or 0)
-    rows = list((await db.scalars(select(MaterialRequest).where(where)
+                           target: str = "/compras?view=requests",
+                           period: DashboardPeriod | None = None) -> WorkQueue:
+    criteria = [MaterialRequest.status.in_(statuses),
+                *period_criteria(MaterialRequest.created_at, period or DashboardPeriod(), timestamp=True)]
+    total = int(await db.scalar(select(func.count(MaterialRequest.id)).where(*criteria)) or 0)
+    rows = list((await db.scalars(select(MaterialRequest).where(*criteria)
                 .order_by(MaterialRequest.created_at.asc(), MaterialRequest.id.asc())
                 .limit(5))).all())
     order_ids = {row.work_order_id for row in rows if row.work_order_id is not None}
@@ -139,9 +206,11 @@ async def _materials_queue(db: AsyncSession, *, key: str, title: str,
 
 
 async def _finance_queue(db: AsyncSession, *, key: str, title: str,
-                         description: str, tone: str, today: date, overdue: bool) -> WorkQueue:
+                         description: str, tone: str, today: date, overdue: bool,
+                         period: DashboardPeriod | None = None) -> WorkQueue:
     criteria = [FinancialEntry.is_deleted.is_(False), FinancialEntry.status == "pending"]
     criteria.append(FinancialEntry.due_date < today if overdue else FinancialEntry.due_date >= today)
+    criteria.extend(period_criteria(FinancialEntry.due_date, period or DashboardPeriod()))
     total = int(await db.scalar(select(func.count(FinancialEntry.id)).where(*criteria)) or 0)
     rows = list((await db.scalars(select(FinancialEntry).where(*criteria)
                 .order_by(FinancialEntry.due_date.asc(), FinancialEntry.id.asc())
@@ -157,30 +226,37 @@ async def _finance_queue(db: AsyncSession, *, key: str, title: str,
                         for row in rows])
 
 
-async def _invoiced_queue(db: AsyncSession, today: date) -> WorkQueue:
+async def _invoiced_queue(db: AsyncSession, today: date,
+                          period: DashboardPeriod | None = None) -> WorkQueue:
+    active_period = period or DashboardPeriod()
     recent_cutoff = today - timedelta(days=30)
     criteria = [LaboratoryWorkOrder.is_cancelled.is_(False),
-                LaboratoryWorkOrder.invoiced_at.is_not(None),
-                LaboratoryWorkOrder.invoiced_at >= recent_cutoff]
+                LaboratoryWorkOrder.invoiced_at.is_not(None)]
+    if active_period.active:
+        criteria.extend(period_criteria(LaboratoryWorkOrder.invoiced_at, active_period, timestamp=True))
+    else:
+        criteria.extend(period_criteria(LaboratoryWorkOrder.invoiced_at,
+            DashboardPeriod(start=recent_cutoff), timestamp=True))
     total = int(await db.scalar(select(func.count(LaboratoryWorkOrder.id)).where(*criteria)) or 0)
     rows = list((await db.scalars(select(LaboratoryWorkOrder).options(
         joinedload(LaboratoryWorkOrder.equipment), raiseload("*"),
-    ).where(
-        LaboratoryWorkOrder.is_cancelled.is_(False),
-        LaboratoryWorkOrder.invoiced_at.is_not(None),
-    ).order_by(LaboratoryWorkOrder.invoiced_at.desc()).limit(5))).all())
+    ).where(*criteria).order_by(LaboratoryWorkOrder.invoiced_at.desc()).limit(5))).all())
     result = [_os_item(row, "Faturado", "financial") for row in rows]
     for item, order in zip(result, rows):
         item.date_label = f"Faturado em {order.invoiced_at.strftime('%d/%m/%Y')}"
     return WorkQueue(key="recent_invoices", section="financeiro",
-                     title="Últimos faturados", description="Últimas OS faturadas · indicador dos últimos 30 dias",
+                     title="Últimos faturados", description=(
+                         f"OS faturadas · {active_period.label}" if active_period.active
+                         else "Últimas OS faturadas · últimos 30 dias"),
                      tone="success", total=total, target="/financeiro",
                      items=result)
 
 
-async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
+async def build_summary(user: User, db: AsyncSession,
+                        period: DashboardPeriod | None = None) -> DashboardSummary:
     now = datetime.now(ZoneInfo("America/Recife"))
     today = now.date()
+    period = period or DashboardPeriod()
     due_limit = today + timedelta(days=7)
     month_start = today.replace(day=1)
     month_label = f"{_MONTHS[now.month - 1]} de {now.year}"
@@ -198,47 +274,50 @@ async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
         if visible_lab:
             queues.append(await _os_queue(db, key="lab_entries", title="Equipamentos em entrada",
                 description="Recebidos ou aguardando análise técnica",
-                tone="info", statuses=("received", "awaiting_analysis"), status_label="Entrada"))
+                tone="info", statuses=("received", "awaiting_analysis"), status_label="Entrada", period=period))
             queues.append(await _os_queue(db, key="lab_approved", title="Serviços aprovados",
                 description="OS aprovadas que aguardam continuidade no laboratório",
-                tone="success", statuses=("approved",), status_label="Aprovado", tab="technical"))
+                tone="success", statuses=("approved",), status_label="Aprovado", tab="technical", period=period))
+            monthly_criteria = [LaboratoryWorkOrder.is_cancelled.is_(False)]
+            monthly_criteria.extend(period_criteria(LaboratoryWorkOrder.opened_at, period)
+                if period.active else [LaboratoryWorkOrder.opened_at >= month_start])
             monthly_equipment_count = int(await db.scalar(select(func.count(LaboratoryWorkOrder.id)).where(
-                LaboratoryWorkOrder.is_cancelled.is_(False),
-                LaboratoryWorkOrder.opened_at >= month_start,
+                *monthly_criteria,
             )) or 0)
         if visible_quotes:
             queues.append(await _os_queue(db, key="quotes_pending", title="Orçamentos a elaborar",
                 description="Equipamentos analisados ainda sem orçamento emitido",
                 tone="warning", statuses=("in_analysis", "awaiting_quote"),
-                status_label="Analisado", tab="quote", require_unquoted=True))
+                status_label="Analisado", tab="quote", require_unquoted=True, period=period))
 
     purchases: list[PurchaseOrder] = []
     if visible_purchases:
         queues.extend([
             await _materials_queue(db, key="requests_approval", title="Solicitações para aprovar",
-                description="Materiais aguardando autorização", tone="warning", statuses=("awaiting_approval",)),
+                description="Materiais aguardando autorização", tone="warning", statuses=("awaiting_approval",), period=period),
             await _materials_queue(db, key="requests_buy", title="Materiais para comprar",
                 description="Solicitações aprovadas que ainda precisam ser compradas", tone="info",
-                statuses=("approved", "purchasing")),
+                statuses=("approved", "purchasing"), period=period),
             await _materials_queue(db, key="requests_arrival", title="Aguardando chegada",
                 description="Materiais comprados e ainda não recebidos", tone="danger",
-                statuses=("purchased", "in_transit")),
+                statuses=("purchased", "in_transit"), period=period),
         ])
         purchases = list((await db.scalars(select(PurchaseOrder).where(
             PurchaseOrder.is_deleted.is_(False),
             PurchaseOrder.status.in_(_OPEN_PURCHASE_STATUSES),
             PurchaseOrder.estimated_delivery_date <= due_limit,
+            *period_criteria(PurchaseOrder.purchase_date, period),
         ).order_by(PurchaseOrder.estimated_delivery_date, PurchaseOrder.id.desc()).limit(30))).all())
 
     if visible_stock:
         stock_queue = await _materials_queue(db, key="stock_to_receive", title="Materiais a receber",
             description="Comprados e em trânsito, aguardando entrada física no estoque",
-            tone="warning", statuses=("purchased", "in_transit"), target="/estoque")
+            tone="warning", statuses=("purchased", "in_transit"), target="/estoque", period=period)
         stock_queue.section = "estoque"
         queues.append(stock_queue)
         stock_ready = await _materials_queue(db, key="stock_to_deliver", title="Separar para o laboratório",
             description="Itens recebidos que aguardam entrega ao laboratório",
-            tone="success", statuses=("received",), target="/estoque")
+            tone="success", statuses=("received",), target="/estoque", period=period)
         stock_ready.section = "estoque"
         queues.append(stock_ready)
 
@@ -246,11 +325,11 @@ async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
         queues.extend([
             await _finance_queue(db, key="finance_overdue", title="Financeiro em atraso",
                 description="Recebimentos e pagamentos com vencimento ultrapassado",
-                tone="danger", today=today, overdue=True),
+                tone="danger", today=today, overdue=True, period=period),
             await _finance_queue(db, key="finance_pending", title="Financeiro pendente",
                 description="Lançamentos a receber e pagar ainda no prazo",
-                tone="warning", today=today, overdue=False),
-            await _invoiced_queue(db, today),
+                tone="warning", today=today, overdue=False, period=period),
+            await _invoiced_queue(db, today, period=period),
         ])
 
     overdue = [item for item in purchases if item.estimated_delivery_date < today]
@@ -313,4 +392,5 @@ async def build_summary(user: User, db: AsyncSession) -> DashboardSummary:
     return DashboardSummary(audience=audience, alerts=alerts, work_queues=queues,
         purchase_events=events, quick_actions=quick_actions,
         monthly_equipment_entries=MonthlyEquipmentEntries(
-            month_label=month_label, count=monthly_equipment_count))
+            month_label=period.label if period.active else month_label, count=monthly_equipment_count),
+        filtered_period=period.active)

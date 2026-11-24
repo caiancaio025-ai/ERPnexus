@@ -16,3 +16,6 @@
 **/.astro
 **/*.log
 apps/api/storage/*
+
+# Chaves de notificacao sao locais e nao entram em builds.
+secrets/
