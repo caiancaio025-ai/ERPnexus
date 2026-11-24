@@ -1,53 +1,11 @@
-# Deploy do Sêntico Green (ERP) por git — VPS
+# Sêntico Green — implantação controlada V47
 
-O código oficial fica neste repositório (GitHub `caiancaio025-ai/ERPnexus`). A VPS clona o repo
-e sobe a aplicação em Docker (projeto `sentico-green-hml`): Postgres, API (FastAPI), Web (React/Caddy)
-e o gateway (Caddy). Os volumes de dados (banco e uploads) são **externos** — o deploy nunca os apaga.
+Procedimento específico para a V47 homologada em b98407ed0ed70c7b3e4185ffc4318c4e5ad14eb9. Não é um atualizador genérico. Não altera a aplicação homologada nem a configuração Compose. As imagens aprovadas na VPS são reutilizadas por tag e ID exatos.
 
-## Fluxo das próximas atualizações (o que você vai fazer)
+1. Com o ERP em funcionamento, confira a main remota e faça fetch. Exija working tree limpa e atualização fast-forward para o commit de infraestrutura aprovado, sem reset/force.
+2. Ative a manutenção com `python3 /root/sentico-manutencao/manutencao.py ativar`. Confira HTTP 503, API/web/gateway parados.
+3. Execute `bash /opt/sentico-green/infra/vps/atualizar.sh` interativamente. Ele exige main sincronizada, revisão 20261117_01 e autorização MIGRAR V47. Faz backup novo do banco e dos uploads, restauração isolada estrita, hashes dos registros, migração e teste de readiness na cópia. Só depois migra o banco real para 20261123_02 e verifica registros. Não recria o banco, volumes ou gateway. Não faz rebuild.
+4. Exija DEPLOY INTERNO V47 OK; MANUTENCAO ATIVA. Confirme relatório e saúde interna. Retire manutenção com `python3 /root/sentico-manutencao/manutencao.py voltar`. Confira HTTP 200 e API ready, login, garantia, pintura, orçamento e PDF.
+5. Em erro, não repita cegamente. Leia a revisão real e logs em /root/backups-sentico/v47-deploy-*. Se a revisão for anterior, avalie retorno operacional com os containers antigos. Após a migração, mantenha manutenção, preserve backups e diagnostique antes de iniciar imagens antigas ou restaurar dados. O voltar.sh de infraestrutura falha fechado: downgrade automático proibido. Retirar manutenção não é rollback.
 
-1. **No seu PC** (pasta do projeto, já clonada): faça as alterações e rode `enviar.bat`
-   (ele faz `git add` + `commit` + `push` para o GitHub).
-2. **Na VPS** (como root):
-   ```
-   bash /opt/sentico-green/infra/vps/atualizar.sh
-   ```
-   Ele faz, em ordem: `git pull` → **backup fresco** → guarda as imagens atuais (rollback) →
-   **build** das imagens novas → **PORTÃO**: testa a migração numa **cópia** do banco (não destrutivo)
-   → **cutover** (migra o banco real e sobe o novo) → confere a saúde e a borda.
-   - Se o **portão falhar**, nada é alterado em produção.
-   - No fim mostra `ATUALIZADO: ... no ar` ou um alerta com o caminho do rollback.
-
-## Instalação (uma vez só)
-
-> O V15 já está no ar. Isto só liga a VPS ao git para as **próximas** atualizações; não re-sobe o sistema.
-
-Na VPS, como root, com o `instalar.sh` em mãos:
-```
-bash instalar.sh
-```
-Na primeira vez ele gera uma **chave de deploy (só leitura)** e pede para você cadastrá-la em
-`GitHub > ERPnexus > Settings > Deploy keys`. Depois rode `instalar.sh` de novo: ele clona o repo em
-`/opt/sentico-green`, reconstrói o `.env.production` a partir dos containers em execução e grava a TAG atual.
-
-## Voltar (rollback)
-
-```
-bash /opt/sentico-green/infra/vps/voltar.sh
-```
-Sobe de volta as imagens `:anterior` (api e web). Se a atualização mexeu no banco, o script mostra como
-restaurar o backup `pre-deploy` feito automaticamente antes da troca.
-
-## Segurança / dados
-
-- `.env.production` (senhas, DATABASE_URL, GEMINI, etc.) **não** vai para o git (está no `.gitignore`).
-  Ele é reconstruído na VPS a partir dos containers. Guarde uma cópia offsite (o backup diário já inclui).
-- Volumes `sentico-green-hml_green_postgres_data` e `_uploads_data` são **externos**: o deploy os usa,
-  nunca os cria nem apaga.
-- O gateway e o web usam Caddy 2.10 com `cap_add: [NET_BIND_SERVICE]` no compose — isso evita o erro
-  `exec /usr/bin/caddy: operation not permitted` quando se usa `cap_drop: [ALL]`.
-
-## Backup offsite
-
-Os scripts em `infra/vps/offsite/` configuram o backup diário (banco + uploads + env) e a cópia puxada
-para a máquina Windows. Veja o pacote de configuração entregue à parte.
+As sete verificações históricas de conciliação (CSV ausentes) e o teste opcional de desempenho permanecem pendentes. A generalização do deploy e rollback com CI deve ocorrer em outro commit, sem esta urgência.
