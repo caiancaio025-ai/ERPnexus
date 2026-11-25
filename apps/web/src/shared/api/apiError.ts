@@ -9,12 +9,14 @@ export type ValidationIssue = {
 export class ApiError extends Error {
   readonly status: number;
   readonly details: unknown;
+  readonly requestId: string | null;
 
-  constructor(message: string, status = 0, details?: unknown) {
-    super(message);
+  constructor(message: string, status = 0, details?: unknown, requestId: string | null = null) {
+    super(requestId ? `${message} (Referência: ${requestId})` : message);
     this.name = "ApiError";
     this.status = status;
     this.details = details;
+    this.requestId = requestId;
   }
 
   get isUnauthorized() {

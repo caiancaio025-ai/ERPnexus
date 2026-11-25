@@ -23,10 +23,11 @@ type Form = {
   photos: QuotePhoto[];
 };
 
-export type QuoteEditorHandle = { save: () => Promise<void> };
+export type QuoteEditorHandle = { save: () => Promise<boolean>; saveIfNeeded: () => Promise<boolean> };
 
 type Props = {
   saveRef?: Ref<QuoteEditorHandle>;
+  onWorkOrderChanged?: () => Promise<void>;
   workOrderId: number; workOrderNumber: string; customerName: string; defect: string; quotedValue: string;
   equipmentType: string; manufacturer: string; model: string; serialNumber: string; power: string; voltage: string;
   readOnly?: boolean;
@@ -48,7 +49,11 @@ export function QuoteEditor(props: Props) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [form, setForm] = useState<Form>(() => empty(defect, quotedValue));
-  const [busy, setBusy] = useState<"save" | "delete" | "upload" | "emit" | "preview" | null>(null);
+  type Busy = "save" | "delete" | "upload" | "emit" | "preview" | null;
+  const [busy, setBusyState] = useState<Busy>(null);
+  const busyRef = useRef<Busy>(null);
+  const [initializing, setInitializing] = useState(true);
+  function setBusy(value: Busy) { busyRef.current = value; setBusyState(value); }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -58,7 +63,7 @@ export function QuoteEditor(props: Props) {
   const activeOrderId = useRef(workOrderId);
   const selectedQuote = quotes.find((quote) => quote.id === selected) ?? null;
   const locked = readOnly || selectedQuote?.status === "emitted" || Boolean(selectedQuote?.emitted_at);
-  const editingBlocked = locked || busy === "save" || busy === "emit" || busy === "preview";
+  const editingBlocked = initializing || locked || busy === "save" || busy === "emit" || busy === "preview";
 
   function editForm(next: Form | ((previous: Form) => Form)) {
     editedSinceLoad.current = true;
@@ -86,8 +91,12 @@ export function QuoteEditor(props: Props) {
   useEffect(() => {
     activeOrderId.current = workOrderId;
     editedSinceLoad.current = false;
+    setInitializing(true); setDirty(false);
     setSelected(null); setForm(empty(defect, quotedValue)); setShowMobileContext(false);
-    void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar os rascunhos."));
+    let active = true;
+    void load().then(() => { if (active) setInitializing(false); })
+      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Falha ao carregar os rascunhos."); });
+    return () => { active = false; };
   }, [workOrderId]);
 
   function selectQuote(quote: Quote) {
@@ -159,6 +168,11 @@ export function QuoteEditor(props: Props) {
     const result = selected
       ? await apiClient.put<Quote>(`/laboratory/quotes/${selected}`, snapshot)
       : await apiClient.post<Quote>(`/laboratory/work-orders/${workOrderId}/quotes`, snapshot);
+    // Preserve the identity acknowledged by POST before the verification GET.
+    // A temporary read failure must never cause the next Save to create R+1.
+    setSelected(result.id);
+    setQuotes((current) => [result, ...current.filter((quote) => quote.id !== result.id)]);
+    void props.onWorkOrderChanged?.().catch(() => undefined);
     const responseError = verifyQuoteSaved(snapshot, result);
     // Uma resposta do PUT pode estar desatualizada; a conferência decisiva é
     // o registro lido NOVAMENTE em uma requisição sem cache, após o commit.
@@ -177,21 +191,27 @@ export function QuoteEditor(props: Props) {
     return savedQuote;
   }
 
-  async function save() {
-    if (locked || busy) return;
+  async function save(): Promise<boolean> {
+    if (locked) return true;
+    if (busyRef.current || initializing) return false;
     setBusy("save"); setSaved(false); setError(""); setNotice("");
     try {
       const result = await persistDraft();
       setNotice(`Revisão ${String(result.revision).padStart(2, "0")} salva e conferida: ${money(Number(result.total ?? 0))}.`);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível salvar o orçamento. Suas alterações continuam nesta tela.");
+      return false;
     } finally { setBusy(null); }
   }
 
-  useImperativeHandle(props.saveRef, () => ({ save }), [save]);
+  useImperativeHandle(props.saveRef, () => ({ save, saveIfNeeded: async () => {
+    if (busyRef.current) return false;
+    return dirty ? save() : true;
+  } }), [save, dirty]);
 
   async function remove() {
-    if (!selected || locked || busy || !confirm("Excluir este rascunho de orçamento?")) return;
+    if (!selected || locked || busyRef.current || !confirm("Excluir este rascunho de orçamento?")) return;
     setBusy("delete"); setError(""); setNotice("");
     try {
       await apiClient.delete(`/laboratory/quotes/${selected}`);
@@ -203,7 +223,7 @@ export function QuoteEditor(props: Props) {
   }
 
   async function openPdf(preview: boolean) {
-    if (busy) return;
+    if (busyRef.current || initializing) return;
     // Abrir antes de iniciar a requisição assíncrona evita bloqueadores de
     // pop-up. Uma falha exibe erro no formulário e fecha a aba vazia.
     const previewWindow = preview ? window.open("", "_blank") : null;
@@ -256,6 +276,7 @@ export function QuoteEditor(props: Props) {
       }
       window.setTimeout(() => URL.revokeObjectURL(link), 120_000);
       if (!preview && !alreadyEmitted) {
+        void props.onWorkOrderChanged?.().catch(() => undefined);
         const updated = await load(quoteId);
         if (!updated || (updated.status !== "emitted" && !updated.emitted_at)) {
           throw new Error("O PDF foi recebido, mas não foi possível confirmar o status emitido. Atualize a O.S. antes de tentar novamente.");
@@ -269,7 +290,7 @@ export function QuoteEditor(props: Props) {
   }
 
   async function newRevision() {
-    if (busy) return;
+    if (busyRef.current || initializing) return;
     if (!selectedQuote) {
       if (dirty && !window.confirm("Descartar as alterações ainda não salvas?")) return;
       setSelected(null); setForm(empty(defect, quotedValue)); setError(""); return;
@@ -286,7 +307,7 @@ export function QuoteEditor(props: Props) {
     } finally { setBusy(null); }
   }
   async function uploadReportPhotos(files: FileList | null) {
-    if (!files?.length || locked || busy) return;
+    if (!files?.length || locked || busyRef.current || initializing) return;
     const selectedFiles = Array.from(files);
     const available = MAX_QUOTE_PHOTOS - form.photos.length;
     if (selectedFiles.length > available) {
@@ -335,7 +356,10 @@ export function QuoteEditor(props: Props) {
     {!!quotes.length && <div className="lab-quote-revisions">{quotes.map((quote) => <button key={quote.id} className={selected === quote.id ? "active" : ""} disabled={!!busy} onClick={() => {if (busy) return; if (dirty && !window.confirm("Há alterações não salvas. Deseja descartá-las e abrir outra revisão?")) return; selectQuote(quote);}}>R{String(quote.revision).padStart(2,"0")} · {quote.status === "emitted" ? "Emitido" : "Rascunho"}{!readOnly && ` · ${money(Number(quote.total ?? 0))}`}</button>)}</div>}
 
     {notice && <div className="lab-quote-save-confirmation" role="status">{notice}</div>}
-    {error && <div className="lab-quote-error" role="alert">{error}</div>}
+    {initializing && <p role="status">Carregando as revisões do orçamento…</p>}
+    {error && <div className="lab-quote-error" role="alert">{error}{initializing && <button type="button" onClick={() => {
+      setError(""); void load().then(() => setInitializing(false)).catch((cause) => setError(cause instanceof Error ? cause.message : "Falha ao carregar as revisões."));
+    }}>Recarregar orçamentos</button>}</div>}
 
     <button type="button" className="lab-quote-context-toggle" aria-expanded={showMobileContext} onClick={() => setShowMobileContext((value) => !value)}>
       <span>Dados completos do cliente e equipamento</span>

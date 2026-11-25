@@ -10,6 +10,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { monthlyInstallmentDates, splitInstallmentAmounts } from "./installmentPlan";
 
 import { apiClient } from "../../shared/api/apiClient";
+import { moneyInput } from "../../shared/forms/moneyInput";
 import { CashFlowChart, CompositionDonut } from "./components/FinanceCharts";
 import type { AuthUser } from "../auth/AuthCard";
 import type {
@@ -87,7 +88,7 @@ const emptyBillingConfirmation = (): BillingConfirmation => ({
 function money(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function companyName(code: CompanyCode) { return companies.find((item) => item.code === code)?.name ?? code; }
 function dateBR(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "—"; }
-function parseAmount(value: string) { return Number(value.replace(/\./g, "").replace(",", ".")); }
+function parseAmount(value: string) { return moneyInput(value); }
 function queryScope(company: CompanyFilter, startDate: string, endDate: string, dateBasis: DateBasis) {
   const scope = company === "consolidated" ? "consolidated=true" : `company_code=${company}`;
   return `${scope}&start_date=${startDate}&end_date=${endDate}&date_basis=${dateBasis}`;

@@ -1,0 +1,23 @@
+SENTICO V48 — VALIDAÇÃO DE 25/11/2026
+
+API e instalador: 665 aprovados, 0 falhas, 0 erros, 7 ignorados.
+Detalhamento: 602 aprovados da API + 63 aprovados do instalador.
+Os 7 ignorados dependem de CSVs privados de uma conciliação histórica ausentes no ZIP recebido.
+Migrações: 50 percorridas em PostgreSQL 17.12 real até 20261123_02.
+
+Interface: TypeScript e Vite aprovados; 18 testes JavaScript + 20 verificações de orçamento.
+Preferências e temas V26/V27/V29: 41 verificações aprovadas na execução anterior;
+o resultado consta do resumo-frontend.json, sem log separado daquela execução.
+
+Navegador com API controlada: 18 cenários aprovados, incluindo falhas de conexão,
+anexo, conflito de versão, resposta tardia, orçamento e abertura dos nove módulos.
+Navegador com API/PostgreSQL reais: 12 verificações aprovadas, sem simulação de API:
+criação de compra, edição/reabertura de compra, edição/reabertura de OS e nove módulos.
+Não houve erro de JavaScript ou resposta HTTP de erro nesse teste real.
+Três leituras foram canceladas durante a navegação; nenhuma gravação foi cancelada.
+
+Consulte o relatório na raiz para causas, correções, cobertura e limites.
+Docker Desktop/PowerShell do Windows e o banco operacional não foram executados aqui.
+Os logs preservam os resultados; somente cores de terminal e caminhos locais do ambiente
+de execução foram normalizados. Nenhum resultado de teste foi removido ou alterado.
+Não estão incluídos screenshots, binários de navegador, dados operacionais ou credenciais reais.

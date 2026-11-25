@@ -7,12 +7,24 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.stock_codes import format_stock_code
 from app.inventory.models import InventoryComponentFormat, InventoryItem, InventoryMovement
+
+
+async def lock_purchase_receipts(db: AsyncSession) -> None:
+    """Serializa a conciliação pedido/solicitação antes de travar suas origens.
+
+    Uma origem pode chegar ao estoque por qualquer um dos dois módulos. Sem
+    este lock, dois recebimentos simultâneos não enxergam o movimento ainda
+    não confirmado do outro e criam duas entradas físicas para a mesma compra.
+    Deve ser chamado antes de SELECT FOR UPDATE do pedido ou da solicitação.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(select(func.pg_advisory_xact_lock(1397051988, 1)))
 
 
 def purchase_unit_cost(total: Decimal, quantity: int) -> Decimal:
@@ -48,8 +60,14 @@ async def receive_purchase(
         other_field = "material_request_id" if source == "order" else "purchase_order_id"
         linked = await db.scalar(select(InventoryMovement).where(
             getattr(InventoryMovement, other_field) == linked_source_id,
-        ).with_for_update())
+        ).with_for_update().execution_options(populate_existing=True))
         if linked is not None:
+            if getattr(linked, field) not in (None, source_id):
+                raise HTTPException(
+                    409,
+                    "Este recebimento já está vinculado a outra compra ou solicitação. "
+                    "Concilie a referência antes de receber.",
+                )
             matched = await db.scalar(select(InventoryItem).where(
                 InventoryItem.id == linked.item_id,
             ))
@@ -71,7 +89,9 @@ async def receive_purchase(
     if destination == "existing":
         if target_item_id is None:
             raise HTTPException(422, "Selecione o item que receberá o saldo.")
-        item = await db.scalar(select(InventoryItem).where(InventoryItem.id == target_item_id).with_for_update())
+        item = await db.scalar(select(InventoryItem).where(
+            InventoryItem.id == target_item_id,
+        ).with_for_update().execution_options(populate_existing=True))
         if item is None or not item.is_active or item.company_code != company_code or item.mode != "bulk":
             raise HTTPException(422, "Item de estoque inexistente, de outra empresa ou não acumulável.")
         old_qty = item.quantity

@@ -1,0 +1,25 @@
+{
+  "passed": 18,
+  "checks": [
+    "purchase attachment failure retries same purchase: one POST, one PUT, two attachments",
+    "background list refresh does not lock OS editing after a confirmed save",
+    "OS partial edit saved even when post-save history lookup fails",
+    "OS disjoint version conflict rebases only changed field and preserves financial value",
+    "OS same-field conflict retains local draft and blocks overwrite",
+    "delayed location suggestion preserves text typed while the query is pending",
+    "unsaved quote is persisted before leaving its tab",
+    "delayed quote refresh cannot advance baseline over a conflicting local edit",
+    "quote confirmation failure retries PUT on the saved draft instead of duplicating a revision",
+    "module navigation renders: /painel",
+    "module navigation renders: /compras",
+    "module navigation renders: /laboratorio",
+    "module navigation renders: /estoque",
+    "module navigation renders: /comercial",
+    "module navigation renders: /financeiro",
+    "module navigation renders: /clientes",
+    "module navigation renders: /colaboradores",
+    "module navigation renders: /notificacoes"
+  ],
+  "page_errors": [],
+  "fixture": "mocked API only; database verified separately"
+}

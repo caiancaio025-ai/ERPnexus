@@ -82,6 +82,15 @@ class PurchaseOutput(BaseModel):
     invoice_number: str | None
     client_destination: str | None
     product_name: str
+    # Estes campos precisam voltar ao formulário: omiti-los fazia o editor
+    # apagar o destino salvo e bloquear até alterações de observações após receber.
+    inventory_destination: Literal["new", "existing"] | None = None
+    inventory_item_id: int | None = None
+    inventory_name: str | None = None
+    inventory_mode: Literal["bulk", "serialized"] | None = None
+    inventory_serial: str | None = None
+    inventory_category: str | None = None
+    inventory_format_id: int | None = None
     quantity: int
     total_amount: Decimal | None
     origin: PurchaseOrigin

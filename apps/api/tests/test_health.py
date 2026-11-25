@@ -17,3 +17,10 @@ def test_ready() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_version_identifies_installed_release_without_caching() -> None:
+    response = client.get("/health/version")
+    assert response.status_code == 200
+    assert response.json()["version"] == "48"
+    assert response.headers["Cache-Control"] == "no-store"

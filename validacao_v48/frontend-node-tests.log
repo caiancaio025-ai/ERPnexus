@@ -1,0 +1,32 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> nexus-web@0.1.0 test
+> node --test tests/*.test.mjs && node tests/test_quote_save_guard_v41.cjs
+
+✔ converte números digitados em pt-BR e valores monetários da API (1.158361ms)
+✔ salva R02 de R$ 22.000 e mantém quantidades e total da revisão (0.599811ms)
+✔ detecta retorno antigo com valores concretos para diagnóstico (17.200429ms)
+✔ quantidade 2 × R$ 1.500 = R$ 3.000 (0.349515ms)
+✔ arredondamento de quantidade em 3 casas coincide com NUMERIC em centavos (0.281122ms)
+✔ API URL uses a single API prefix with relative and absolute installations (1.378131ms)
+✔ GET retries a temporary proxy failure and returns the recovered JSON (10.76662ms)
+✔ GET retries a disconnected read once, with bounded attempts (1.002347ms)
+✔ POST never automatically repeats an acknowledged or ambiguous write (0.855386ms)
+✔ DELETE is not replayed after a timeout and the timer aborts the request (5.009057ms)
+✔ caller cancellation is propagated without retrying or masquerading as a network fault (0.813613ms)
+✔ successful HTML or malformed JSON is rejected instead of reported as saved (1.339863ms)
+✔ 204 deletion and JSON validation errors retain their exact semantics (1.009437ms)
+✔ purchase and OS monetary fields accept Brazilian and API decimal values (0.68533ms)
+✔ OS sends only changed fields and preserves an explicit clearing (0.365098ms)
+✔ version conflict from quote/stock can safely rebase an unrelated OS edit once (0.627453ms)
+✔ concurrent modification of the same field blocks overwrite and keeps the local draft (0.442134ms)
+✔ ambiguous write failures never trigger version rebase or a second mutation (0.261774ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 227.750566
+20 verificações V41 passaram: moeda brasileira, salvamento confirmado, falha preservada e botão geral integrado.

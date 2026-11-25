@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -30,6 +30,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
+import { moneyInput } from "../../shared/forms/moneyInput";
 import type { AuthUser } from "../auth/AuthCard";
 import { MaterialRequestsPanel } from "./MaterialRequestsPanel";
 import { PurchasingSpendingReport } from "./PurchasingSpendingReport";
@@ -186,6 +187,10 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const mutationRef = useRef(false);
+  const supplierMutationRef = useRef(false);
+  const loadSequenceRef = useRef(0);
+  const [loadError, setLoadError] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
@@ -211,7 +216,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   }, [company, search, statusFilter]);
 
   async function load() {
-    setError("");
+    const sequence = ++loadSequenceRef.current;
     const companyQuery = company === "all" ? "" : `?company_code=${company}`;
     const requestQuery = company === "all" ? "" : `?company_code=${company}`;
     const [summaryResult, ordersResult, suppliersResult, requestsResult, notificationsResult] = await Promise.allSettled([
@@ -222,6 +227,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       apiClient.request<PurchaseNotificationSummary>("/api/notifications?limit=20&unread_only=true"),
     ]);
 
+    if (sequence !== loadSequenceRef.current) return;
     const failures: string[] = [];
 
     if (summaryResult.status === "fulfilled") {
@@ -259,17 +265,15 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       failures.push(`Notificações: ${notificationsResult.reason instanceof Error ? notificationsResult.reason.message : "falha ao carregar"}`);
     }
 
-    if (failures.length) {
-      setError(failures.join(" | "));
-    }
+    setLoadError(failures.join(" | "));
   }
 
   useEffect(() => {
     void load();
-    const refresh = () => void load();
+    const refresh = () => { if (document.visibilityState === "visible" && !mutationRef.current) void load(); };
     const timer = window.setInterval(refresh, 30000);
     window.addEventListener("focus", refresh);
-    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+    return () => { ++loadSequenceRef.current; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [query, company]);
 
   // A pesquisa é informativa antes da compra e permite escolher o destino
@@ -377,6 +381,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
   async function saveOrder(event: React.FormEvent) {
     event.preventDefault();
+    if (mutationRef.current) return;
+    mutationRef.current = true;
     setSaving(true);
     setError("");
     setMessage("");
@@ -396,6 +402,13 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           throw new Error("Item individualizado exige quantidade 1 e número de série.");
         }
       }
+      const totalAmount = moneyInput(form.total_amount);
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0 || Math.abs(totalAmount * 100 - Math.round(totalAmount * 100)) > 0.00001) {
+        throw new Error("Informe um valor total maior que zero, com no máximo duas casas decimais.");
+      }
+      if (!Number.isInteger(Number(form.quantity)) || Number(form.quantity) < 1) {
+        throw new Error("Informe uma quantidade inteira maior que zero.");
+      }
       const payload = {
         ...form,
         supplier_id: Number(form.supplier_id),
@@ -409,7 +422,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         inventory_serial: form.inventory_destination === "new" && form.inventory_mode === "serialized" ? form.inventory_serial.trim() || null : null,
         inventory_category: form.inventory_destination === "new" ? form.inventory_category : null,
         inventory_format_id: form.inventory_destination === "new" && form.inventory_format_id ? Number(form.inventory_format_id) : null,
-        total_amount: Number(form.total_amount.replace(/\./g, "").replace(",", ".")),
+        total_amount: totalAmount,
         equipment_serial: form.equipment_serial || null,
         invoice_number: form.invoice_number || null,
         client_destination: form.client_destination || null,
@@ -417,6 +430,15 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         product_link: form.product_link || null,
         notes: form.notes || null,
         ...(editing ? { delivered_at: editing.delivered_at || null } : {}),
+        ...(editing?.status === "delivered" ? {
+          inventory_destination: editing.inventory_destination ?? null,
+          inventory_item_id: editing.inventory_item_id ?? null,
+          inventory_name: editing.inventory_name ?? null,
+          inventory_mode: editing.inventory_mode ?? null,
+          inventory_serial: editing.inventory_serial ?? null,
+          inventory_category: editing.inventory_category ?? null,
+          inventory_format_id: editing.inventory_format_id ?? null,
+        } : {}),
       };
       const order = await apiClient.request<PurchaseOrder>(
         editing ? `/api/purchasing/orders/${editing.id}` : "/api/purchasing/orders",
@@ -426,10 +448,20 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           body: JSON.stringify(payload),
         },
       );
+      // The purchase already exists after this response. Keep its identity even
+      // when a separate attachment request fails, so retrying cannot POST twice.
+      setEditing(order);
       if (attachment) {
         const body = new FormData();
         body.append("file", attachment);
-        await apiClient.request(`/api/purchasing/orders/${order.id}/attachment`, { method: "POST", body });
+        try {
+          await apiClient.request(`/api/purchasing/orders/${order.id}/attachment`, { method: "POST", body });
+          setAttachment(null);
+        } catch (cause) {
+          setMessage(`Compra ${order.code} salva no sistema.`);
+          setError(`Somente o anexo não foi enviado: ${cause instanceof Error ? cause.message : "falha de conexão"} Clique em Salvar alterações para reenviar o anexo desta mesma compra.`);
+          return;
+        }
       }
       setMessage(form.status === "delivered" ? "Compra entregue: entrada lançada automaticamente no Estoque. Consulte a etiqueta no módulo Estoque." : (editing ? "Compra atualizada." : `Compra ${order.code} registrada.`));
       setView("orders");
@@ -437,26 +469,35 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível salvar a compra.");
     } finally {
+      mutationRef.current = false;
       setSaving(false);
     }
   }
 
   async function deleteOrder() {
-    if (!editing || !window.confirm(`Excluir a compra ${editing.code}?`)) return;
-    await apiClient.request(`/api/purchasing/orders/${editing.id}`, { method: "DELETE" });
-    setEditing(null);
-    setView("orders");
-    await load();
+    if (mutationRef.current || !editing || !window.confirm(`Excluir a compra ${editing.code}?`)) return;
+    mutationRef.current = true; setSaving(true); setError("");
+    try {
+      await apiClient.delete(`/api/purchasing/orders/${editing.id}`);
+      setEditing(null);
+      setView("orders");
+      setMessage("Compra excluída.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível excluir a compra.");
+    } finally { mutationRef.current = false; setSaving(false); }
   }
 
   async function addSupplier(event: React.FormEvent) {
     event.preventDefault();
+    if (supplierMutationRef.current) return;
     const name = supplierName.trim().replace(/\s+/g, " ");
     if (name.length < 2) {
       setSupplierError("Informe um nome de fornecedor com pelo menos 2 caracteres.");
       return;
     }
 
+    supplierMutationRef.current = true;
     setSupplierSaving(true);
     setSupplierError("");
     try {
@@ -485,6 +526,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
     } catch (reason) {
       setSupplierError(reason instanceof Error ? reason.message : "Não foi possível cadastrar o fornecedor.");
     } finally {
+      supplierMutationRef.current = false;
       setSupplierSaving(false);
     }
   }
@@ -530,7 +572,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           {companies.map((item) => <button key={item.code} className={company === item.code ? "active" : ""} onClick={() => setCompany(item.code)}>{item.label}</button>)}
         </div>
 
-        {error && <div className="purchase-alert error">{error}</div>}
+        {loadError && <div className="purchase-alert error" role="alert">{loadError}</div>}
+        {error && <div className="purchase-alert error" role="alert">{error}</div>}
         {message && <div className="purchase-alert success">{message}</div>}
 
         {view === "dashboard" && <>
@@ -584,7 +627,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
 
         {canViewValues && view === "report" && <PurchasingSpendingReport company={company} />}
 
-        {canViewValues && view === "new" && <form className="purchase-form" onSubmit={saveOrder}>
+        {canViewValues && view === "new" && <form className="purchase-form" onSubmit={saveOrder}><fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
           <div className="form-top"><button type="button" className="supplier-manager" onClick={() => { setSupplierError(""); setSupplierModal(true); }}><Settings size={17} />Cadastrar / selecionar fornecedor</button>{editing && <span className="purchase-code">{editing.code}</span>}</div>
           <div className="form-grid">
             <Field label="Empresa"><select value={form.company_code} disabled={editing?.status === "delivered"} onChange={(e) => setForm({ ...form, company_code: e.target.value as CompanyCode, inventory_destination: "", inventory_item_id: "", inventory_name: "" })}>{companies.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></Field>
@@ -669,7 +712,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             <Field label="Anexo" wide><label className="attachment-input"><Paperclip size={18} /><span>{attachment?.name || editing?.attachment_name || "Anexar pedido, boleto, nota ou comprovante"}</span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] || null)} /></label></Field>
           </div>
           <div className="form-actions">{editing && <button type="button" className="danger-button" onClick={deleteOrder}>Excluir compra</button>}<button type="button" className="secondary-button" onClick={() => setView("orders")}>Cancelar</button><motion.button className="save-button" disabled={saving} whileTap={{ scale: 0.98 }}>{saving ? "Salvando..." : editing ? "Salvar alterações" : "Salvar compra no sistema"}</motion.button></div>
-        </form>}
+        </fieldset></form>}
 
         {view === "audit" && <section className="purchase-panel"><div className="panel-title"><div><small>RASTREABILIDADE</small><h2>Histórico de ações</h2></div></div><div className="audit-list">{audit.map((item) => <article key={item.id}><History size={17} /><div><strong>{item.description}</strong><span>{item.user_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</span></div></article>)}{audit.length === 0 && <div className="empty-state">Nenhum evento de auditoria.</div>}</div></section>}
       </section>

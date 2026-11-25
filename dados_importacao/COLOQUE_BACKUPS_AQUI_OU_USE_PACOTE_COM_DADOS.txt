@@ -1,0 +1,5 @@
+Somente se o volume sentico-v14-recuperado_pgdata estiver AUSENTE ou VAZIO:
+coloque um arquivo banco_postgresql.tar.gz ou sentico-v14-recuperado_pgdata.tar.gz aqui.
+Para fotos e anexos, use sentico-v14-recuperado_uploads.tar.gz.
+Se o volume existir e contiver PG_VERSION=17, o instalador o reutiliza e IGNORA o backup.
+O instalador NUNCA apaga nem muda o nome dos 3 volumes sentico-v14-recuperado_*.

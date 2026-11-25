@@ -1,5 +1,6 @@
 import { ApiError, extractApiMessage } from "./apiError";
 import type { ApiRequestOptions } from "./types";
+import { buildApiUrl, fetchJson, TransportError } from "./requestPolicy";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") || "/api";
@@ -7,49 +8,6 @@ const API_BASE_URL =
 const DEFAULT_ERROR = "Não foi possível concluir a operação.";
 
 let redirectingToLogin = false;
-
-function isAbsoluteUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
-}
-
-function buildRequestUrl(url: string): string {
-  if (isAbsoluteUrl(url)) {
-    return url;
-  }
-
-  const normalizedPath = url.startsWith("/") ? url : `/${url}`;
-
-  if (
-    normalizedPath === API_BASE_URL ||
-    normalizedPath.startsWith(`${API_BASE_URL}/`)
-  ) {
-    return normalizedPath;
-  }
-
-  return `${API_BASE_URL}${normalizedPath}`;
-}
-
-function isJsonResponse(response: Response): boolean {
-  return (
-    response.headers
-      .get("content-type")
-      ?.includes("application/json") ?? false
-  );
-}
-
-async function readPayload(response: Response): Promise<unknown> {
-  if (response.status === 204) {
-    return undefined;
-  }
-
-  if (isJsonResponse(response)) {
-    return response.json().catch(() => undefined);
-  }
-
-  const text = await response.text().catch(() => "");
-
-  return text || undefined;
-}
 
 function handleUnauthorized(): void {
   if (
@@ -73,6 +31,7 @@ async function request<T>(
   const {
     redirectOnUnauthorized = true,
     headers: providedHeaders,
+    timeoutMs,
     ...requestOptions
   } = options;
 
@@ -93,30 +52,20 @@ async function request<T>(
   }
 
   let response: Response;
-
+  let payload: unknown;
   try {
-    response = await fetch(buildRequestUrl(url), {
+    ({ response, payload } = await fetchJson(buildApiUrl(url, API_BASE_URL), {
       credentials: "include",
       cache: "no-store",
       ...requestOptions,
       headers,
-    });
+    }, { timeoutMs }));
   } catch (error) {
-    if (
-      error instanceof DOMException &&
-      error.name === "AbortError"
-    ) {
-      throw error;
+    if (error instanceof TransportError) {
+      throw new ApiError(error.message, 0, error, error.requestId);
     }
-
-    throw new ApiError(
-      "Não foi possível conectar ao servidor. Verifique se a API está em execução.",
-      0,
-      error,
-    );
+    throw error;
   }
-
-  const payload = await readPayload(response);
 
   if (!response.ok) {
     const fallback =
@@ -124,7 +73,15 @@ async function request<T>(
         ? "Sua sessão expirou. Entre novamente."
         : response.status === 403
           ? "Você não tem permissão para realizar esta operação."
-          : DEFAULT_ERROR;
+          : response.status === 409
+            ? "Este registro foi atualizado por outra operação. Atualize os dados antes de salvar novamente."
+            : response.status === 413
+              ? "O arquivo ultrapassa o tamanho permitido. Escolha um arquivo menor."
+              : response.status === 429
+                ? "Muitas solicitações ao mesmo tempo. Aguarde alguns instantes e tente novamente."
+                : response.status >= 500
+                  ? "O servidor não conseguiu concluir a operação. Tente novamente após conferir o registro."
+                  : DEFAULT_ERROR;
 
     if (
       response.status === 401 &&
@@ -137,6 +94,7 @@ async function request<T>(
       extractApiMessage(payload, fallback),
       response.status,
       payload,
+      response.headers.get("x-request-id"),
     );
   }
 

@@ -156,7 +156,7 @@ def test_upload_item_photo_commits_document_and_link_together_and_returns_ids(ro
         file_path.write_bytes(b"JPEG")
         return SimpleNamespace(path=file_path, mime_type="image/jpeg", size_bytes=4, checksum_sha256="a" * 64)
 
-    async def dispatch(db, dispatch_id):
+    async def dispatch(db, dispatch_id, *, for_update=False):
         return SimpleNamespace(id=7, status="sent", work_order_id=5)
 
     async def order(db, order_id):
@@ -192,7 +192,7 @@ def test_upload_rollback_does_not_leave_orphan_file(router_module, monkeypatch, 
         file_path.write_bytes(b"JPEG")
         return SimpleNamespace(path=file_path, mime_type="image/jpeg", size_bytes=4, checksum_sha256="b" * 64)
 
-    async def dispatch(db, dispatch_id):
+    async def dispatch(db, dispatch_id, *, for_update=False):
         return SimpleNamespace(id=7, status="draft", work_order_id=5)
 
     async def order(db, order_id):
@@ -216,7 +216,7 @@ def test_upload_rollback_does_not_leave_orphan_file(router_module, monkeypatch, 
 
 
 def test_rejects_item_from_another_dispatch_before_file_storage(router_module, monkeypatch):
-    async def dispatch(db, dispatch_id):
+    async def dispatch(db, dispatch_id, *, for_update=False):
         return SimpleNamespace(id=7, status="draft", work_order_id=5)
 
     async def order(db, order_id):

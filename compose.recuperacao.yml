@@ -23,6 +23,8 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile.dev
     restart: unless-stopped
+    # A instalação operacional não reinicia a API por eventos do monitor de arquivos.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--workers", "2"]
     environment:
       APP_ENV: development
       SENTICO_DB_NAME: ${SENTICO_DB_NAME:?Banco nao identificado}
@@ -48,7 +50,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -58,16 +60,11 @@ services:
   web:
     build:
       context: ./apps/web
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      VITE_API_BASE_URL: /api
-      VITE_API_PROXY_TARGET: http://api:8000
-    volumes:
-      - ./apps/web:/app
-      - v14_node_modules:/app/node_modules
+    # Interface compilada: não depende de HMR nem de node_modules de versões antigas.
     ports:
-      - "127.0.0.1:5183:5173"
+      - "127.0.0.1:5183:8080"
     depends_on:
       api:
         condition: service_healthy
@@ -79,7 +76,7 @@ services:
     ports:
       - "127.0.0.1:5184:8080"
     volumes:
-      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.runtime:/etc/caddy/Caddyfile:ro
     depends_on:
       - web
     networks: [dev_private]

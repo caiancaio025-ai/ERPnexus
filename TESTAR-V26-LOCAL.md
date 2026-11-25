@@ -1,3 +1,5 @@
+> **V48:** o atalho `TESTAR-V26-LOCAL.cmd` agora encaminha para `TESTAR_SENTICO.cmd`, sem trocar branches. O texto abaixo é histórico da V26. O script original foi preservado como texto em `historico_documentacao/TESTAR-V26-LOCAL_ORIGINAL.txt`.
+
 # Testar a V26 localmente (sem tocar na produção nem nos seus dados reais)
 
 Este guia sobe a branch **`feat/v16-v26-outro-dev`** num ambiente Docker **isolado**, só pra você clicar e testar antes de qualquer deploy.

@@ -333,8 +333,13 @@ async def _update_grouped_installment(
     db.add(obligation)
 
 
-async def _work_order_or_404(db: AsyncSession, work_order_id: int) -> LaboratoryWorkOrder:
-    work_order = await db.get(LaboratoryWorkOrder, work_order_id)
+async def _work_order_or_404(
+    db: AsyncSession, work_order_id: int, *, for_update: bool = False,
+) -> LaboratoryWorkOrder:
+    query = select(LaboratoryWorkOrder).where(LaboratoryWorkOrder.id == work_order_id)
+    if for_update:
+        query = query.with_for_update(of=LaboratoryWorkOrder).execution_options(populate_existing=True)
+    work_order = await db.scalar(query)
     if not work_order or work_order.is_cancelled or work_order.is_inactive:
         raise HTTPException(status_code=404, detail="OS não encontrada ou cancelada.")
     return work_order
@@ -973,7 +978,7 @@ async def create_obligation(
     work_order = None
     billing_compliance = None
     if payload.entry_type == "income" and payload.work_order_id:
-        work_order = await _work_order_or_404(db, payload.work_order_id)
+        work_order = await _work_order_or_404(db, payload.work_order_id, for_update=True)
         if work_order.company_code != payload.company_code:
             raise HTTPException(
                 status_code=422,
@@ -1270,7 +1275,7 @@ async def create_entry(
     billing_compliance = None
 
     if payload.entry_type == "income" and work_order_id:
-        work_order = await _work_order_or_404(db, work_order_id)
+        work_order = await _work_order_or_404(db, work_order_id, for_update=True)
         if work_order.company_code != payload.company_code:
             raise HTTPException(status_code=422, detail="A OS pertence a outra empresa do grupo.")
         billing_compliance = await _validate_billing_confirmation(
@@ -1343,7 +1348,7 @@ async def update_entry(
         work_order_id = data.pop("work_order_id", None)
         work_order = None
         if payload.entry_type == "income" and work_order_id:
-            work_order = await _work_order_or_404(db, work_order_id)
+            work_order = await _work_order_or_404(db, work_order_id, for_update=True)
             if work_order.company_code != payload.company_code:
                 raise HTTPException(status_code=422, detail="A OS pertence a outra empresa do grupo.")
             entry.billing_compliance = await _validate_billing_confirmation(

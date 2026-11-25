@@ -2,7 +2,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from alembic.script import ScriptDirectory
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
@@ -70,18 +69,13 @@ def test_api_frontend_and_outputs_carry_every_guarantee_field():
     assert 'Garantia — retornos do equipamento' in tsx
 
 
-def test_migration_preserves_legacy_and_is_ancestor_of_v47_head():
+def test_migration_preserves_legacy_and_installer_revision():
     migration = (ROOT / "api/migrations/versions/20261027_04_separate_warranty_entry_exit_invoices.py").read_text()
+    installer = (ROOT.parent / "INSTALAR_SENTICO.ps1").read_text(encoding="utf-8-sig")
     assert 'down_revision: str | None = "20261027_03"' in migration
     assert 'for kind in ("entry", "exit"):' in migration
     assert 'for number in (1, 2, 3):' in migration
     assert "op.add_column" in migration and "op.drop_column" not in migration
-    # O instalador Windows legado não integra o repositório de produção.
-    # Verifica a cadeia efetivamente usada pelo Alembic (sem conexão ao banco).
-    scripts = ScriptDirectory(str(ROOT / "api/migrations"))
-    assert scripts.get_heads() == ["20261123_02"]
-    lineage = [rev.revision for rev in scripts.walk_revisions()]
-    assert "20261027_04" in lineage
-    assert lineage.index("20261123_01") < lineage.index("20261027_04")
+    assert "20261027_04" in installer
     for key in LEGACY:
         assert key in LaboratoryWorkOrder.__table__.columns

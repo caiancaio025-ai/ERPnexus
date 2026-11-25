@@ -1,0 +1,38 @@
+{
+  "completed_at_utc": "2026-11-25T18:00:08.497149+00:00",
+  "frontend_build": "passed after final gestao access fix",
+  "node_tests": {
+    "passed": 18,
+    "quote_legacy_assertions_passed": 20,
+    "failed": 0,
+    "log": "frontend-node-tests.log"
+  },
+  "browser_mocked_api": {
+    "passed": 18,
+    "failed": 0,
+    "role": "gestao",
+    "modules": [],
+    "report": "navegador-api-controlada.json"
+  },
+  "browser_real_stack": {
+    "passed": 12,
+    "failed": 0,
+    "postgres": "17.12",
+    "role": "gestao",
+    "modules": [],
+    "api_mocks": false,
+    "page_errors": 0,
+    "http_errors": 0,
+    "report": "navegador-api-postgresql-reais.json"
+  },
+  "legacy_installer_checks_previous_run": {
+    "v26": 11,
+    "v27": 19,
+    "v29": 11,
+    "total": 41,
+    "failed": 0,
+    "note": "Tool output from previous successful run; no separate log saved."
+  },
+  "final_source_change": "CustomerMaster includes gestao alongside admin/super_admin, matching the existing backend access rule. Browser regression fixture uses gestao with modules=[].",
+  "real_stack_request_cancellations": "results.json retains three canceled GET requests (net::ERR_ABORTED) observed during navigation; all writes were acknowledged and independently read back."
+}

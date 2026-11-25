@@ -5,20 +5,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.purchasing.models import PurchaseOrder
+from app.purchasing.numbering import next_purchasing_code
 from app.purchasing.schemas import PurchaseSummary
 
 
 async def next_purchase_code(db: AsyncSession) -> str:
-    current_year = date.today().year
-    prefix = f"PC-{current_year}-"
-    latest = await db.scalar(
-        select(PurchaseOrder.code)
-        .where(PurchaseOrder.code.like(f"{prefix}%"))
-        .order_by(PurchaseOrder.id.desc())
-        .limit(1)
-    )
-    sequence = int(latest.rsplit("-", 1)[-1]) + 1 if latest else 1
-    return f"{prefix}{sequence:04d}"
+    return await next_purchasing_code(db, PurchaseOrder.code, "PC")
 
 
 async def build_purchase_summary(

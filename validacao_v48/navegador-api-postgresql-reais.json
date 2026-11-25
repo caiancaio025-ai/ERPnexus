@@ -1,0 +1,83 @@
+{
+  "backend": "real FastAPI and migrated PostgreSQL; no API mocks",
+  "postgres": "PostgreSQL 17.12 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit",
+  "checks": [
+    {
+      "check": "create purchase through UI and verify actual database persistence",
+      "purchase_id": 1,
+      "amount": "1234.56"
+    },
+    {
+      "check": "edit and reopen purchase in real browser; verify title and notes after reload"
+    },
+    {
+      "check": "edit and reopen OS through UI; delta PATCH persists and preserves unchanged values",
+      "version": 2,
+      "payload": {
+        "model": "ATV630-HOMOLOGADO",
+        "internal_notes": "Edição real do navegador validada no PostgreSQL",
+        "version": 1
+      }
+    },
+    {
+      "check": "real module navigation /painel",
+      "heading": "Visão da Gestão"
+    },
+    {
+      "check": "real module navigation /compras",
+      "heading": "Compras e entregas"
+    },
+    {
+      "check": "real module navigation /laboratorio",
+      "heading": "Operação técnica e rastreabilidade"
+    },
+    {
+      "check": "real module navigation /estoque",
+      "heading": "Estoque técnico"
+    },
+    {
+      "check": "real module navigation /comercial",
+      "heading": "Operação comercial"
+    },
+    {
+      "check": "real module navigation /financeiro",
+      "heading": "Painel de operações"
+    },
+    {
+      "check": "real module navigation /clientes",
+      "heading": "Clientes"
+    },
+    {
+      "check": "real module navigation /colaboradores",
+      "heading": "Colaboradores"
+    },
+    {
+      "check": "real module navigation /notificacoes",
+      "heading": "Central de notificações"
+    }
+  ],
+  "page_errors": [],
+  "http_errors": [],
+  "request_failures": [
+    {
+      "url": "http://127.0.0.1:5173/api/notifications?limit=10",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/dashboard/summary?periodo=todos",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/notifications/history?page=1&page_size=25",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "authenticated_role": "gestao",
+  "fixture_ids": {
+    "customer": 1,
+    "supplier": 3,
+    "work_order": 1
+  },
+  "status": "passed",
+  "passed": 12
+}

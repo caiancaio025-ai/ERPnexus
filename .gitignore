@@ -30,3 +30,9 @@ secrets/
 .env.*
 !.env.example
 !.env.dev.example
+
+# Evidencias da V48; resultados locais permanecem fora do Git.
+!validacao_v48/*.log
+resultados_testes/
+dados_importacao/*
+!dados_importacao/COLOQUE_BACKUPS_AQUI_OU_USE_PACOTE_COM_DADOS.txt

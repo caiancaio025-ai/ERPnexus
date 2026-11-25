@@ -47,7 +47,7 @@ def test_quote_save_v42_transaction_confirms_values_without_removing_revision(mo
         stub.get_db = get_db
         monkeypatch.setitem(sys.modules, 'app.core.db', stub)
     from app.laboratory import router as endpoint
-    async def fake_work_order(db, pk): return SimpleNamespace(id=pk,number='OS-30740')
+    async def fake_work_order(db, pk, **kwargs): return SimpleNamespace(id=pk,number='OS-30740')
     async def fake_activity(*args, **kwargs): return None
     monkeypatch.setattr(endpoint,'_work_order_or_404',fake_work_order)
     monkeypatch.setattr(endpoint,'work_order_activity',fake_activity)

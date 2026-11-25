@@ -1,16 +1,64 @@
-> **Instalador atual:** use apenas `INICIAR_SENTICO.cmd` na raiz do pacote. Este documento descreve versões antigas e foi mantido para referência histórica. Veja `LEIA_PRIMEIRO_SENTICO.md`.
+# SÊNTICO / ERPnexus — V48
 
-> **Atualizacao do kit com instalador (22/10/2026):** use `INICIAR_SENTICO_GREEN.cmd` na raiz do pacote. Ele pre-cadastra automaticamente o usuario **adm**, senha **123**, e-mail ficticio `adm@.com.br` no banco local e conclui migrations. Instrucoes antigas para cadastrar um administrador manualmente aplicam-se somente a instalacao manual sem o instalador. Nao usar essas credenciais em producao.
+Versão de 25/11/2026 com correções de gravação em Compras e ordens de serviço, preservação de campos em edições, controle de operações simultâneas e recuperação de falhas de comunicação.
 
-# SÊNTICO Green — Codigo de desenvolvimento
+## Instalação local no Windows
 
-Este diretorio contem backend FastAPI, frontend React/Vite, migrations Alembic, testes e Docker Compose.
+1. Faça backup do banco e dos uploads da instalação existente.
+2. Baixe e extraia o repositório completo, ou utilize um checkout atualizado da branch `main`.
+3. Abra o Docker Desktop com containers Linux.
+4. Execute **`INICIAR_SENTICO.cmd`** na raiz e aguarde `SENTICO_INICIADO=OK`.
+5. Acesse **http://127.0.0.1:5184/** e pressione Ctrl+F5.
+6. Confira **http://127.0.0.1:5184/api/health/version**: deve informar `"version":"48"`.
 
-**Instalacao recomendada no Windows:** volte uma pasta e dê duplo clique em `INICIAR_SENTICO_GREEN.cmd`.
-O instalador ja sabe que o codigo reside neste diretorio e gerencia a senha do banco, a criacao de administrador e as migrations na ordem correta.
+O instalador preserva o projeto operacional `sentico-v14-recuperado` e reutiliza os volumes existentes de PostgreSQL e uploads. Não remova volumes para atualizar. A V48 não acrescenta migração de estrutura; a revisão atual permanece `20261123_02`.
 
-**Leia:** `../LEIA_PRIMEIRO_INSTALACAO.md` e `../RELATORIO_INSTALADOR_20261022.md`.
+Leia o procedimento completo em [LEIA_PRIMEIRO_SENTICO.md](LEIA_PRIMEIRO_SENTICO.md).
 
-O Compose de desenvolvimento utiliza `compose.dev.yml`, projeto isolado `sentico-dev-entrega`, com PostgreSQL novo e portas localhost. Ele compila API e Web a partir do codigo; imagens privadas da VPS nao sao distribuidas.
+## Correções principais
 
-Nao execute `alembic upgrade head` diretamente num banco vazio: a migration `20261009_02` exige um usuario previo. Nao use o banco Blue/Green da VPS nem credenciais reais.
+- Compras e solicitações preservam informações não editadas e retornam corretamente o destino de estoque.
+- Reenvio de anexo usa a compra já confirmada; recebimentos e numeração possuem proteção contra concorrência.
+- A edição de OS envia apenas os campos modificados e verifica a versão antes de gravar.
+- Falhas de consulta posteriores a uma gravação confirmada não são apresentadas como falha de salvamento.
+- Ajustes em Orçamentos, Estoque, Comercial, Financeiro, Clientes, Colaboradores e Notificações.
+- Interface operacional compilada e API sem recarga automática de código.
+
+O [relatório V48](RELATORIO_V48_ESTABILIDADE_E_TESTES.md) descreve causas, alterações e limites da validação.
+
+## Testes
+
+A validação da versão entregue terminou com **665 testes Python aprovados, zero falhas e sete testes históricos ignorados** por ausência dos CSVs privados necessários. Também passaram a compilação TypeScript/Vite, 18 testes JavaScript, 61 verificações adicionais, 18 cenários de navegador com respostas controladas e 12 verificações de navegador com API/PostgreSQL reais.
+
+Execute **`TESTAR_SENTICO.cmd`** para repetir os testes automatizados em um banco temporário separado. O projeto `sentico-v48-testes` não publica portas nem monta volumes operacionais. O resultado fica em `resultados_testes/api-e-instalador.xml`.
+
+Após adaptar os caminhos para este repositório, a suíte foi executada novamente no checkout: **665 aprovados, sete ignorados e nenhuma falha**. O build da interface e os testes JavaScript também passaram. Os resultados desta conferência têm prefixo `github-` na pasta de evidências.
+
+As evidências da entrega estão em [validacao_v48](validacao_v48/). Os testes de navegador ficam em `apps/web/tests/browser-reliability.py` e exigem Playwright/Chromium. O ambiente Windows/Docker operacional não foi acessado durante a validação registrada.
+
+## Organização
+
+| Caminho | Conteúdo |
+|---|---|
+| `apps/api/` | API FastAPI, migrações, dependências fixadas e testes. |
+| `apps/web/` | Interface React/TypeScript, build Vite e testes. |
+| `compose.recuperacao.yml` | Instalação local gerenciada por `INICIAR_SENTICO.cmd`. |
+| `compose.tests.yml` | Ambiente descartável de testes. |
+| `compose.dev.yml` | Ambiente de desenvolvimento separado. |
+| `testes_instalador/` | Verificações do instalador e de compatibilidade. |
+| `scripts_recuperacao/` | Ferramentas usadas pelo instalador local. |
+| `infra/vps/` | Infraestrutura e procedimentos existentes da VPS. |
+
+O repositório mantém a estrutura anterior com `apps/` na raiz. No ZIP V48 entregue na conversa, a mesma aplicação fica em `codigo-fonte/apps/`; somente os caminhos de instalação e teste foram adaptados para este repositório.
+
+## VPS e procedimentos anteriores
+
+**Atualizar este repositório não atualiza automaticamente a VPS.** O Compose de produção, os volumes externos, as redes e os scripts de backup existentes foram preservados.
+
+O arquivo `infra/vps/atualizar.sh` é um procedimento restrito à V47, com commits e imagens fixados. Ele mantém suas verificações e **não deve ser usado como instalador da V48**. Consulte [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md) para entender o escopo histórico. Não há implantação automática adicionada nesta atualização.
+
+O atalho antigo `TESTAR-V26-LOCAL.cmd` agora encaminha para `TESTAR_SENTICO.cmd`, sem trocar a branch atual. Seu conteúdo original foi preservado como texto em `historico_documentacao/TESTAR-V26-LOCAL_ORIGINAL.txt`. `TESTAR-V26-LOCAL.md` e relatórios de versões anteriores são históricos.
+
+## Diagnóstico
+
+Execute **`DIAGNOSTICAR_SENTICO.cmd`** para consultar versão, disponibilidade da API/banco, reinícios e volumes. Se uma gravação tiver resultado incerto por perda de conexão, consulte o registro antes de reenviar e anote a referência exibida na mensagem.

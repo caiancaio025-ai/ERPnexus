@@ -1,0 +1,38 @@
+name: sentico-v48-testes
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sentico_test
+      POSTGRES_USER: sentico_test
+      POSTGRES_PASSWORD: isolated_test_only
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentico_test -d sentico_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  api-tests:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.tests
+    environment:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://sentico_test:isolated_test_only@db:5432/sentico_test
+      SENTICO_TEST_DATABASE_URL: postgresql+psycopg://sentico_test:isolated_test_only@db:5432/sentico_test
+      SENTICO_ISOLATED_TEST_RUN: "1"
+      STORAGE_ROOT: /tmp/sentico-test-uploads
+      ALLOWED_HOSTS: localhost,127.0.0.1,api,testserver
+      CORS_ORIGINS: http://localhost:5173
+      TEST_REPORT_DIR: /test-results
+      RUN_DB_PERFORMANCE_TESTS: "1"
+    volumes:
+      - ./resultados_testes:/test-results
+    depends_on:
+      db:
+        condition: service_healthy
+  web-tests:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.tests

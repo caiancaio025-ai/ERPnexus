@@ -6,8 +6,17 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 
 BASE = Path(__file__).resolve().parents[1] / "scripts" / "finance_reconcile_data"
+
+# This historical audit requires private recovery CSVs, absent from the supplied
+# release. Never fabricate financial rows to make the archived audit pass.
+pytestmark = pytest.mark.skipif(
+    not BASE.is_dir(),
+    reason="Manifestos privados da conciliação histórica não incluídos no pacote.",
+)
 
 
 def rows(name: str):

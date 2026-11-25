@@ -40,7 +40,9 @@ async def move_stock(
     user_id: int, work_order_id: int | None = None,
     reversal_of_id: int | None = None, note: str | None = None,
 ) -> InventoryMovement:
-    item = await db.scalar(select(InventoryItem).where(InventoryItem.id == item_id).with_for_update())
+    item = await db.scalar(select(InventoryItem).where(
+        InventoryItem.id == item_id,
+    ).with_for_update().execution_options(populate_existing=True))
     if item is None:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     if not item.is_active:
@@ -50,7 +52,7 @@ async def move_stock(
     if kind in {"issue", "return"}:
         work_order = await db.scalar(select(LaboratoryWorkOrder).where(
             LaboratoryWorkOrder.id == work_order_id
-        ).with_for_update(of=LaboratoryWorkOrder))
+        ).with_for_update(of=LaboratoryWorkOrder).execution_options(populate_existing=True))
         if work_order is None or work_order.is_cancelled:
             raise HTTPException(status_code=404, detail="O.S. inexistente ou cancelada.")
         if work_order.company_code != item.company_code:
@@ -62,7 +64,8 @@ async def move_stock(
     unit_cost = item.unit_cost
     if kind == "return":
         original = await db.scalar(
-            select(InventoryMovement).where(InventoryMovement.id == reversal_of_id).with_for_update()
+            select(InventoryMovement).where(InventoryMovement.id == reversal_of_id)
+            .with_for_update().execution_options(populate_existing=True)
         )
         if original is None or original.kind != "issue" or original.item_id != item_id or original.work_order_id != work_order_id:
             raise HTTPException(status_code=409, detail="Saída original inválida para devolução.")

@@ -6,11 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 RUN groupadd --system nexus && useradd --system --gid nexus --home-dir /app nexus
 
-COPY pyproject.toml ./
+COPY pyproject.toml requirements-v48.lock ./
 COPY app ./app
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN pip install --no-cache-dir ".[auth,ai]" \
+RUN pip install --no-cache-dir -c requirements-v48.lock ".[auth,ai]" \
     && mkdir -p /app/storage \
     && chown -R nexus:nexus /app
 

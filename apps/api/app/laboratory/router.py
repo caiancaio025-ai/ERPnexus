@@ -105,6 +105,7 @@ from app.laboratory.service import (
     apply_work_order_update,
     find_or_create_equipment,
     list_work_orders_page,
+    merge_work_order_patch,
     next_work_order_number,
     next_free_storage_location,
     ensure_storage_location_available,
@@ -183,11 +184,13 @@ async def _validate_customer_company(
     db: AsyncSession,
     customer_id: int | None,
     company_code: str,
+    *,
+    allow_inactive: bool = False,
 ) -> None:
     if customer_id is None:
         return
     customer = await db.get(LaboratoryCustomer, customer_id)
-    if customer is None or not customer.is_active:
+    if customer is None or (not customer.is_active and not allow_inactive):
         raise HTTPException(status_code=422, detail="Cliente inexistente ou inativo.")
     if customer.company_code != company_code:
         raise HTTPException(
@@ -351,15 +354,39 @@ def _active_substatus_codes(work_order: LaboratoryWorkOrder) -> list[str]:
     return sorted(row.code for row in work_order.substatuses if row.is_active)
 
 
-async def _work_order_or_404(db: AsyncSession, work_order_id: int) -> LaboratoryWorkOrder:
-    work_order = await db.scalar(
+async def _work_order_or_404(
+    db: AsyncSession, work_order_id: int, *, for_update: bool = False,
+) -> LaboratoryWorkOrder:
+    query = (
         select(LaboratoryWorkOrder)
         .where(LaboratoryWorkOrder.id == work_order_id)
         .execution_options(populate_existing=True)
     )
+    if for_update:
+        # OF evita tentar bloquear o lado anulável dos LEFT JOINs de equipamento
+        # e técnico. A versão só pode ser conferida depois de adquirir este lock.
+        query = query.with_for_update(of=LaboratoryWorkOrder)
+    work_order = await db.scalar(query)
     if not work_order:
         raise HTTPException(status_code=404, detail="OS não encontrada.")
     return work_order
+
+
+async def _quote_for_write_or_404(db: AsyncSession, quote_id: int) -> LaboratoryQuote:
+    """Serializa orçamento/revisão/emissão na O.S. antes de alterar o rascunho."""
+    work_order_id = await db.scalar(
+        select(LaboratoryQuote.work_order_id).where(LaboratoryQuote.id == quote_id)
+    )
+    if work_order_id is None:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    await _work_order_or_404(db, work_order_id, for_update=True)
+    quote = await db.scalar(
+        select(LaboratoryQuote).where(LaboratoryQuote.id == quote_id)
+        .with_for_update(of=LaboratoryQuote).execution_options(populate_existing=True)
+    )
+    if quote is None:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    return quote
 
 
 def _to_work_order_output(
@@ -484,6 +511,9 @@ def _to_quote_output(quote: LaboratoryQuote, *, include_sensitive_values: bool) 
 async def _issue_tracking_token(db: AsyncSession, work_order: LaboratoryWorkOrder) -> str:
     """Gera o token uma única vez e persiste. Reaproveitado nas próximas
     chamadas -- essencial para que um QR já impresso nunca pare de funcionar."""
+    work_order = await _work_order_or_404(db, work_order.id, for_update=True)
+    if work_order.tracking_token:
+        return work_order.tracking_token
     while True:
         candidate = secrets.token_hex(16)
         exists = await db.scalar(
@@ -686,8 +716,15 @@ async def summary(
 async def _painting_dispatch_or_404(
     db: AsyncSession,
     dispatch_id: int,
+    *,
+    for_update: bool = False,
 ) -> LaboratoryMechanicalPaintingDispatch:
-    row = await db.get(LaboratoryMechanicalPaintingDispatch, dispatch_id)
+    query = select(LaboratoryMechanicalPaintingDispatch).where(
+        LaboratoryMechanicalPaintingDispatch.id == dispatch_id,
+    )
+    if for_update:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    row = await db.scalar(query)
     if row is None:
         raise HTTPException(status_code=404, detail="Controle de pintura não encontrado.")
     return row
@@ -1606,9 +1643,20 @@ async def update_work_order(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    work_order = await _work_order_or_404(db, work_order_id)
+    work_order = await _work_order_or_404(db, work_order_id, for_update=True)
     if work_order.is_inactive:
         raise HTTPException(status_code=409, detail="OS inativada não pode ser alterada.")
+    if work_order.version != payload.version:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta OS foi alterada por outra pessoa. Recarregue antes de salvar.",
+        )
+    if payload.model_fields_set == {"version"}:
+        return _to_work_order_output(
+            work_order, include_sensitive_values=user_can_view_sensitive_values(user.role),
+        )
+    changed_fields = payload.model_fields_set - {"version"}
+    payload = merge_work_order_patch(work_order, payload)
     if payload.company_code != work_order.company_code:
         from app.inventory.models import InventoryMovement
         inventory_linked = await db.scalar(select(InventoryMovement.id).where(
@@ -1617,12 +1665,11 @@ async def update_work_order(
         if inventory_linked is not None:
             raise HTTPException(409, "Não é permitido alterar a empresa de uma O.S. com peças de estoque.")
         await _active_company_or_422(db, payload.company_code)
-    await _validate_customer_company(db, payload.customer_id, payload.company_code)
-    if work_order.version != payload.version:
-        raise HTTPException(
-            status_code=409,
-            detail="Esta OS foi alterada por outra pessoa. Recarregue antes de salvar.",
-        )
+    await _validate_customer_company(
+        db, payload.customer_id, payload.company_code,
+        allow_inactive=(payload.customer_id == work_order.customer_id
+                        and payload.company_code == work_order.company_code),
+    )
 
     equipment = await find_or_create_equipment(
         db,
@@ -1636,6 +1683,8 @@ async def update_work_order(
         power=payload.power,
         voltage=payload.voltage,
         user_id=user.id,
+        existing_equipment_id=work_order.equipment_id,
+        changed_fields=changed_fields,
     )
 
     apply_work_order_update(
@@ -1676,7 +1725,7 @@ async def inactivate_work_order(
     db: AsyncSession = DB_DEP,
 ):
     _require_master_management(user)
-    work_order = await _work_order_or_404(db, work_order_id)
+    work_order = await _work_order_or_404(db, work_order_id, for_update=True)
     if work_order.is_inactive:
         raise HTTPException(status_code=409, detail="A OS já está inativada.")
     if work_order.version != payload.version:
@@ -1736,7 +1785,7 @@ async def change_status(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    work_order = await _work_order_or_404(db, work_order_id)
+    work_order = await _work_order_or_404(db, work_order_id, for_update=True)
     if work_order.is_inactive:
         raise HTTPException(status_code=409, detail="OS inativada não pode mudar de status.")
     if work_order.version != payload.version:
@@ -1852,7 +1901,9 @@ async def toggle_substatus(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    work_order = await _work_order_or_404(db, work_order_id)
+    work_order = await _work_order_or_404(db, work_order_id, for_update=True)
+    if work_order.is_inactive:
+        raise HTTPException(status_code=409, detail="OS inativada não pode mudar de substatus.")
     if work_order.version != payload.version:
         raise HTTPException(
             status_code=409,
@@ -2078,7 +2129,7 @@ async def upload_mechanics_painting_photo(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    dispatch = await _painting_dispatch_or_404(db, dispatch_id)
+    dispatch = await _painting_dispatch_or_404(db, dispatch_id, for_update=True)
     work_order = await _work_order_or_404(db, dispatch.work_order_id)
     if phase == "outbound" and dispatch.status != "draft":
         raise HTTPException(status_code=409, detail="Fotos da saída só podem ser anexadas antes do envio.")
@@ -2185,7 +2236,7 @@ async def send_mechanics_painting(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    dispatch = await _painting_dispatch_or_404(db, dispatch_id)
+    dispatch = await _painting_dispatch_or_404(db, dispatch_id, for_update=True)
     if dispatch.status != "draft":
         raise HTTPException(status_code=409, detail="Somente um rascunho pode ser enviado para pintura.")
 
@@ -2241,7 +2292,7 @@ async def update_mechanics_painting_item(
     item = await db.get(LaboratoryMechanicalPaintingItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item da pintura não encontrado.")
-    dispatch = await _painting_dispatch_or_404(db, item.dispatch_id)
+    dispatch = await _painting_dispatch_or_404(db, item.dispatch_id, for_update=True)
     if dispatch.status != "sent":
         raise HTTPException(
             status_code=409,
@@ -2271,7 +2322,7 @@ async def return_mechanics_painting(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    dispatch = await _painting_dispatch_or_404(db, dispatch_id)
+    dispatch = await _painting_dispatch_or_404(db, dispatch_id, for_update=True)
     if dispatch.status != "sent":
         raise HTTPException(status_code=409, detail="Este controle não está aguardando retorno.")
 
@@ -2346,7 +2397,7 @@ async def create_quote(
     db: AsyncSession = DB_DEP,
 ):
     _require_quote_permission(user)
-    await _work_order_or_404(db, work_order_id)
+    await _work_order_or_404(db, work_order_id, for_update=True)
     existing_draft = await db.scalar(
         select(LaboratoryQuote)
         .where(
@@ -2435,9 +2486,7 @@ async def create_quote_revision(
     db: AsyncSession = DB_DEP,
 ):
     _require_quote_permission(user)
-    source = await db.get(LaboratoryQuote, quote_id)
-    if source is None:
-        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    source = await _quote_for_write_or_404(db, quote_id)
     if source.status != "emitted" and source.emitted_at is None:
         raise HTTPException(status_code=409, detail="A revisão de origem precisa estar emitida.")
     existing_draft = await db.scalar(select(LaboratoryQuote).where(
@@ -2500,9 +2549,7 @@ async def update_quote(
     db: AsyncSession = DB_DEP,
 ):
     _require_quote_permission(user)
-    quote = await db.get(LaboratoryQuote, quote_id)
-    if not quote:
-        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    quote = await _quote_for_write_or_404(db, quote_id)
     if quote.status == "emitted" or quote.emitted_at is not None:
         raise HTTPException(
             status_code=409,
@@ -2547,9 +2594,7 @@ async def delete_quote(
     db: AsyncSession = DB_DEP,
 ):
     _require_quote_permission(user)
-    quote = await db.get(LaboratoryQuote, quote_id)
-    if not quote:
-        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    quote = await _quote_for_write_or_404(db, quote_id)
     if quote.status == "emitted" or quote.emitted_at is not None:
         raise HTTPException(
             status_code=409,
@@ -2580,7 +2625,10 @@ async def quote_pdf_endpoint(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    quote = await db.get(LaboratoryQuote, quote_id)
+    quote = (
+        await db.get(LaboratoryQuote, quote_id) if preview
+        else await _quote_for_write_or_404(db, quote_id)
+    )
     if not quote:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
     work_order = await _work_order_or_404(db, quote.work_order_id)
@@ -2655,6 +2703,7 @@ async def quote_pdf_endpoint(
                 active=True,
                 user_id=user.id,
             )
+            work_order.version += 1
         await work_order_activity(db, actor=user, work_order=work_order, module="orcamentos", action="quote_issued",
             title=f"Orçamento emitido · OS {work_order.number}",
             message=f"{user.name} emitiu a revisão {quote.revision} do orçamento.", severity="success")

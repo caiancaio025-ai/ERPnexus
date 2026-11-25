@@ -146,7 +146,28 @@ async def next_free_storage_location(db: AsyncSession) -> str:
 def normalize_serial(serial: str | None) -> str | None:
     if not serial:
         return None
-    return re.sub(r"[^A-Z0-9]", "", serial.upper())
+    return re.sub(r"[^A-Z0-9]", "", serial.upper()) or None
+
+
+def merge_work_order_patch(work_order, payload):
+    """Preserva os campos omitidos no PATCH e os dados históricos da O.S.
+
+    O payload já validou os campos recebidos. Não revalidamos valores antigos
+    que o usuário não editou (por exemplo, um laudo vazio importado).
+    """
+    from app.laboratory.schemas import WorkOrderInput
+
+    equipment_fields = {"manufacturer", "model", "equipment_type", "power", "voltage"}
+    values = {}
+    for name in WorkOrderInput.model_fields:
+        if name in equipment_fields:
+            values[name] = getattr(work_order.equipment, name, None)
+        elif name == "serial_number":
+            values[name] = work_order.equipment_serial
+        else:
+            values[name] = getattr(work_order, name, None)
+    values.update(payload.model_dump(exclude_unset=True, exclude={"version"}))
+    return WorkOrderInput.model_construct(**values)
 
 
 def apply_work_order_update(
@@ -196,9 +217,9 @@ def apply_work_order_update(
     work_order.warranty_exit_invoice_access_key_2 = payload.warranty_exit_invoice_access_key_2
     work_order.warranty_exit_invoice_access_key_3 = payload.warranty_exit_invoice_access_key_3
     if include_sensitive_values:
-        work_order.parts_cost = payload.parts_cost or None
-        work_order.quoted_value = payload.quoted_value or None
-        work_order.approved_value = payload.approved_value or None
+        work_order.parts_cost = None if payload.parts_cost in (None, "") else payload.parts_cost
+        work_order.quoted_value = None if payload.quoted_value in (None, "") else payload.quoted_value
+        work_order.approved_value = None if payload.approved_value in (None, "") else payload.approved_value
     work_order.internal_notes = payload.internal_notes
     work_order.customer_notes = payload.customer_notes
 
@@ -253,26 +274,70 @@ async def find_or_create_equipment(
     power: str | None,
     voltage: str | None,
     user_id: int,
+    existing_equipment_id: int | None = None,
+    changed_fields: set[str] | None = None,
 ) -> LaboratoryEquipment:
     """Reaproveita o cadastro de equipamento existente pelo serial (por empresa);
     se não houver serial ou não encontrar, cria um novo registro."""
     serial_normalized = normalize_serial(serial_number)
     equipment = None
-    if serial_normalized:
+    preserve_identity = (existing_equipment_id is not None and changed_fields is not None
+                         and not changed_fields.intersection({"serial_number", "company_code"}))
+    if serial_normalized and not preserve_identity:
+        # Uma busca seguida de INSERT sem exclusão mútua falhava quando duas
+        # O.S. do mesmo equipamento eram abertas/salvas simultaneamente.
+        if db.get_bind().dialect.name == "postgresql":
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:equipment_key))"),
+                {"equipment_key": f"laboratory-equipment:{company_code}:{serial_normalized}"},
+            )
         equipment = await db.scalar(
             select(LaboratoryEquipment).where(
                 LaboratoryEquipment.company_code == company_code,
                 LaboratoryEquipment.serial_normalized == serial_normalized,
-            )
+            ).with_for_update(of=LaboratoryEquipment).execution_options(populate_existing=True)
         )
+    if equipment is None and existing_equipment_id is not None:
+        equipment = await db.scalar(
+            select(LaboratoryEquipment).where(
+                LaboratoryEquipment.id == existing_equipment_id,
+                LaboratoryEquipment.company_code == company_code,
+            ).with_for_update(of=LaboratoryEquipment).execution_options(populate_existing=True)
+        )
+        if (equipment is not None and not preserve_identity
+                and serial_normalized != equipment.serial_normalized):
+            linked_orders = int(await db.scalar(
+                select(func.count(LaboratoryWorkOrder.id)).where(
+                    LaboratoryWorkOrder.equipment_id == equipment.id,
+                )
+            ) or 0)
+            if linked_orders > 1:
+                # Corrigir a identidade de uma O.S. não pode renumerar o
+                # equipamento compartilhado com outras O.S. históricas.
+                equipment = None
     if equipment:
-        equipment.customer_id = customer_id
-        equipment.customer_name = customer_name
-        equipment.manufacturer = manufacturer or equipment.manufacturer
-        equipment.model = model or equipment.model
-        equipment.equipment_type = equipment_type or equipment.equipment_type
-        equipment.power = power or equipment.power
-        equipment.voltage = voltage or equipment.voltage
+        if existing_equipment_id is not None:
+            values = {
+                "customer_id": customer_id, "customer_name": customer_name,
+                "serial_number": serial_number, "manufacturer": manufacturer,
+                "model": model, "equipment_type": equipment_type,
+                "power": power, "voltage": voltage,
+            }
+            # Equipamentos podem ser compartilhados por várias O.S. Um PATCH
+            # de um campo não pode restaurar valores antigos dos demais campos.
+            for name, value in values.items():
+                if changed_fields is None or name in changed_fields:
+                    setattr(equipment, name, value)
+            if changed_fields is None or "serial_number" in changed_fields:
+                equipment.serial_normalized = serial_normalized
+        else:
+            equipment.customer_id = customer_id
+            equipment.customer_name = customer_name
+            equipment.manufacturer = manufacturer or equipment.manufacturer
+            equipment.model = model or equipment.model
+            equipment.equipment_type = equipment_type or equipment.equipment_type
+            equipment.power = power or equipment.power
+            equipment.voltage = voltage or equipment.voltage
         return equipment
 
     equipment = LaboratoryEquipment(

@@ -1,9 +1,15 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel
 
 from app.core.db import database_is_ready
 
 router = APIRouter()
+
+
+@router.get("/version")
+def version(response: Response) -> dict[str, str]:
+    response.headers["Cache-Control"] = "no-store"
+    return {"version": "48", "release_date": "2026-11-25", "name": "SENTICO"}
 
 
 class Health(BaseModel):

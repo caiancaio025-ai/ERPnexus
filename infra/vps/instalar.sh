@@ -4,7 +4,7 @@
 # - cria uma CHAVE DE DEPLOY (so leitura) e clona o repo em /opt/sentico-green
 # - reconstroi o .env.production a partir dos containers em execucao (sem expor segredos)
 # - grava a TAG das imagens que ja estao no ar (para o compose continuar consistente)
-# NAO redeploya: o V15 ja esta rodando. Rode como root:
+# NAO faz deploy nem substitui os containers em execucao. Rode como root:
 #   bash instalar.sh
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "rode como root"; exit 1; }
@@ -83,5 +83,7 @@ fi
 
 echo
 echo "OK. Deploy por git preparado em $DEST."
-echo "Para atualizar daqui pra frente (depois de dar push no GitHub):"
-echo "  bash $DEST/infra/vps/atualizar.sh"
+echo "Atualizar o checkout nao altera os containers em execucao."
+echo "A V48 exige um procedimento proprio de implantacao na VPS."
+echo "infra/vps/atualizar.sh permanece exclusivo da V47 e nao instala a V48."
+echo "Consulte README.md e infra/vps/LEIA-ME-DEPLOY.md."

@@ -1,8 +1,9 @@
 import { stockIdFromSearch } from "./stockCode";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Archive, ArrowDownToLine, ArrowLeft, Boxes, Camera, Eye, FolderPlus, LogOut, MapPinned, PackagePlus, Pencil, Trash2, Printer, RefreshCw, Search, Warehouse } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../shared/api/apiClient";
+import { moneyInput } from "../../shared/forms/moneyInput";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
 import type { AuthUser } from "../auth/AuthCard";
 import "./inventory.css";
@@ -185,21 +186,32 @@ export function InventoryDashboard({ user, onLogout }: InventoryProps) {
     apiClient.get<typeof itemLocations>(`/inventory/items/${selected.id}/location-history`),
   ]).then(([movements,locations])=>{setItemMovements(movements);setItemLocations(locations);}).catch(()=>{setItemMovements([]);setItemLocations([]);});},[selected?.id, selected?.quantity, selected?.slot_id]);
   function success(text: string) { setError(""); setMessage(text); }
-  async function run(task: () => Promise<void>) { setBusy(true); setError(""); setMessage(""); try { await task(); await load(); } catch(e) { setError(errorText(e)); } finally { setBusy(false); } }
+  const mutationPendingRef = useRef(false);
+  async function run(task: () => Promise<void>) {
+    if (mutationPendingRef.current) return;
+    mutationPendingRef.current = true; setBusy(true); setError(""); setMessage("");
+    try {
+      await task();
+      try { await load(); }
+      catch (cause) { setError(`Operação concluída. A consulta dos saldos falhou: ${errorText(cause)} Atualize a tela antes de registrar uma nova movimentação.`); }
+    } catch (cause) { setError(errorText(cause)); }
+    finally { mutationPendingRef.current = false; setBusy(false); }
+  }
   function openNew() { setCameraTarget(null); setPendingPhoto(null); setEditing(null); setForm({ ...blankItem, company_code: stockMap.companies.find(c=>c.code===blankItem.company_code)?.code ?? stockMap.companies[0]?.code ?? blankItem.company_code, slot_id: "" }); setEditor(true); }
   function openEdit(item: StockItem) { setCameraTarget(null); setPendingPhoto(null); setEditing(item); setForm({ company_code:item.company_code, name:item.name, category:item.category, subtype_id:item.subtype_id?.toString()??"", format_id:item.format_id?.toString()??"", manufacturer:item.manufacturer??"", model:item.model??"", mode:item.mode, manufacturer_serial:item.manufacturer_serial??"", unit:item.unit, quantity:item.quantity, unit_cost:item.unit_cost??"0", slot_id:item.slot_id?.toString()??"", notes:item.notes??"" }); setEditor(true); }
   async function saveItem(event: React.FormEvent) {
     event.preventDefault();
     await run(async () => {
+      if (maySeeCost(user) && (!Number.isFinite(moneyInput(form.unit_cost)) || moneyInput(form.unit_cost) < 0)) throw new Error("Informe um custo unitário válido.");
       if (editing) {
-        await apiClient.put(`/inventory/items/${editing.id}`, {name:form.name, category:form.category, subtype_id:form.subtype_id?Number(form.subtype_id):null, format_id:form.format_id?Number(form.format_id):null, manufacturer:form.manufacturer||null, model:form.model||null, slot_id:form.slot_id?Number(form.slot_id):null, unit_cost:maySeeCost(user)?Number(form.unit_cost):null, notes:form.notes||null, is_active:true});
+        await apiClient.put(`/inventory/items/${editing.id}`, {name:form.name, category:form.category, subtype_id:form.subtype_id?Number(form.subtype_id):null, format_id:form.format_id?Number(form.format_id):null, manufacturer:form.manufacturer||null, model:form.model||null, slot_id:form.slot_id?Number(form.slot_id):null, unit_cost:maySeeCost(user)?moneyInput(form.unit_cost):null, notes:form.notes||null, is_active:true});
         if (pendingPhoto) {
           const photo = new FormData(); photo.append("file",pendingPhoto);
           try { await apiClient.post(`/inventory/items/${editing.id}/photos`,photo); }
           catch(e) { setEditor(false); setPendingPhoto(null); throw new Error(`Dados salvos, mas a foto não foi enviada: ${errorText(e)}. Anexe-a nos detalhes.`); }
         }
       } else {
-        const created = await apiClient.post<{id:number}>("/inventory/items", { ...form, subtype_id:form.subtype_id?Number(form.subtype_id):null, format_id:form.format_id?Number(form.format_id):null, slot_id:form.slot_id?Number(form.slot_id):null, quantity:Number(form.quantity), unit_cost:maySeeCost(user)?Number(form.unit_cost):0, manufacturer_serial:form.manufacturer_serial||null });
+        const created = await apiClient.post<{id:number}>("/inventory/items", { ...form, subtype_id:form.subtype_id?Number(form.subtype_id):null, format_id:form.format_id?Number(form.format_id):null, slot_id:form.slot_id?Number(form.slot_id):null, quantity:Number(form.quantity), unit_cost:maySeeCost(user)?moneyInput(form.unit_cost):0, manufacturer_serial:form.manufacturer_serial||null });
         if (pendingPhoto) {
           const photo = new FormData(); photo.append("file", pendingPhoto);
           try { await apiClient.post(`/inventory/items/${created.id}/photos`, photo); }

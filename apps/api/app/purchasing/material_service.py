@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -9,6 +9,7 @@ from app.auth.models import User
 from app.laboratory.models import LaboratoryWorkOrder
 from app.purchasing.material_models import MaterialRequest, MaterialRequestEvent
 from app.purchasing.material_schemas import MaterialRequestOutput
+from app.purchasing.numbering import next_purchasing_code
 
 STATUS_TRANSITIONS: dict[str, set[str]] = {
     "awaiting_approval": {"approved", "rejected", "cancelled"},
@@ -28,15 +29,7 @@ MATERIAL_COST_STATUSES = {"purchased", "in_transit", "received", "delivered_to_l
 
 
 async def next_material_request_code(db: AsyncSession) -> str:
-    prefix = f"SC-{date.today().year}-"
-    latest = await db.scalar(
-        select(MaterialRequest.code)
-        .where(MaterialRequest.code.like(f"{prefix}%"))
-        .order_by(MaterialRequest.id.desc())
-        .limit(1)
-    )
-    sequence = int(latest.rsplit("-", 1)[-1]) + 1 if latest else 1
-    return f"{prefix}{sequence:04d}"
+    return await next_purchasing_code(db, MaterialRequest.code, "SC")
 
 
 def validate_transition(previous: str, target: str) -> None:
@@ -94,12 +87,17 @@ async def recalculate_work_order_parts_cost(db: AsyncSession, work_order_id: int
     if work_order_id is None:
         return None
 
+    # A sessão usa autoflush=False: uma soma antes deste flush enxergava o
+    # status/custo anterior e deixava a O.S. defasada após salvar a compra.
+    await db.flush()
+
     # Serializa recalculos concorrentes: compras e estoque convergem no mesmo
     # campo canônico sem o último writer apagar custos já confirmados.
     work_order = await db.scalar(
         select(LaboratoryWorkOrder)
         .where(LaboratoryWorkOrder.id == work_order_id)
         .with_for_update(of=LaboratoryWorkOrder)
+        .execution_options(populate_existing=True)
     )
     if work_order is None:
         return None

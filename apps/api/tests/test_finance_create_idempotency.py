@@ -22,13 +22,6 @@ class FakeDB:
         self.add = MagicMock()
 
 
-@pytest.fixture(autouse=True)
-def _silencia_notificacao(monkeypatch):
-    # V26: create_entry passou a emitir notify_activity (consulta usuários no banco).
-    # Estes testes checam idempotência, não notificação — neutraliza o efeito colateral.
-    monkeypatch.setattr("app.finance.router.notify_activity", AsyncMock())
-
-
 def make_payload(*, due_date: date, work_order_id: int = 123) -> FinancialEntryInput:
     return FinancialEntryInput(
         entry_type="income",
@@ -52,10 +45,11 @@ async def test_same_work_order_accepts_multiple_installments(monkeypatch):
     monkeypatch.setattr("app.finance.router._validate_billing_confirmation", AsyncMock(return_value={"status": "complete"}))
     mark_invoiced = AsyncMock()
     monkeypatch.setattr("app.finance.router._mark_work_order_invoiced", mark_invoiced)
+    monkeypatch.setattr("app.finance.router.notify_activity", AsyncMock())
 
     first_db = FakeDB()
     second_db = FakeDB()
-    user = SimpleNamespace(id=7, name="Teste")
+    user = SimpleNamespace(id=7, name="Gestor de teste")
 
     first = await create_entry(make_payload(due_date=date(2026, 9, 10)), user, first_db, "req-1")
     second = await create_entry(make_payload(due_date=date(2026, 10, 10)), user, second_db, "req-2")
@@ -92,7 +86,7 @@ async def test_repeated_same_idempotency_key_returns_existing_entry(monkeypatch)
     db = FakeDB()
     db.scalar.return_value = existing
 
-    result = await create_entry(payload, SimpleNamespace(id=7, name="Teste"), db, "same-request")
+    result = await create_entry(payload, SimpleNamespace(id=7), db, "same-request")
 
     assert result is existing
     db.add.assert_not_called()
@@ -125,7 +119,7 @@ async def test_same_idempotency_key_with_different_payload_is_rejected():
     db.scalar.return_value = existing
 
     with pytest.raises(HTTPException) as exc:
-        await create_entry(changed, SimpleNamespace(id=7, name="Teste"), db, "same-request")
+        await create_entry(changed, SimpleNamespace(id=7), db, "same-request")
 
     assert exc.value.status_code == 409
     assert "dados diferentes" in exc.value.detail

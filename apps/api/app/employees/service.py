@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,12 +23,18 @@ class EmployeeService:
         return await EmployeeService.get_employee(db, employee.id)  # type: ignore[return-value]
 
     @staticmethod
-    async def get_employee(db: AsyncSession, employee_id: int) -> Employee | None:
-        return await db.scalar(
+    async def get_employee(
+        db: AsyncSession, employee_id: int, *, for_update: bool = False,
+    ) -> Employee | None:
+        query = (
             select(Employee)
             .options(selectinload(Employee.employment_history), selectinload(Employee.documents))
             .where(Employee.id == employee_id)
+            .execution_options(populate_existing=True)
         )
+        if for_update:
+            query = query.with_for_update(of=Employee)
+        return await db.scalar(query)
 
     @staticmethod
     async def get_employees(
@@ -52,7 +59,7 @@ class EmployeeService:
 
     @staticmethod
     async def update_employee(db: AsyncSession, employee_id: int, payload: EmployeeUpdate, user_id: int) -> Employee | None:
-        employee = await EmployeeService.get_employee(db, employee_id)
+        employee = await EmployeeService.get_employee(db, employee_id, for_update=True)
         if not employee:
             return None
         before = {"department": employee.department, "position": employee.position, "salary_base": str(employee.salary_base), "is_active": employee.is_active}
@@ -72,9 +79,13 @@ class EmployeeService:
 
     @staticmethod
     async def terminate_employee(db: AsyncSession, employee_id: int, payload: EmployeeTerminateRequest, user_id: int) -> Employee | None:
-        employee = await EmployeeService.get_employee(db, employee_id)
+        employee = await EmployeeService.get_employee(db, employee_id, for_update=True)
         if not employee:
             return None
+        if not employee.is_active:
+            raise HTTPException(status_code=409, detail="O colaborador já está desligado ou inativo.")
+        if payload.termination_date < employee.hiring_date:
+            raise HTTPException(status_code=422, detail="A data de desligamento não pode ser anterior à admissão.")
         employee.termination_date = payload.termination_date
         employee.is_active = False
         db.add(EmploymentHistory(
@@ -90,7 +101,8 @@ class EmployeeService:
         db.add(EmployeeAuditEvent(
             employee_id=employee.id,
             action="employee_terminated",
-            description=f"Colaborador {employee.full_name} desligado: {payload.reason_end}",
+            # O motivo completo é preservado em EmploymentHistory.reason_end.
+            description=f"Colaborador {employee.full_name} desligado: {payload.reason_end}"[:500],
             user_id=user_id,
         ))
         await db.commit()
@@ -98,9 +110,11 @@ class EmployeeService:
 
     @staticmethod
     async def reactivate_employee(db: AsyncSession, employee_id: int, user_id: int) -> Employee | None:
-        employee = await EmployeeService.get_employee(db, employee_id)
+        employee = await EmployeeService.get_employee(db, employee_id, for_update=True)
         if not employee:
             return None
+        if employee.is_active:
+            return employee
         employee.termination_date = None
         employee.is_active = True
         db.add(EmployeeAuditEvent(

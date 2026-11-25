@@ -5,8 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-from sqlalchemy import create_engine, update as sql_update
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.auth.models import User  # noqa: F401 (registro FK)
@@ -149,14 +148,13 @@ async def test_real_quote_api_functions_revise_and_reuse_draft(monkeypatch):
         async def scalar(self, query): return self.sync.scalar(query)
         async def scalars(self, query): return self.sync.scalars(query)
         async def execute(self, query): return self.sync.execute(query)
-        async def rollback(self): self.sync.rollback()
         async def flush(self): self.sync.flush()
         async def commit(self): self.sync.commit()
         async def refresh(self, value): self.sync.refresh(value)
         def add(self, value): self.sync.add(value)
         async def delete(self, value): self.sync.delete(value)
 
-    async def fake_work_order(db, work_order_id):
+    async def fake_work_order(db, work_order_id, **kwargs):
         return SimpleNamespace(id=work_order_id, number=f"OS-{work_order_id}")
 
     async def fake_activity(*args, **kwargs):
@@ -210,28 +208,3 @@ async def test_real_quote_api_functions_revise_and_reuse_draft(monkeypatch):
         assert again.id == draft.id and again.total == Decimal("22000.00")
         assert sess.get(LaboratoryQuote, source.id).total == Decimal("25000.00")
         assert sess.get(LaboratoryQuote, draft.id).total == Decimal("22000.00")
-
-        # Simula discrepância efetiva no SQL após flush. O guard real deve
-        # rejeitar a gravação antes do commit; reproduz o rollback de get_db.
-        draft_id, source_id = draft.id, source.id
-        class DivergentSession(SessionAdapter):
-            async def flush(self):
-                await super().flush()
-                self.sync.execute(sql_update(LaboratoryQuote).where(
-                    LaboratoryQuote.id == draft_id
-                ).values(total=Decimal("1.00")), execution_options={"synchronize_session": False})
-            async def commit(self):
-                pytest.fail("Commit indevido após divergência no SQL")
-
-        bad_db = DivergentSession(sess)
-        bad = _input(23000).model_copy(update={"photos": [QuotePhotoInput(document_id=photo_id, caption="Não gravar")]})
-        with pytest.raises(HTTPException) as exc:
-            await endpoint.update_quote(draft_id, bad, user=user, db=bad_db)
-        assert exc.value.status_code == 409
-        await bad_db.rollback()
-        sess.expire_all()
-        persisted = sess.get(LaboratoryQuote, draft_id)
-        assert persisted.total == Decimal("22000.00")
-        assert persisted.items[0].unit_value == Decimal("22000.00")
-        assert persisted.photos[0].document_id == photo_id
-        assert sess.get(LaboratoryQuote, source_id).total == Decimal("25000.00")

@@ -1,6 +1,6 @@
 @echo off
 rem Envia suas mudancas do Sentico Green (ERP) para o GitHub (push).
-rem Rode na pasta do projeto (onde esta este arquivo). Depois, na VPS: bash infra/vps/atualizar.sh
+rem Rode na pasta do projeto (onde esta este arquivo). O push publica o codigo; nao faz deploy na VPS.
 if /i not "%~1"=="--dentro" (
   cmd /k ""%~f0" --dentro"
   exit /b
@@ -42,8 +42,10 @@ if errorlevel 1 goto push_falhou
 echo.
 echo ------------------------------------------------------------
 echo OK - enviado para o GitHub.
-echo Agora, na VPS (como root), aplique a atualizacao:
-echo   bash /opt/sentico-green/infra/vps/atualizar.sh
+echo O envio publica o codigo e nao altera os containers da VPS.
+echo A V48 exige um procedimento proprio de implantacao.
+echo infra/vps/atualizar.sh e exclusivo da V47 e nao instala a V48.
+echo Consulte README.md e infra/vps/LEIA-ME-DEPLOY.md.
 echo ------------------------------------------------------------
 goto fim
 

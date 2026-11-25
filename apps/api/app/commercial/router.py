@@ -208,8 +208,13 @@ async def _asset_location_config(db: AsyncSession) -> CommercialAssetLocationCon
     )
 
 
-async def _quote_or_404(db: AsyncSession, quote_id: int) -> CommercialQuote:
-    quote = await db.get(CommercialQuote, quote_id)
+async def _quote_or_404(
+    db: AsyncSession, quote_id: int, *, for_update: bool = False,
+) -> CommercialQuote:
+    query = select(CommercialQuote).where(CommercialQuote.id == quote_id)
+    if for_update:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    quote = await db.scalar(query)
     if not quote:
         raise HTTPException(status_code=404, detail="Orçamento comercial não encontrado.")
     return quote
@@ -527,7 +532,7 @@ async def create_quote(payload:CommercialQuoteInput,user:CurrentUser,db:DbSessio
 
 @router.put("/quotes/{quote_id}", response_model=CommercialQuoteOutput)
 async def update_quote(quote_id:int,payload:CommercialQuoteInput,user:CurrentUser,db:DbSession):
-    _require_quote(user); quote=await _quote_or_404(db,quote_id)
+    _require_quote(user); quote=await _quote_or_404(db,quote_id,for_update=True)
     if quote.status!="draft": raise HTTPException(409,"Somente rascunhos podem ser editados. Crie uma revisão formal para alterar um orçamento emitido.")
     for k,v in payload.model_dump(exclude={"items"}).items(): setattr(quote,k,v)
     await _replace_items(db,quote,payload); await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_updated",
@@ -538,7 +543,7 @@ async def update_quote(quote_id:int,payload:CommercialQuoteInput,user:CurrentUse
 
 @router.post("/quotes/{quote_id}/issue", response_model=CommercialQuoteOutput)
 async def issue_quote(quote_id:int,user:CurrentUser,db:DbSession):
-    _require_quote(user); quote=await _quote_or_404(db,quote_id)
+    _require_quote(user); quote=await _quote_or_404(db,quote_id,for_update=True)
     if quote.status!="draft": raise HTTPException(409,"Apenas rascunhos podem ser emitidos.")
     from datetime import datetime, timezone
     quote.status="issued"; quote.revision=max(1,quote.revision or 0); quote.issued_at=datetime.now(timezone.utc); await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_issued",
@@ -550,10 +555,31 @@ async def issue_quote(quote_id:int,user:CurrentUser,db:DbSession):
 @router.post("/quotes/{quote_id}/revision", response_model=CommercialQuoteOutput, status_code=201)
 async def revise_quote(quote_id:int,user:CurrentUser,db:DbSession):
     _require_quote(user); source=await _quote_or_404(db,quote_id)
+    # Reabrir uma revisão antiga deve usar a próxima revisão da família, não
+    # source.revision + 1 (que colidia com revisões mais recentes já gravadas).
+    # Bloqueamos a mesma família em ordem estável para serializar duplo clique.
+    family_filter = (
+        CommercialQuote.quote_number == source.quote_number if source.quote_number
+        else CommercialQuote.id == source.id
+    )
+    await db.scalar(
+        select(CommercialQuote.id).where(family_filter).order_by(CommercialQuote.id)
+        .limit(1).with_for_update()
+    )
+    # A nova consulta começa após obter o lock e enxerga a revisão que uma
+    # transação concorrente acabou de confirmar enquanto aguardávamos.
+    family = list((await db.scalars(
+        select(CommercialQuote).where(family_filter).order_by(CommercialQuote.id)
+        .execution_options(populate_existing=True)
+    )).all())
     if source.status=="draft": raise HTTPException(409,"Já existe um rascunho editável; não é necessário criar revisão.")
+    existing_draft = next((row for row in family if row.status == "draft"), None)
+    if existing_draft is not None:
+        return await _quote_output(db, existing_draft, user)
+    next_revision = max((row.revision for row in family), default=source.revision) + 1
     source_items=list((await db.scalars(select(CommercialQuoteItem).where(CommercialQuoteItem.quote_id==source.id).order_by(CommercialQuoteItem.sort_order))).all())
     data={c.name:getattr(source,c.name) for c in CommercialQuote.__table__.columns if c.name not in {"id","quote_number","revision","status","issued_at","created_at","updated_at","created_by"}}
-    copy=CommercialQuote(**data,quote_number=source.quote_number,revision=source.revision+1,status="draft",issued_at=None,created_by=user.id); db.add(copy); await db.flush()
+    copy=CommercialQuote(**data,quote_number=source.quote_number,revision=next_revision,status="draft",issued_at=None,created_by=user.id); db.add(copy); await db.flush()
     for item in source_items:
         vals={c.name:getattr(item,c.name) for c in CommercialQuoteItem.__table__.columns if c.name not in {"id","quote_id"}}; db.add(CommercialQuoteItem(quote_id=copy.id,**vals))
     await notify_activity(db, actor=user, activity_module="orcamentos", action="commercial_quote_revised",
@@ -564,7 +590,7 @@ async def revise_quote(quote_id:int,user:CurrentUser,db:DbSession):
 
 @router.patch("/quotes/{quote_id}/status", response_model=CommercialQuoteOutput)
 async def set_quote_status(quote_id:int,payload:QuoteStatusInput,user:CurrentUser,db:DbSession):
-    quote=await _quote_or_404(db,quote_id)
+    quote=await _quote_or_404(db,quote_id,for_update=True)
     if payload.status == quote.status:
         return await _quote_output(db,quote,user)
     allowed=QUOTE_STATUS_TRANSITIONS.get(quote.status,set())

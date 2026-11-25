@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CheckCircle2, ExternalLink, PackageCheck, PackagePlus, Search, ShoppingCart, Truck, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../shared/api/apiClient";
+import { moneyInput } from "../../shared/forms/moneyInput";
 import type { MaterialRequest, MaterialRequestStatus } from "./types";
 import { PurchaseStockDestination, emptyStockDestination, stockDestinationFromRequest, stockDestinationPayload } from "../inventory/PurchaseStockDestination";
 
@@ -80,23 +81,24 @@ function StandaloneRequestModal({ onClose, onSaved }: { onClose: () => void; onS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [stockTarget, setStockTarget] = useState(emptyStockDestination);
+  const pendingRef = useRef(false);
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setError("");
+    e.preventDefault(); if (pendingRef.current) return; pendingRef.current = true; setSaving(true); setError("");
     try {
-      await apiClient.post("/purchasing/material-requests", { ...form, quantity: Number(form.quantity) || 1, technical_note: form.technical_note || null, suggested_link: form.suggested_link || null, ...stockDestinationPayload(stockTarget) });
+      await apiClient.post("/purchasing/material-requests", { ...form, quantity: Number(form.quantity), technical_note: form.technical_note || null, suggested_link: form.suggested_link || null, ...stockDestinationPayload(stockTarget) });
       await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível criar a solicitação."); }
-    finally { setSaving(false); }
+    finally { pendingRef.current = false; setSaving(false); }
   }
-  return <div className="material-request-modal"><section><header><div><small>COMPRA AVULSA</small><h2>Solicitar compra</h2><span>Ferramenta, material administrativo, estoque ou infraestrutura — sem vínculo com O.S.</span></div><button onClick={onClose}><XCircle /></button></header>
-    <form onSubmit={submit}><div className="material-editor-grid">
+  return <div className="material-request-modal"><section><header><div><small>COMPRA AVULSA</small><h2>Solicitar compra</h2><span>Ferramenta, material administrativo, estoque ou infraestrutura — sem vínculo com O.S.</span></div><button disabled={saving} onClick={onClose}><XCircle /></button></header>
+    <form onSubmit={submit}><fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}><div className="material-editor-grid">
       <label>Empresa<select value={form.company_code} onChange={(e) => setForm({ ...form, company_code: e.target.value })}><option value="universo_eletronica">Universo Eletrônica</option><option value="universo_automacao">Universo Automação</option><option value="solucoes_eletronica">Soluções Eletrônicas</option></select></label>
       <label>Prioridade<select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Baixa</option><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label>
       <label className="wide">Item / material<input required minLength={2} value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} placeholder="Ex.: Jogo de chaves, grampos, papel A4..." /></label>
-      <label>Quantidade<input type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></label>
+      <label>Quantidade<input required type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></label>
       <label className="wide">Observação / justificativa<textarea rows={3} value={form.technical_note} onChange={(e) => setForm({ ...form, technical_note: e.target.value })} placeholder="Explique a necessidade da compra." /></label>
       <label className="wide">Link sugerido (opcional)<input value={form.suggested_link} onChange={(e) => setForm({ ...form, suggested_link: e.target.value })} placeholder="https://..." /></label>
-    </div><PurchaseStockDestination companyCode={form.company_code} quantity={Number(form.quantity) || 1} value={stockTarget} onChange={setStockTarget} />{error && <div className="purchase-alert error">{error}</div>}<footer><button type="submit" disabled={saving} className="primary-action"><PackagePlus size={16}/>{saving ? "Enviando..." : "Enviar para aprovação"}</button><button type="button" onClick={onClose}>Cancelar</button></footer></form>
+    </div><PurchaseStockDestination companyCode={form.company_code} quantity={Number(form.quantity) || 1} value={stockTarget} onChange={setStockTarget} />{error && <div className="purchase-alert error">{error}</div>}<footer><button type="submit" disabled={saving} className="primary-action"><PackagePlus size={16}/>{saving ? "Enviando..." : "Enviar para aprovação"}</button><button type="button" disabled={saving} onClick={onClose}>Cancelar</button></footer></fieldset></form>
   </section></div>;
 }
 
@@ -104,28 +106,31 @@ function MaterialRequestEditor({ item, canViewValues, onOpenLab, onClose, onSave
   const [form, setForm] = useState({ supplier_name: item.supplier_name || "", purchase_reference: item.purchase_reference || "", purchase_link: item.purchase_link || "", tracking_code: item.tracking_code || "", unit_cost: item.unit_cost ? String(item.unit_cost) : "", expected_delivery_date: item.expected_delivery_date || "", note: "" });
   const [saving, setSaving] = useState(false); const [error, setError] = useState("");
   const [stockTarget, setStockTarget] = useState(() => stockDestinationFromRequest(item));
-  const parsedUnitCost = Number(form.unit_cost.replace(",", ".")) || 0;
+  const pendingRef = useRef(false);
+  const parsedUnitCost = moneyInput(form.unit_cost);
   const totalCost = parsedUnitCost * item.quantity;
   async function update(nextStatus: MaterialRequestStatus) {
-    if (nextStatus === "received") {
+    if (pendingRef.current) return;
+    if (canViewValues && form.unit_cost && (!Number.isFinite(parsedUnitCost) || parsedUnitCost < 0)) { setError("Informe um valor unitário válido, como 1.250,50."); return; }
+    if (nextStatus === "received" && item.status !== "received") {
       if (!stockTarget.inventory_destination) { setError("Selecione como o material entrará no Estoque antes de marcar Recebido."); return; }
       if (stockTarget.inventory_destination === "existing" && !stockTarget.inventory_item_id) { setError("Selecione o cadastro do Estoque que receberá a quantidade."); return; }
       if (stockTarget.inventory_destination === "new" && stockTarget.inventory_mode === "serialized" && (item.quantity !== 1 || !stockTarget.inventory_serial.trim())) { setError("Item individual exige uma unidade e número de série."); return; }
     }
-    setSaving(true); setError("");
+    pendingRef.current = true; setSaving(true); setError("");
     try {
-      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, ...(canViewValues ? { unit_cost: form.unit_cost ? Number(form.unit_cost.replace(",", ".")) : null } : {}), expected_delivery_date: form.expected_delivery_date || null, note: form.note || null, ...stockDestinationPayload(stockTarget) });
+      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, ...(canViewValues ? { unit_cost: form.unit_cost ? parsedUnitCost : null } : {}), expected_delivery_date: form.expected_delivery_date || null, note: form.note || null, ...(["received", "delivered_to_lab"].includes(item.status) ? {} : stockDestinationPayload(stockTarget)) });
       await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível atualizar."); }
-    finally { setSaving(false); }
+    finally { pendingRef.current = false; setSaving(false); }
   }
-  return <div className="material-request-modal"><section><header><div><small>{item.code}</small><h2>{item.item_name}</h2><span>{item.work_order_number ? `${item.work_order_number} · ${item.customer_name || "Cliente"}` : "Compra avulsa · sem vínculo com O.S."}</span></div><div className="material-modal-head-actions">{item.work_order_id != null && <button className="material-open-lab" onClick={() => onOpenLab(item.work_order_id!)}><ArrowLeft size={15}/>Abrir OS no Laboratório</button>}<button onClick={onClose}><XCircle /></button></div></header>
+  return <div className="material-request-modal"><section><header><div><small>{item.code}</small><h2>{item.item_name}</h2><span>{item.work_order_number ? `${item.work_order_number} · ${item.customer_name || "Cliente"}` : "Compra avulsa · sem vínculo com O.S."}</span></div><div className="material-modal-head-actions">{item.work_order_id != null && <button className="material-open-lab" disabled={saving} onClick={() => onOpenLab(item.work_order_id!)}><ArrowLeft size={15}/>Abrir OS no Laboratório</button>}<button disabled={saving} onClick={onClose}><XCircle /></button></div></header>
     <div className="material-request-context"><span><strong>Origem</strong>{item.source_type === "standalone" ? "Compra avulsa" : "Laboratório / O.S."}</span><span><strong>Equipamento</strong>{item.equipment_serial || "Não vinculado"}</span><span><strong>Quantidade</strong>{item.quantity}</span><span><strong>Status</strong>{labels[item.status]}</span><span><strong>Solicitante</strong>{item.requester_name}</span></div>
     {item.technical_note && <div className="material-note"><strong>Observação técnica</strong><p>{item.technical_note}</p></div>}
     {item.suggested_link && <a className="material-suggested-link" href={item.suggested_link} target="_blank" rel="noreferrer"><ExternalLink size={15} />Abrir link sugerido pelo técnico</a>}
     {canViewValues && <div className="material-purchase-total"><span>Valor desta compra</span><strong>{money(totalCost)}</strong><small>{item.quantity} × {money(parsedUnitCost)}</small></div>}<div className="material-editor-grid"><label>Fornecedor<input value={form.supplier_name} onChange={(e) => setForm({ ...form, supplier_name: e.target.value })} /></label><label>Referência / pedido<input value={form.purchase_reference} onChange={(e) => setForm({ ...form, purchase_reference: e.target.value })} /></label>{canViewValues && <label>Valor unitário<input value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} placeholder="0,00" /></label>}<label>Previsão de chegada<input type="date" value={form.expected_delivery_date} onChange={(e) => setForm({ ...form, expected_delivery_date: e.target.value })} /></label><label className="wide">Link da compra<input value={form.purchase_link} onChange={(e) => setForm({ ...form, purchase_link: e.target.value })} /></label><label>Rastreio<input value={form.tracking_code} onChange={(e) => setForm({ ...form, tracking_code: e.target.value })} /></label><label className="wide">Observação da movimentação<textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label></div>
     <PurchaseStockDestination companyCode={item.company_code} quantity={item.quantity} value={stockTarget} onChange={setStockTarget} disabled={["received", "delivered_to_lab", "cancelled"].includes(item.status)} />
     {error && <div className="purchase-alert error">{error}</div>}
-    <footer>{!["received", "delivered_to_lab", "cancelled"].includes(item.status) && <button type="button" disabled={saving} onClick={() => void update(item.status)}>Salvar dados sem mudar status</button>}{nextActions[item.status]?.filter((action) => canViewValues || action.status !== "purchased").map((action) => <button key={action.status} disabled={saving} className={action.status === "rejected" ? "danger" : "primary-action"} onClick={() => void update(action.status)}>{action.status === "received" || action.status === "delivered_to_lab" ? <PackageCheck size={16} /> : action.status === "rejected" ? <XCircle size={16} /> : <CheckCircle2 size={16} />}{canViewValues && action.status === "purchased" && totalCost > 0 ? `${action.label} · ${money(totalCost)}` : action.label}</button>)}<button onClick={onClose}>Fechar</button></footer>
+    <footer>{!["received", "delivered_to_lab", "cancelled"].includes(item.status) && <button type="button" disabled={saving} onClick={() => void update(item.status)}>Salvar dados sem mudar status</button>}{nextActions[item.status]?.filter((action) => canViewValues || action.status !== "purchased").map((action) => <button key={action.status} disabled={saving} className={action.status === "rejected" ? "danger" : "primary-action"} onClick={() => void update(action.status)}>{action.status === "received" || action.status === "delivered_to_lab" ? <PackageCheck size={16} /> : action.status === "rejected" ? <XCircle size={16} /> : <CheckCircle2 size={16} />}{canViewValues && action.status === "purchased" && totalCost > 0 ? `${action.label} · ${money(totalCost)}` : action.label}</button>)}<button disabled={saving} onClick={onClose}>Fechar</button></footer>
   </section></div>;
 }

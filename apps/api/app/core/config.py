@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     db_pool_timeout: int = 10
     db_pool_recycle: int = 1800
+    db_connect_timeout: int = 10
 
     session_hours: int = 12
     session_cookie_name: str = "nexus_session"

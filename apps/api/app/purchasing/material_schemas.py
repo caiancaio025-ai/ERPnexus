@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.purchasing.schemas import CompanyCode
+
 MaterialPriority = Literal["low", "normal", "high", "urgent"]
 MaterialRequestStatus = Literal[
     "awaiting_approval",
@@ -37,7 +39,7 @@ class MaterialRequestCreate(InventoryTargetFields):
 
 
 class StandaloneMaterialRequestCreate(MaterialRequestCreate):
-    company_code: str = Field(min_length=2, max_length=40)
+    company_code: CompanyCode
 
 
 class MaterialRequestUpdate(InventoryTargetFields):

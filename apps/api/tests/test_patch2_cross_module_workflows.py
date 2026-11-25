@@ -1,5 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
 
 from app.commercial.quote_pdf import commercial_quote_pdf
 
@@ -48,28 +51,51 @@ def test_purchasing_can_open_approved_sale_in_commercial() -> None:
     assert "setQuoteEditor({type:quote.quote_type,quote})" in commercial
 
 
-def test_material_status_change_emits_activity_with_lab_link() -> None:
-    # Estrutura nova (V26): a mudança de status da solicitação de material vira uma
-    # atividade pelo módulo de eventos; a aprovação mapeia para "material_approved" e
-    # a notificação leva ao laboratório, na aba de materiais da OS.
-    router = (API_ROOT / "app" / "purchasing" / "router.py").read_text(encoding="utf-8")
-    events = (API_ROOT / "app" / "notifications" / "events.py").read_text(encoding="utf-8")
+@pytest.mark.asyncio
+async def test_material_approval_preserves_laboratory_destination(monkeypatch) -> None:
+    from app.notifications import events
+    from app.notifications.service import activity_visible
 
-    assert "material_request_activity(" in router
-    assert '"approved": "material_approved"' in router
-    assert "async def material_request_activity" in events
-    assert 'target=(f"/laboratorio?os={order.id}&aba=materials"' in events
+    order = SimpleNamespace(id=12, number="OS-12", equipment_id=7)
+    equipment = SimpleNamespace(equipment_type="Inversor", manufacturer="WEG", model="CFW")
+    db = SimpleNamespace(get=AsyncMock(side_effect=[order, equipment]))
+    notify = AsyncMock()
+    monkeypatch.setattr(events, "notify_activity", notify)
+    await events.material_request_activity(
+        db, actor=SimpleNamespace(id=1), request=SimpleNamespace(id=8, work_order_id=12),
+        action="material_approved", title="Solicitação aprovada", message="Material aprovado.",
+    )
+    sent = notify.await_args.kwargs
+    assert sent["action"] == "material_approved"
+    assert sent["target"] == "/laboratorio?os=12&aba=materials"
+    assert sent["work_order_id"] == 12
+    assert activity_visible("lab", ["laboratorio", "compras"], sent["activity_module"])
 
 
-def test_sale_status_change_emits_commercial_activity() -> None:
-    # Estrutura nova (V26): a aprovação de venda passa pelo fluxo unificado de status do
-    # orçamento, que emite a atividade comercial (severity "success" quando aprovado).
-    source = (API_ROOT / "app" / "commercial" / "router.py").read_text(encoding="utf-8")
+@pytest.mark.asyncio
+async def test_sale_approval_records_scoped_commercial_activity(monkeypatch) -> None:
+    from app.commercial import router
+    from app.commercial.schemas import QuoteStatusInput
+    from app.notifications.service import activity_visible
 
-    assert 'action="commercial_quote_status"' in source
-    assert 'activity_module="orcamentos"' in source
-    assert 'target=f"/comercial?quote={quote.id}"' in source
-    assert 'severity="success" if payload.status == "approved"' in source
+    quote = SimpleNamespace(id=17, quote_number="COM-000017", quote_type="sale", status="issued")
+    user = SimpleNamespace(id=2, name="Gestão", role="gestao", modules=[])
+    db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+    notify = AsyncMock()
+    monkeypatch.setattr(router, "_quote_or_404", AsyncMock(return_value=quote))
+    monkeypatch.setattr(router, "_quote_output", AsyncMock(return_value={"status": "approved"}))
+    monkeypatch.setattr(router, "notify_activity", notify)
+
+    result = await router.set_quote_status(quote.id, QuoteStatusInput(status="approved"), user, db)
+    assert result["status"] == quote.status == "approved"
+    db.commit.assert_awaited_once()
+    event = notify.await_args.kwargs
+    assert event["action"] == "commercial_quote_status"
+    assert event["activity_module"] == "orcamentos"
+    assert event["target"] == "/comercial?quote=17"
+    assert event["severity"] == "success"
+    assert activity_visible("gestao", [], event["activity_module"])
+    assert not activity_visible("lab", ["laboratorio"], event["activity_module"])
 
 
 def test_quote_editor_has_all_issuers_and_approval_actions() -> None:

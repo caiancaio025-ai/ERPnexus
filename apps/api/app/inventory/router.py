@@ -516,7 +516,9 @@ async def create_item(payload: ItemInput, db: AsyncSession = DB, user: User = De
 
 @router.put("/items/{item_id}")
 async def edit_item(item_id: int, payload: ItemUpdate, db: AsyncSession = DB, user: User = Depends(require_module("estoque"))):
-    item = await db.get(InventoryItem, item_id)
+    item = await db.scalar(select(InventoryItem).where(
+        InventoryItem.id == item_id,
+    ).with_for_update().execution_options(populate_existing=True))
     if item is None:
         raise HTTPException(404, "Item não encontrado.")
     await _valid_slot(db, payload.slot_id)

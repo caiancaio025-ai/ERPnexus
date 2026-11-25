@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 
 import { apiClient } from "../../shared/api/apiClient";
+import { changedFields, conflictingFields, ConcurrentEditError, saveVersionedChanges } from "../../shared/api/editChanges";
+import { optionalMoneyInput } from "../../shared/forms/moneyInput";
 import type { WorkOrderReceivables } from "../finance/types";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
 import type { AuthUser } from "../auth/AuthCard";
@@ -171,7 +173,15 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("customers");
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [detail, setDetail] = useState<DetailState | null>(null);
+  const [detail, setDetailState] = useState<DetailState | null>(null);
+  const detailRef = useRef<DetailState | null>(null);
+  const detailBaselineRef = useRef<DetailState | null>(null);
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  function setDetail(value: DetailState | null) {
+    detailRef.current = value;
+    setDetailState(value);
+  }
   const [detailTab, setDetailTab] = useState<DetailTab>("general");
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [locationHistory, setLocationHistory] = useState<LocationHistory[]>([]);
@@ -181,6 +191,12 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [saved, setSaved] = useState(false);
   const detailSavedFingerprintRef = useRef<string | null>(null);
   const detailSavePromiseRef = useRef<Promise<DetailState | null> | null>(null);
+  const listSequenceRef = useRef(0);
+  const orderOpenSequenceRef = useRef(0);
+  const createPendingRef = useRef(false);
+  const transitionPendingRef = useRef(false);
+  const locationSuggestionPendingRef = useRef(false);
+  const [suggestingLocation, setSuggestingLocation] = useState(false);
 
   const query = useMemo(() => {
     const normalizedSearch = search.trim();
@@ -235,7 +251,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
 
   async function load() {
     if (!periodReady) return;
-    setLoading(true); setError("");
+    const sequence = ++listSequenceRef.current;
+    setLoading(true);
     try {
       const companyQuery = company === "all" ? "" : `?company_code=${company}`;
       const summaryParams = new URLSearchParams({ year: String(yearFilter) });
@@ -248,9 +265,10 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         apiClient.get<Technician[]>(`/laboratory/technicians${companyQuery}`),
         apiClient.get<WorkflowOption[]>("/laboratory/workflow-options?include_inactive=true"),
       ]);
+      if (sequence !== listSequenceRef.current) return;
       setSummary(summaryData); setPageData(orders); setCustomers(customerData); setTechnicians(technicianData); setWorkflowOptions(workflowData);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao carregar o Laboratório."); }
-    finally { setLoading(false); }
+    } catch (reason) { if (sequence === listSequenceRef.current) setError(reason instanceof Error ? reason.message : "Falha ao carregar o Laboratório."); }
+    finally { if (sequence === listSequenceRef.current) setLoading(false); }
   }
 
   useEffect(() => { void loadMasterData(); }, []);
@@ -275,21 +293,25 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   }
 
   async function openOrder(orderId: number, initialTab: DetailTab = "general") {
-    setLoading(true); setError("");
+    const sequence = ++orderOpenSequenceRef.current;
+    setDetailLoading(true); setError("");
+    setHistory([]); setLocationHistory([]);
     try {
       const order = await apiClient.get<WorkOrder>(`/laboratory/work-orders/${orderId}`);
+      if (sequence !== orderOpenSequenceRef.current) return;
       const openedDetail = toDetail(order);
+      detailBaselineRef.current = openedDetail;
       setDetail(openedDetail);
       detailSavedFingerprintRef.current = detailFingerprint(openedDetail, canViewValues);
       setDetailTab(initialTab);
+      setDetailLoading(false);
       const [statusRows, locationRows] = await Promise.all([
         apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${orderId}/history`),
         apiClient.get<LocationHistory[]>(`/laboratory/work-orders/${orderId}/location-history`),
       ]);
-      setHistory(statusRows);
-      setLocationHistory(locationRows);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao abrir a O.S."); }
-    finally { setLoading(false); }
+      if (sequence === orderOpenSequenceRef.current) { setHistory(statusRows); setLocationHistory(locationRows); }
+    } catch (reason) { if (sequence === orderOpenSequenceRef.current) setError(detailRef.current?.id === orderId ? "O.S. aberta. Não foi possível atualizar o histórico; consulte a aba Histórico novamente." : reason instanceof Error ? reason.message : "Falha ao abrir a O.S."); }
+    finally { if (sequence === orderOpenSequenceRef.current) setDetailLoading(false); }
   }
 
   async function inactivateSelected() {
@@ -305,7 +327,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       return;
     }
     if (!window.confirm(`Confirma inativar ${detail.number}? Ela sairá dos indicadores, mas permanecerá no histórico.`)) return;
-    setLoading(true); setError("");
+    setDetailSaving(true); setError("");
     try {
       await apiClient.post(`/laboratory/work-orders/${detail.id}/inactivate`, { version: detail.version, reason: reason.trim() });
       setDetail(null); detailSavedFingerprintRef.current = null;
@@ -313,11 +335,14 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível inativar a O.S.");
-    } finally { setLoading(false); }
+    } finally { setDetailSaving(false); }
   }
 
   async function createWorkOrder(event: React.FormEvent, entryFiles: File[]) {
-    event.preventDefault(); setLoading(true); setError(""); setMessage("");
+    event.preventDefault();
+    if (createPendingRef.current) return;
+    createPendingRef.current = true;
+    setLoading(true); setError(""); setMessage("");
     try {
       const created = await apiClient.post<WorkOrder>("/laboratory/work-orders", payloadFromForm(form, canViewValues));
       let uploaded = 0;
@@ -339,7 +364,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       setForm(emptyForm()); setShowForm(false); setPage(1); await load();
       if (locationMap !== null || view === "locations") await loadLocationMap({ silent: true });
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao criar a O.S."); }
-    finally { setLoading(false); }
+    finally { createPendingRef.current = false; setLoading(false); }
   }
 
   function hasDetailChanges(currentDetail: DetailState | null) {
@@ -361,26 +386,32 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     if (detailSavePromiseRef.current) return detailSavePromiseRef.current;
 
     const savePromise = (async (): Promise<DetailState | null> => {
-      setLoading(true); setSaved(false); setError("");
+      setDetailSaving(true); setSaved(false); setError("");
       try {
-        const updated = await apiClient.patch<WorkOrder>(`/laboratory/work-orders/${currentDetail.id}`, {
-          ...payloadFromForm(currentDetail, canViewValues), version: currentDetail.version,
-        });
+        const baseline = detailBaselineRef.current?.id === currentDetail.id ? detailBaselineRef.current : currentDetail;
+        const updated = await saveVersionedChanges(
+          payloadFromForm(baseline, canViewValues), payloadFromForm(currentDetail, canViewValues), currentDetail.version,
+          {
+            save: (patch, version) => apiClient.patch<WorkOrder>(`/laboratory/work-orders/${currentDetail.id}`, { ...patch, version }),
+            read: () => apiClient.get<WorkOrder>(`/laboratory/work-orders/${currentDetail.id}`),
+            snapshot: (record) => payloadFromForm(toDetail(record), canViewValues),
+          },
+        );
         const savedDetail = toDetail(updated);
+        detailBaselineRef.current = savedDetail;
         detailSavedFingerprintRef.current = detailFingerprint(savedDetail, canViewValues);
         setDetail(savedDetail);
         setSaved(true);
         if (announce) setMessage(`O.S. ${updated.number} atualizada.`);
-        await load();
-        setLocationHistory(await apiClient.get<LocationHistory[]>(`/laboratory/work-orders/${updated.id}/location-history`));
-        if (locationMap !== null || view === "locations") await loadLocationMap({ silent: true });
+        // An ancillary GET cannot turn an acknowledged write into a save error.
+        void refreshAfterDetailWrite(updated.id);
         window.setTimeout(() => setSaved(false), 1800);
         return savedDetail;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Falha ao salvar a O.S.");
         return null;
       } finally {
-        setLoading(false);
+        setDetailSaving(false);
       }
     })();
 
@@ -392,9 +423,67 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     }
   }
 
+  async function refreshAfterDetailWrite(orderId: number) {
+    const results = await Promise.allSettled([
+      apiClient.get<LocationHistory[]>(`/laboratory/work-orders/${orderId}/location-history`),
+      apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${orderId}/history`),
+    ]);
+    if (detailRef.current?.id === orderId) {
+      if (results[0].status === "fulfilled") setLocationHistory(results[0].value);
+      if (results[1].status === "fulfilled") setHistory(results[1].value);
+      if (results.some((result) => result.status === "rejected")) setError("O.S. salva. O histórico não pôde ser atualizado; tente abrir a aba Histórico novamente.");
+    }
+    await load();
+    if (locationMap !== null || view === "locations") await loadLocationMap({ silent: true });
+  }
+
+  async function refreshOpenDetail() {
+    const current = detailRef.current;
+    if (!current) return;
+    const updated = toDetail(await apiClient.get<WorkOrder>(`/laboratory/work-orders/${current.id}`));
+    if (detailRef.current?.id !== current.id || updated.version < detailRef.current.version) return;
+    const local = detailRef.current;
+    const baseline = detailBaselineRef.current ?? current;
+    // Quote/stock changes update the canonical version and values. Preserve any
+    // unrelated edits typed while this read was in flight.
+    const baselinePayload = payloadFromForm(baseline, canViewValues);
+    const localPayload = payloadFromForm(local, canViewValues);
+    const conflicts = conflictingFields(baselinePayload, localPayload, payloadFromForm(updated, canViewValues));
+    if (conflicts.length) {
+      // Advancing the baseline/version here would silently authorize an
+      // overwrite on the next Save. Keep both the old base and local draft.
+      setError(new ConcurrentEditError(conflicts.map(String)).message);
+      return;
+    }
+    const pending = changedFields(baselinePayload, localPayload);
+    const preserved = Object.fromEntries(Object.keys(pending).filter((key) => key in local).map((key) => [key, local[key as keyof DetailState]]));
+    detailBaselineRef.current = updated;
+    detailSavedFingerprintRef.current = detailFingerprint(updated, canViewValues);
+    setDetail({ ...updated, ...preserved });
+    void load();
+  }
+
   async function saveDetail() {
-    if (!detail) return;
-    await persistDetail(detail, true);
+    if (!detailRef.current) return;
+    await persistDetail(detailRef.current, true);
+  }
+
+  async function suggestDetailLocation() {
+    const orderId = detailRef.current?.id;
+    if (!orderId || locationSuggestionPendingRef.current) return;
+    locationSuggestionPendingRef.current = true; setSuggestingLocation(true);
+    try {
+      const result = await apiClient.get<{ location: string }>("/laboratory/locations/next");
+      const latest = detailRef.current;
+      if (latest?.id === orderId) setDetail({ ...latest, storage_location: result.location });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível sugerir uma posição."); }
+    finally { locationSuggestionPendingRef.current = false; setSuggestingLocation(false); }
+  }
+
+  async function reloadDetail() {
+    if (!detail || detailSaving) return;
+    if (hasDetailChanges(detail) && !window.confirm("Recarregar os dados atuais do servidor e descartar as alterações ainda não salvas nesta tela?")) return;
+    await openOrder(detail.id, detailTab);
   }
 
   async function openFinanceFromDetail(entryId?: number) {
@@ -418,12 +507,14 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
     }
     setDetailTab(nextTab);
     if (nextTab === "history") {
+      try {
       const [statusRows, locationRows] = await Promise.all([
         apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${detail.id}/history`),
         apiClient.get<LocationHistory[]>(`/laboratory/work-orders/${detail.id}/location-history`),
       ]);
       setHistory(statusRows);
       setLocationHistory(locationRows);
+      } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao consultar o histórico."); }
     }
   }
 
@@ -438,6 +529,9 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   }
 
   async function changeStatus(targetStatus: WorkOrderStatus, override = false, overrideNote = "") {
+    if (transitionPendingRef.current) return;
+    transitionPendingRef.current = true;
+    try {
     if (!detail || targetStatus === detail.status) return;
     let currentDetail = detail;
     if (hasDetailChanges(currentDetail)) {
@@ -446,7 +540,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       currentDetail = savedDetail;
     }
 
-    setLoading(true); setError(""); setMessage("");
+    setDetailSaving(true); setError(""); setMessage("");
     try {
       const currentStatus = currentDetail.status;
       const updated = await apiClient.post<WorkOrder>(`/laboratory/work-orders/${currentDetail.id}/status`, {
@@ -455,17 +549,20 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         override,
       });
       const updatedDetail = toDetail(updated);
+      detailBaselineRef.current = updatedDetail;
       detailSavedFingerprintRef.current = detailFingerprint(updatedDetail, canViewValues);
       setDetail(updatedDetail);
-      setHistory(await apiClient.get<StatusHistory[]>(`/laboratory/work-orders/${currentDetail.id}/history`));
       setMessage(`Status da ${updated.number} alterado para ${statusLabel(updated.status, workflowOptions)}.`);
-      await load();
-      if (locationMap !== null || view === "locations") await loadLocationMap({ silent: true });
+      void refreshAfterDetailWrite(updated.id);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível alterar o status."); }
-    finally { setLoading(false); }
+    finally { setDetailSaving(false); }
+    } finally { transitionPendingRef.current = false; }
   }
 
   async function toggleSubstatus(code: string, active: boolean) {
+    if (transitionPendingRef.current) return;
+    transitionPendingRef.current = true;
+    try {
     if (!detail) return;
     let currentDetail = detail;
     if (hasDetailChanges(currentDetail)) {
@@ -474,20 +571,21 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       currentDetail = savedDetail;
     }
 
-    setLoading(true); setError(""); setMessage("");
+    setDetailSaving(true); setError(""); setMessage("");
     try {
       const updated = await apiClient.post<WorkOrder>(`/laboratory/work-orders/${currentDetail.id}/substatuses/${code}`, {
         active, version: currentDetail.version,
       });
       const updatedDetail = toDetail(updated);
+      detailBaselineRef.current = updatedDetail;
       detailSavedFingerprintRef.current = detailFingerprint(updatedDetail, canViewValues);
       setDetail(updatedDetail);
       const option = workflowOptions.find((item) => item.kind === "substatus" && item.code === code);
       setMessage(`${option?.label ?? "Substatus"} ${active ? "marcado" : "desmarcado"} na ${updated.number}.`);
-      await load();
-      if (locationMap !== null || view === "locations") await loadLocationMap({ silent: true });
+      void refreshAfterDetailWrite(updated.id);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível alterar o substatus."); }
-    finally { setLoading(false); }
+    finally { setDetailSaving(false); }
+    } finally { transitionPendingRef.current = false; }
   }
 
   const primaryStatusOptions = useMemo(() => {
@@ -500,8 +598,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
 
   async function loadLocationMap(options?: { silent?: boolean }) {
     const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    setError("");
+    if (!silent) { setLoading(true); setError(""); }
     try {
       const data = await apiClient.get<LaboratoryLocationMap>(`/laboratory/locations/map?ts=${Date.now()}`);
       setLocationMap(data);
@@ -647,13 +744,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       />}
 
       {showForm && <OrderForm form={form} setForm={setForm} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} onTab={(nextTab) => void switchDetailTab(nextTab)} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} history={history} locationHistory={locationHistory} workflowOptions={workflowOptions} loading={loading} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onOpenReceivables={() => void openFinanceFromDetail()} onOpenReceivableEntry={(entryId) => void openFinanceFromDetail(entryId)} onLocationPreview={(location) => void openLocationPreview(location)} onSave={() => void saveDetail()} onInactivate={() => void inactivateSelected()} canInactivate={canManageQuote} onStatus={(status, note) => void changeStatus(status, false, note ?? "")} onSubstatus={(code, active) => void toggleSubstatus(code, active)} onClose={() => void closeDetail()} onInventoryChange={async () => {
-        const updated = await apiClient.get<WorkOrder>(`/laboratory/work-orders/${detail.id}`);
-        const refreshed = toDetail(updated);
-        detailSavedFingerprintRef.current = detailFingerprint(refreshed, canViewValues);
-        setDetail(refreshed);
-        await load();
-      }} />}
+      {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} onTab={(nextTab) => void switchDetailTab(nextTab)} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} history={history} locationHistory={locationHistory} workflowOptions={workflowOptions} loading={detailLoading || detailSaving} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onOpenReceivables={() => void openFinanceFromDetail()} onOpenReceivableEntry={(entryId) => void openFinanceFromDetail(entryId)} onLocationPreview={(location) => void openLocationPreview(location)} onSave={() => void saveDetail()} onInactivate={() => void inactivateSelected()} canInactivate={canManageQuote} onStatus={(status, note) => void changeStatus(status, false, note ?? "")} onSubstatus={(code, active) => void toggleSubstatus(code, active)} onClose={() => void closeDetail()} onInventoryChange={refreshOpenDetail} onSuggestLocation={() => void suggestDetailLocation()} suggestingLocation={suggestingLocation} error={error} onReload={() => void reloadDetail()} />}
       {showSettings && <SettingsModal company={company === "all" ? (companies[0]?.company_code || "universo_eletronica") : company} companies={companies} locationConfig={locationConfig} customers={customers} technicians={technicians} workflowOptions={workflowOptions} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={async () => { await Promise.all([load(), loadMasterData()]); }} canManageTechnicians={canManageTechnicians} />}
     </main>
   );
@@ -792,7 +883,8 @@ function LaboratoryLocationMapView({ data, updatedAt, filter, setFilter, loading
 }
 
 function payloadFromForm(form: FormState, includeSensitiveValues: boolean) {
-  const { parts_cost, quoted_value, approved_value, ...safeForm } = form;
+  const editableForm = Object.fromEntries(Object.keys(emptyForm()).map((key) => [key, form[key as keyof FormState]])) as FormState;
+  const { parts_cost, quoted_value, approved_value, ...safeForm } = editableForm;
   return {
     ...safeForm, customer_id: form.customer_id ? Number(form.customer_id) : null,
     assigned_technician_id: form.assigned_technician_id ? Number(form.assigned_technician_id) : null,
@@ -807,7 +899,7 @@ function payloadFromForm(form: FormState, includeSensitiveValues: boolean) {
     entry_condition: form.entry_condition || null, accessories_received: form.accessories_received || null,
     internal_notes: form.internal_notes || null, customer_notes: form.customer_notes || null,
     ...(includeSensitiveValues ? {
-      parts_cost: parts_cost || null, quoted_value: quoted_value || null, approved_value: approved_value || null,
+      parts_cost: optionalMoneyInput(parts_cost), quoted_value: optionalMoneyInput(quoted_value), approved_value: optionalMoneyInput(approved_value),
     } : {}),
   };
 }
@@ -969,11 +1061,16 @@ function OrderReceivablesPanel({ workOrderId, onOpenReceivables, onOpenEntry }: 
   </section>;
 }
 
-function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, customers, technicians, history, locationHistory, workflowOptions, loading, saved, canManageQuote, canViewValues, onLocationPreview, onSave, onInactivate, canInactivate, onStatus, onSubstatus, onClose, onInventoryChange, onOpenReceivables, onOpenReceivableEntry }: { detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; onTab: (value: DetailTab) => void; companies: CompanyProfile[]; locations: LaboratoryLocationConfig["locations"]; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; locationHistory: LocationHistory[]; workflowOptions: WorkflowOption[]; loading: boolean; saved: boolean; canManageQuote: boolean; canViewValues: boolean; onLocationPreview: (location: string) => void; onSave: () => void; onInactivate: () => void; canInactivate: boolean; onStatus: (status: WorkOrderStatus, note?: string) => void; onSubstatus: (code: string, active: boolean) => void; onClose: () => void; onInventoryChange:()=>Promise<void>; onOpenReceivables: () => void; onOpenReceivableEntry: (entryId: number) => void }) {
+function OrderDetail({ error, onReload, onSuggestLocation, suggestingLocation, detail, setDetail, tab, onTab, companies, locations, customers, technicians, history, locationHistory, workflowOptions, loading, saved, canManageQuote, canViewValues, onLocationPreview, onSave, onInactivate, canInactivate, onStatus, onSubstatus, onClose, onInventoryChange, onOpenReceivables, onOpenReceivableEntry }: { error: string; onReload: () => void; onSuggestLocation: () => void; suggestingLocation: boolean; detail: DetailState; setDetail: (value: DetailState) => void; tab: DetailTab; onTab: (value: DetailTab) => void; companies: CompanyProfile[]; locations: LaboratoryLocationConfig["locations"]; customers: Customer[]; technicians: Technician[]; history: StatusHistory[]; locationHistory: LocationHistory[]; workflowOptions: WorkflowOption[]; loading: boolean; saved: boolean; canManageQuote: boolean; canViewValues: boolean; onLocationPreview: (location: string) => void; onSave: () => void; onInactivate: () => void; canInactivate: boolean; onStatus: (status: WorkOrderStatus, note?: string) => void; onSubstatus: (code: string, active: boolean) => void; onClose: () => void; onInventoryChange:()=>Promise<void>; onOpenReceivables: () => void; onOpenReceivableEntry: (entryId: number) => void }) {
   const [targetStatus, setTargetStatus] = useState<WorkOrderStatus | "">("");
   const [showMobileActions, setShowMobileActions] = useState(false);
   const tabsRef = useRef<HTMLElement>(null);
   const quoteSaveRef = useRef<QuoteEditorHandle>(null);
+  async function leaveDetail(action: () => void) {
+    if (loading) return;
+    if (tab === "quote" && quoteSaveRef.current && !await quoteSaveRef.current.saveIfNeeded()) return;
+    action();
+  }
   const configuredBusinessStatuses = workflowOptions
     .filter((item) => item.kind === "status" && item.is_active)
     .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
@@ -1011,7 +1108,7 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
             <button type="button" className="lab-detail-actions-toggle" aria-expanded={showMobileActions} aria-controls="lab-detail-extra-actions" onClick={() => setShowMobileActions((value) => !value)}>
               Ações <ChevronDown size={16} aria-hidden="true" />
             </button>
-            <button type="button" className="lab-close-button" aria-label="Fechar detalhe da OS" disabled={loading} onClick={onClose}><X size={21} /></button>
+            <button type="button" className="lab-close-button" aria-label="Fechar detalhe da OS" disabled={loading} onClick={() => void leaveDetail(onClose)}><X size={21} /></button>
           </div>
         </div>
         <span className="lab-detail-subtitle">{detail.customer_name} · {detail.equipment_type || detail.model || "Equipamento"}</span>
@@ -1022,27 +1119,28 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
         </div>
       </div>
       <div id="lab-detail-extra-actions" className={`lab-detail-header-actions${showMobileActions ? " is-mobile-open" : ""}`}>
-        {canViewValues && <button type="button" className="lab-receipts-link" disabled={loading} onClick={onOpenReceivables}><BadgeDollarSign size={16}/> Ver receitas / parcelas</button>}
-        {canInactivate && !detail.is_inactive && <button type="button" className="lab-inactivate-action" disabled={loading} onClick={onInactivate}><Trash2 size={16}/> Inativar OS</button>}
+        {canViewValues && <button type="button" className="lab-receipts-link" disabled={loading} onClick={() => void leaveDetail(onOpenReceivables)}><BadgeDollarSign size={16}/> Ver receitas / parcelas</button>}
+        {canInactivate && !detail.is_inactive && <button type="button" className="lab-inactivate-action" disabled={loading} onClick={() => void leaveDetail(onInactivate)}><Trash2 size={16}/> Inativar OS</button>}
         {detail.is_inactive && <span className="lab-inactive-label">OS INATIVADA</span>}
         <ActionButton variant="secondary" icon={<Printer size={17}/>} onClick={() => window.open(`/api/laboratory/work-orders/${detail.id}/label.pdf`, "_blank", "noopener,noreferrer")}>Emitir etiqueta</ActionButton>
-        <button type="button" className="lab-close-button lab-detail-close-desktop" aria-label="Fechar detalhe da OS" disabled={loading} onClick={onClose}><X /></button>
+        <button type="button" className="lab-close-button lab-detail-close-desktop" aria-label="Fechar detalhe da OS" disabled={loading} onClick={() => void leaveDetail(onClose)}><X /></button>
       </div>
     </header>
+    {error && <div className="lab-alert error" role="alert">{error} <button type="button" className="lab-reload-detail" disabled={loading} onClick={onReload}>Recarregar O.S.</button></div>}
     <nav ref={tabsRef} className="lab-detail-tabs" aria-label="Seções da ordem de serviço">
-      <TabButton active={tab === "general"} disabled={loading} icon={<Pencil size={16} />} onClick={() => onTab("general")}>Edição completa</TabButton>
-      <TabButton active={tab === "technical"} disabled={loading} icon={<Wrench size={16} />} onClick={() => onTab("technical")}>Dados técnicos</TabButton>
-      {canViewValues && <TabButton active={tab === "financial"} disabled={loading} icon={<BadgeDollarSign size={16} />} onClick={() => onTab("financial")}>Valores</TabButton>}
-      <TabButton active={tab === "materials"} disabled={loading} icon={<Wrench size={16} />} onClick={() => onTab("materials")}>Materiais</TabButton>
-      <TabButton active={tab === "status"} disabled={loading} icon={<ClipboardList size={16} />} onClick={() => onTab("status")}>Status</TabButton>
-      <TabButton active={tab === "documents"} disabled={loading} icon={<Image size={16} />} onClick={() => onTab("documents")}>Fotos</TabButton>
-      <TabButton active={tab === "quote"} disabled={loading} icon={<FileText size={16} />} onClick={() => onTab("quote")}>Orçamento</TabButton>
-      <TabButton active={tab === "mechanics"} disabled={loading} icon={<Wrench size={16} />} onClick={() => onTab("mechanics")}>Mecânica</TabButton>
-      <TabButton active={tab === "history"} disabled={loading} icon={<History size={16} />} onClick={() => onTab("history")}>Histórico</TabButton>
+      <TabButton active={tab === "general"} disabled={loading} icon={<Pencil size={16} />} onClick={() => void leaveDetail(() => onTab("general"))}>Edição completa</TabButton>
+      <TabButton active={tab === "technical"} disabled={loading} icon={<Wrench size={16} />} onClick={() => void leaveDetail(() => onTab("technical"))}>Dados técnicos</TabButton>
+      {canViewValues && <TabButton active={tab === "financial"} disabled={loading} icon={<BadgeDollarSign size={16} />} onClick={() => void leaveDetail(() => onTab("financial"))}>Valores</TabButton>}
+      <TabButton active={tab === "materials"} disabled={loading} icon={<Wrench size={16} />} onClick={() => void leaveDetail(() => onTab("materials"))}>Materiais</TabButton>
+      <TabButton active={tab === "status"} disabled={loading} icon={<ClipboardList size={16} />} onClick={() => void leaveDetail(() => onTab("status"))}>Status</TabButton>
+      <TabButton active={tab === "documents"} disabled={loading} icon={<Image size={16} />} onClick={() => void leaveDetail(() => onTab("documents"))}>Fotos</TabButton>
+      <TabButton active={tab === "quote"} disabled={loading} icon={<FileText size={16} />} onClick={() => void leaveDetail(() => onTab("quote"))}>Orçamento</TabButton>
+      <TabButton active={tab === "mechanics"} disabled={loading} icon={<Wrench size={16} />} onClick={() => void leaveDetail(() => onTab("mechanics"))}>Mecânica</TabButton>
+      <TabButton active={tab === "history"} disabled={loading} icon={<History size={16} />} onClick={() => void leaveDetail(() => onTab("history"))}>Histórico</TabButton>
     </nav>
     <fieldset className="lab-detail-body-scroll" disabled={loading || detail.is_inactive} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
     <div className="lab-detail-content">
-      {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><CustomerSearchSelect customers={customers} companyCode={detail.company_code} value={detail.customer_id} customerName={detail.customer_name} onChange={(customer) => setDetail({ ...detail, customer_id: String(customer.id), customer_name: customer.legal_name })} /><SelectCompany companies={companies} value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value, customer_id: "", customer_name: "" })} /></div><StandardInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><WarrantyInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><HistoricalInvoiceNotes values={detail} /><div className="lab-location-editor"><div className="lab-location-field"><SelectLocation locations={locations} value={detail.storage_location} onChange={(value) => setDetail({ ...detail, storage_location: value })} />{detail.storage_location && <button type="button" className="lab-location-current lab-location-current-button" onClick={() => onLocationPreview(detail.storage_location)} title="Mostrar esta posição no mapa"><MapPin size={15} /> Posição atual: <strong>{detail.storage_location}</strong><span>Ver no mapa</span></button>}</div><div className="lab-location-actions"><button type="button" className="lab-location-suggest" onClick={async()=>{const result=await apiClient.get<{location:string}>("/laboratory/locations/next");setDetail({...detail,storage_location:result.location});}}>Sugerir melhor posição</button><button type="button" className="lab-location-release" disabled={!detail.storage_location} onClick={()=>setDetail({...detail,storage_location:""})}>Liberar posição</button></div><small className="lab-location-help">A localização é física e independente do status. Mais de uma O.S. pode compartilhar a mesma posição; a sugestão prioriza os espaços menos carregados.</small></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
+      {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><CustomerSearchSelect customers={customers} companyCode={detail.company_code} value={detail.customer_id} customerName={detail.customer_name} onChange={(customer) => setDetail({ ...detail, customer_id: String(customer.id), customer_name: customer.legal_name })} /><SelectCompany companies={companies} value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value, customer_id: "", customer_name: "" })} /></div><StandardInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><WarrantyInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><HistoricalInvoiceNotes values={detail} /><div className="lab-location-editor"><div className="lab-location-field"><SelectLocation locations={locations} value={detail.storage_location} onChange={(value) => setDetail({ ...detail, storage_location: value })} />{detail.storage_location && <button type="button" className="lab-location-current lab-location-current-button" onClick={() => onLocationPreview(detail.storage_location)} title="Mostrar esta posição no mapa"><MapPin size={15} /> Posição atual: <strong>{detail.storage_location}</strong><span>Ver no mapa</span></button>}</div><div className="lab-location-actions"><button type="button" className="lab-location-suggest" disabled={suggestingLocation} onClick={onSuggestLocation}>Sugerir melhor posição</button><button type="button" className="lab-location-release" disabled={!detail.storage_location} onClick={()=>setDetail({...detail,storage_location:""})}>Liberar posição</button></div><small className="lab-location-help">A localização é física e independente do status. Mais de uma O.S. pode compartilhar a mesma posição; a sugestão prioriza os espaços menos carregados.</small></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
       {tab === "technical" && <><SectionTitle title="Informações do equipamento" /><div className="lab-grid three"><Input label="Equipamento" value={detail.equipment_type} onChange={(value) => setDetail({ ...detail, equipment_type: value })} /><Input label="Fabricante" value={detail.manufacturer} onChange={(value) => setDetail({ ...detail, manufacturer: value })} /><Input label="Modelo" value={detail.model} onChange={(value) => setDetail({ ...detail, model: value })} /><Input label="Número de série" value={detail.serial_number} onChange={(value) => setDetail({ ...detail, serial_number: value })} /><Input label="Potência" value={detail.power} onChange={(value) => setDetail({ ...detail, power: value })} /><Input label="Tensão" value={detail.voltage} onChange={(value) => setDetail({ ...detail, voltage: value })} /></div><label>Observações internas<textarea rows={6} value={detail.internal_notes} onChange={(e) => setDetail({ ...detail, internal_notes: e.target.value })} /></label></>}
       {canViewValues && tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div><OrderReceivablesPanel workOrderId={detail.id} onOpenReceivables={onOpenReceivables} onOpenEntry={onOpenReceivableEntry} /></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} onInventoryChange={onInventoryChange} />}
@@ -1050,6 +1148,7 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
       {tab === "documents" && <EquipmentDocumentsPanel workOrderId={detail.id} />}
       {tab === "quote" && <QuoteEditor
         saveRef={quoteSaveRef}
+        onWorkOrderChanged={onInventoryChange}
         workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
         equipmentType={detail.equipment_type} manufacturer={detail.manufacturer} model={detail.model}
         serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
@@ -1071,7 +1170,7 @@ function OrderDetail({ detail, setDetail, tab, onTab, companies, locations, cust
       </div>}
     </div>
     </fieldset>
-    <footer className="lab-detail-footer"><ActionButton disabled={loading} variant="secondary" icon={<X size={17} />} onClick={onClose}>Fechar</ActionButton><ActionButton loading={tab === "quote" ? false : loading} success={tab === "quote" ? false : saved} disabled={tab === "quote" && !canManageQuote} icon={<Save size={17} />} onClick={tab === "quote" ? () => { void quoteSaveRef.current?.save(); } : onSave}>{tab === "quote" ? "Salvar orçamento" : saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>
+    <footer className="lab-detail-footer"><ActionButton disabled={loading} variant="secondary" icon={<X size={17} />} onClick={() => void leaveDetail(onClose)}>Fechar</ActionButton><ActionButton loading={tab === "quote" ? false : loading} success={tab === "quote" ? false : saved} disabled={tab === "quote" && !canManageQuote} icon={<Save size={17} />} onClick={tab === "quote" ? () => { void quoteSaveRef.current?.save(); } : onSave}>{tab === "quote" ? "Salvar orçamento" : saved ? "Salvo" : "Salvar alterações"}</ActionButton></footer>
   </section></div>;
 }
 

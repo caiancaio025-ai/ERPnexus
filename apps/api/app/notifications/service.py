@@ -9,6 +9,22 @@ from app.auth.models import User
 from app.notifications.models import Notification
 
 
+def _preview(value: str | None, limit: int) -> str | None:
+    if value is None or len(value) <= limit:
+        return value
+    return value[:limit - 1] + "…"
+
+
+def _full_details(title: str, details: str | None = None, equipment: str | None = None) -> str | None:
+    """Notification previews must never abort a valid business transaction."""
+    parts = [details] if details else []
+    if len(title) > 180:
+        parts.append(f"Título completo: {title}")
+    if equipment and len(equipment) > 250:
+        parts.append(f"Equipamento completo: {equipment}")
+    return "\n".join(parts) or None
+
+
 async def notify_modules(
     db: AsyncSession,
     *,
@@ -40,7 +56,8 @@ async def notify_modules(
                     activity_module=scope,
                     push_processed_at=datetime.now(UTC),
                     severity=severity,
-                    title=title,
+                    title=_preview(title, 180),
+                    details=_full_details(title),
                     message=message,
                     target=target,
                     entity_type=entity_type,
@@ -81,7 +98,8 @@ async def notify_roles(
                 activity_module="orcamentos" if category == "quote" else None,
                 push_processed_at=datetime.now(UTC),
                 severity=severity,
-                title=title,
+                title=_preview(title, 180),
+                details=_full_details(title),
                 message=message,
                 target=target,
                 entity_type=entity_type,
@@ -117,7 +135,8 @@ async def notify_quote_users(
                 activity_module="orcamentos",
                 push_processed_at=datetime.now(UTC),
                 severity=severity,
-                title=title,
+                title=_preview(title, 180),
+                details=_full_details(title),
                 message=message,
                 target=target,
                 entity_type=entity_type,
@@ -187,11 +206,12 @@ async def notify_activity(
         db.add(Notification(
             user_id=recipient.id, category=activity_module, activity_module=activity_module,
             action=action, actor_user_id=actor.id, actor_name=actor.name,
-            severity=severity, title=title, message=message,
+            severity=severity, title=_preview(title, 180), message=message,
             target=target, entity_type=entity_type, entity_id=entity_id,
             work_order_id=work_order_id,
             work_order_number=str(work_order_number) if work_order_number is not None else None,
-            equipment_name=equipment_name, details=details,
+            equipment_name=_preview(equipment_name, 250),
+            details=_full_details(title, details, equipment_name),
             # Mensagem exclusivamente interna; não colocá-la na fila Web Push.
             push_processed_at=datetime.now(UTC),
         ))

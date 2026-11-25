@@ -29,6 +29,10 @@ ai = [
   "httpx>=0.28,<1"
 ]
 dev = [
+  "aiosqlite>=0.20,<1",
+  "PyYAML>=6,<7",
+  "tinycss2>=1.4,<2",
+  "PyMuPDF>=1.26,<2",
   "httpx>=0.28,<1",
   "mypy>=1.16,<2",
   "pytest>=9.0.3,<10",
@@ -43,7 +47,9 @@ include = ["app*"]
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
+  "integration: testes com PostgreSQL isolado explicitamente autorizado por SENTICO_TEST_DATABASE_URL",
   "performance: testes de desempenho executados somente sob demanda"
 ]
 

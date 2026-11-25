@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-WEB_ROOT = Path("/web")
+WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
 LAB_DASHBOARD = WEB_ROOT / "src" / "features" / "laboratory" / "LaboratoryDashboard.tsx"
 
 
@@ -18,9 +18,9 @@ def test_detail_tabs_persist_pending_edits_before_navigation() -> None:
     assert "if (!savedDetail) return;" in source
     assert "setDetailTab(nextTab);" in source
     assert 'onTab={(nextTab) => void switchDetailTab(nextTab)}' in source
-    assert 'onClick={() => onTab("general")}' in source
-    assert 'onClick={() => onTab("technical")}' in source
-    assert 'onClick={() => onTab("status")}' in source
+    assert 'onClick={() => void leaveDetail(() => onTab("general"))}' in source
+    assert 'onClick={() => void leaveDetail(() => onTab("technical"))}' in source
+    assert 'onClick={() => void leaveDetail(() => onTab("status"))}' in source
     assert 'onClick={() => setTab("general")}' not in source
 
 
@@ -54,3 +54,14 @@ def test_autosave_tracks_server_fingerprint_and_avoids_redundant_patch() -> None
     assert "if (detailSavePromiseRef.current) return detailSavePromiseRef.current;" in source
     assert "detailSavedFingerprintRef.current = detailFingerprint(savedDetail, canViewValues);" in source
     assert "return JSON.stringify(payloadFromForm(detail, includeSensitiveValues));" in source
+
+
+def test_detail_mutations_use_partial_versioned_changes_and_separate_busy_state() -> None:
+    source = _source()
+    assert "await saveVersionedChanges(" in source
+    assert "payloadFromForm(baseline, canViewValues), payloadFromForm(currentDetail, canViewValues)" in source
+    assert "setDetailSaving(true)" in source
+    assert "loading={detailLoading || detailSaving}" in source
+    assert "void refreshAfterDetailWrite(updated.id);" in source
+    assert 'role="alert">{error}' in source
+    assert "quoteSaveRef.current.saveIfNeeded()" in source

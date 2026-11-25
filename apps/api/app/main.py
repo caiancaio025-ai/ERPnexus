@@ -6,6 +6,7 @@ from app.auth.admin_router import router as admin_users_router
 from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.core.observability import request_observability_middleware
+from app.core.errors import register_error_handlers
 from app.customers.router import router as customers_router
 from app.commercial.router import router as commercial_router
 from app.dashboard.router import router as dashboard_router
@@ -26,6 +27,7 @@ app = FastAPI(
 )
 
 app.middleware("http")(request_observability_middleware)
+register_error_handlers(app)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 app.add_middleware(
@@ -33,7 +35,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Idempotency-Key"],
     expose_headers=["X-Request-ID"],
 )
 app.include_router(health_router, prefix="/health", tags=["health"])

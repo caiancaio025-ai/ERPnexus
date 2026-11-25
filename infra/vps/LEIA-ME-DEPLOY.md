@@ -1,4 +1,14 @@
-# Sêntico Green — implantação controlada V47
+# Sêntico Green — histórico da implantação controlada V47
+
+## Publicação da V48
+
+A branch principal agora contém o código da V48. Enviar ou atualizar esse código pelo Git não substitui os containers em execução nem aplica alterações no banco da VPS. Consulte o `README.md` da raiz para instalação e testes locais da V48.
+
+O script `infra/vps/atualizar.sh` continua restrito à implantação V47 descrita abaixo: ele verifica o commit homologado, a revisão inicial do banco e os IDs exatos das imagens V47. Essas verificações foram preservadas; o script bloqueia uma aplicação diferente, inclusive a V48. Ele não é o instalador nem o atualizador da V48.
+
+A V48 mantém a revisão Alembic `20261123_02`. Sua implantação na VPS exige um procedimento próprio para construir e validar as imagens V48; trocar apenas a tag ou reutilizar as etapas V47 abaixo não atende a essa atualização.
+
+## Procedimento histórico — somente V47
 
 Procedimento específico para a V47 homologada em b98407ed0ed70c7b3e4185ffc4318c4e5ad14eb9. Não é um atualizador genérico. Não altera a aplicação homologada nem a configuração Compose. As imagens aprovadas na VPS são reutilizadas por tag e ID exatos.
 

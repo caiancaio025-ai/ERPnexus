@@ -1,0 +1,26 @@
+{
+  "repositorio": "caiancaio025-ai/ERPnexus",
+  "branch_destino": "main",
+  "base_analisada": "99a44abdf159495bbb9a48aa21276e5a1cd8c93e",
+  "data": "2026-11-25",
+  "zip_v48_sha256": "23aa7b2faca3ccbc97e95daf8457b75ae7e9fbb3d48e75ae2bb712e555f759eb",
+  "arquivos_da_aplicacao_identicos_ao_zip": 181,
+  "organizacao": "apps/ e Compose na raiz; caminhos do instalador/testes adaptados",
+  "validacao_no_checkout": {
+    "python_aprovados": 665,
+    "python_ignorados": 7,
+    "python_falhas": 0,
+    "node_testes_aprovados": 18,
+    "orcamento_verificacoes_aprovadas": 20,
+    "preferencias_temas_verificacoes_aprovadas": 41,
+    "typescript_vite": "aprovado"
+  },
+  "infraestrutura_preservada": [
+    "docker-compose.prod.yml",
+    "Caddyfile.green",
+    "infra/vps/atualizar.sh",
+    "infra/vps/voltar.sh",
+    "scripts de backup"
+  ],
+  "implantacao_na_vps_executada": false
+}

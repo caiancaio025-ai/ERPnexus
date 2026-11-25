@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgeDollarSign,
@@ -122,7 +122,7 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const canAccess = useMemo(
-    () => ["admin", "super_admin"].includes(user.role) || user.modules.some((m) => ["laboratorio", "comercial", "financeiro"].includes(m)),
+    () => ["admin", "super_admin", "gestao"].includes(user.role) || user.modules.some((m) => ["laboratorio", "comercial", "financeiro"].includes(m)),
     [user],
   );
   const canViewValues = ["gestao", "super_admin"].includes(user.role);
@@ -227,13 +227,13 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
               <div className="customer-content">
                 {tab === "overview" && customer && <Overview customer={customer} canViewValues={canViewValues} />}
                 {tab === "data" && <CustomerData form={form} setForm={setForm} onSubmit={saveCustomer} loading={loading} />}
-                {tab === "contacts" && customer && <Contacts customer={customer} reload={() => openCustomer(customer.id, true)} />}
-                {tab === "billing" && customer && <Billing customer={customer} reload={() => openCustomer(customer.id, true)} />}
-                {tab === "documents" && customer && <Documents customer={customer} />}
-                {tab === "equipment" && customer && <Equipment customer={customer} />}
-                {tab === "workorders" && customer && <WorkOrders customer={customer} canViewValues={canViewValues} />}
-                {tab === "quotes" && customer && <Quotes customer={customer} canViewValues={canViewValues} />}
-                {tab === "notes" && customer && <Notes customer={customer} />}
+                {tab === "contacts" && customer && <Contacts key={customer.id} customer={customer} reload={() => openCustomer(customer.id, true)} />}
+                {tab === "billing" && customer && <Billing key={customer.id} customer={customer} reload={() => openCustomer(customer.id, true)} />}
+                {tab === "documents" && customer && <Documents key={customer.id} customer={customer} />}
+                {tab === "equipment" && customer && <Equipment key={customer.id} customer={customer} />}
+                {tab === "workorders" && customer && <WorkOrders key={customer.id} customer={customer} canViewValues={canViewValues} />}
+                {tab === "quotes" && customer && <Quotes key={customer.id} customer={customer} canViewValues={canViewValues} />}
+                {tab === "notes" && customer && <Notes key={customer.id} customer={customer} />}
               </div>
             </>}
           </section>
@@ -288,18 +288,36 @@ const EMPTY_CONTACT = { department: "", name: "", job_title: "", email: "", phon
 
 function Contacts({ customer, reload }: { customer: CustomerDetail; reload: () => Promise<void> }) {
   const [form, setForm] = useState(EMPTY_CONTACT); const [editing, setEditing] = useState<number | null>(null);
+  const pendingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   function edit(item: CustomerContact) { setEditing(item.id); setForm({ department: item.department || "", name: item.name, job_title: item.job_title || "", email: item.email || "", phone: item.phone || "", whatsapp: item.whatsapp || "", is_primary: item.is_primary, receives_quotes: item.receives_quotes, receives_invoices: item.receives_invoices, receives_reports: item.receives_reports, receives_service_updates: item.receives_service_updates, notes: item.notes || "" }); }
   async function save() {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || pendingRef.current) return;
+    pendingRef.current = true; setSaving(true); setError(""); setSaved(false);
+    try {
     const payload = { ...form, department: emptyToNull(form.department), job_title: emptyToNull(form.job_title), email: emptyToNull(form.email), phone: emptyToNull(form.phone), whatsapp: emptyToNull(form.whatsapp), notes: emptyToNull(form.notes), is_primary: form.is_primary || (!editing && customer.contacts.length === 0) };
     if (editing) await apiClient.put(`/customers/${customer.id}/contacts/${editing}`, payload); else await apiClient.post(`/customers/${customer.id}/contacts`, payload);
-    setForm(EMPTY_CONTACT); setEditing(null); await reload();
+    setForm(EMPTY_CONTACT); setEditing(null); setSaved(true); await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o contato."); }
+    finally { pendingRef.current = false; setSaving(false); }
   }
-  async function remove(id: number) { if (!window.confirm("Desativar este contato?")) return; await apiClient.delete(`/customers/${customer.id}/contacts/${id}`); if (editing === id) { setEditing(null); setForm(EMPTY_CONTACT); } await reload(); }
+  async function remove(id: number) {
+    if (pendingRef.current || !window.confirm("Desativar este contato?")) return;
+    pendingRef.current = true; setSaving(true); setError(""); setSaved(false);
+    try {
+      await apiClient.delete(`/customers/${customer.id}/contacts/${id}`);
+      if (editing === id) { setEditing(null); setForm(EMPTY_CONTACT); }
+      await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível desativar o contato."); }
+    finally { pendingRef.current = false; setSaving(false); }
+  }
   const patch = (key: keyof typeof EMPTY_CONTACT, value: string | boolean) => setForm({ ...form, [key]: value });
   return <div className="customer-panel">
     <SectionTitle icon={Users} title="Contatos do cliente" subtitle="Responsáveis e regras de comunicação por tipo de documento." />
-    <div className="contact-editor">
+    {error && <p className="customers-error" role="alert">{error}</p>}{saved && <p role="status">Contato salvo.</p>}
+    <fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}><div className="contact-editor">
       <div className="customer-grid three"><Field label="Pessoa responsável *" value={form.name} onChange={(v) => patch("name", v)} /><Field label="Setor" value={form.department} onChange={(v) => patch("department", v)} /><Field label="Cargo" value={form.job_title} onChange={(v) => patch("job_title", v)} /></div>
       <div className="customer-grid three"><Field label="E-mail" value={form.email} onChange={(v) => patch("email", v)} /><Field label="Telefone" value={form.phone} onChange={(v) => patch("phone", v)} /><Field label="WhatsApp" value={form.whatsapp} onChange={(v) => patch("whatsapp", v)} /></div>
       <div className="contact-flags">{[["is_primary","Contato principal"],["receives_quotes","Recebe orçamentos"],["receives_invoices","Recebe notas"],["receives_reports","Recebe laudos"],["receives_service_updates","Atualizações de OS"]].map(([key,label]) => <label key={key}><input type="checkbox" checked={Boolean(form[key as keyof typeof form])} onChange={(e) => patch(key as keyof typeof EMPTY_CONTACT, e.target.checked)} />{label}</label>)}</div>
@@ -307,14 +325,29 @@ function Contacts({ customer, reload }: { customer: CustomerDetail; reload: () =
       <div className="editor-actions"><button className="customers-primary" onClick={() => void save()} disabled={!form.name.trim()}>{editing ? <Save size={16}/> : <Plus size={16}/>} {editing ? "Salvar contato" : "Adicionar contato"}</button>{editing && <button onClick={() => { setEditing(null); setForm(EMPTY_CONTACT); }}><X size={15}/>Cancelar</button>}</div>
     </div>
     <div className="cards-list">{customer.contacts.map((item) => <article key={item.id}><span className="contact-icon"><UserRound size={18}/></span><div className="contact-card-body"><strong>{item.name}{item.is_primary ? " · Principal" : ""}</strong><span>{[item.department,item.job_title].filter(Boolean).join(" · ") || "Sem setor/cargo"}</span><small>{[item.email,item.phone,item.whatsapp].filter(Boolean).join(" · ") || "Sem contato informado"}</small><div className="contact-badges">{item.receives_quotes && <b>Orçamentos</b>}{item.receives_invoices && <b>Notas</b>}{item.receives_reports && <b>Laudos</b>}{item.receives_service_updates && <b>OS</b>}</div></div><div className="card-actions"><button onClick={() => edit(item)} title="Editar"><Pencil size={15}/></button><button onClick={() => void remove(item.id)} title="Desativar"><Trash2 size={15}/></button></div></article>)}</div>
+    </fieldset>
   </div>;
 }
 
 function Billing({ customer, reload }: { customer: CustomerDetail; reload: () => Promise<void> }) {
   const billing = customer.billing;
   const [form, setForm] = useState({ billing_cutoff_day: billing?.billing_cutoff_day ?? "", payment_term_days: billing?.payment_term_days ?? "", invoice_email: billing?.invoice_email ?? "", xml_email: billing?.xml_email ?? "", portal_url: billing?.portal_url ?? "", billing_instructions: billing?.billing_instructions ?? "", financial_notes: billing?.financial_notes ?? "", requires_purchase_order: billing?.requires_purchase_order ?? false, requires_customer_order: billing?.requires_customer_order ?? false, requires_measurement: billing?.requires_measurement ?? false, requires_service_report: billing?.requires_service_report ?? false });
-  async function save() { await apiClient.put(`/customers/${customer.id}/billing`, { ...form, billing_cutoff_day: form.billing_cutoff_day === "" ? null : Number(form.billing_cutoff_day), payment_term_days: form.payment_term_days === "" ? null : Number(form.payment_term_days) }); await reload(); }
+  const pendingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function save() {
+    if (pendingRef.current) return;
+    pendingRef.current = true; setSaving(true); setError(""); setSaved(false);
+    try {
+      await apiClient.put(`/customers/${customer.id}/billing`, { ...form, billing_cutoff_day: form.billing_cutoff_day === "" ? null : Number(form.billing_cutoff_day), payment_term_days: form.payment_term_days === "" ? null : Number(form.payment_term_days) });
+      setSaved(true); await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o faturamento."); }
+    finally { pendingRef.current = false; setSaving(false); }
+  }
   return <div className="customer-panel"><SectionTitle icon={ReceiptText} title="Política de faturamento" subtitle="Regras reutilizadas por Laboratório, Comercial e Financeiro." />
+    {error && <p className="customers-error" role="alert">{error}</p>}{saved && <p role="status">Política de faturamento salva.</p>}
+    <fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
     <div className="customer-grid"><Field label="Dia limite para faturar" type="number" value={String(form.billing_cutoff_day)} onChange={(v) => setForm({...form,billing_cutoff_day:v})}/><Field label="Prazo padrão (dias)" type="number" value={String(form.payment_term_days)} onChange={(v) => setForm({...form,payment_term_days:v})}/></div>
     <div className="customer-grid"><Field label="E-mail para NF" value={form.invoice_email} onChange={(v) => setForm({...form,invoice_email:v})}/><Field label="E-mail para XML" value={form.xml_email} onChange={(v) => setForm({...form,xml_email:v})}/></div>
     <Field label="Portal do cliente" value={form.portal_url} onChange={(v) => setForm({...form,portal_url:v})}/>
@@ -322,6 +355,7 @@ function Billing({ customer, reload }: { customer: CustomerDetail; reload: () =>
     <label><span>Instruções de faturamento</span><textarea rows={3} value={form.billing_instructions} onChange={(e) => setForm({...form,billing_instructions:e.target.value})}/></label>
     <label><span>Observações financeiras</span><textarea rows={3} value={form.financial_notes} onChange={(e) => setForm({...form,financial_notes:e.target.value})}/></label>
     <div className="panel-actions"><button className="customers-primary" onClick={() => void save()}><Save size={16}/>Salvar faturamento</button></div>
+    </fieldset>
   </div>;
 }
 

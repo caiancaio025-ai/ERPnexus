@@ -21,7 +21,7 @@ from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.notifications.events import purchase_order_activity, material_request_activity
 from app.purchasing.models import PurchaseAuditEvent, PurchaseOrder, Supplier
 from app.inventory.stock_codes import stock_id_from_query
-from app.inventory.purchase_cycle import purchase_unit_cost, receive_purchase
+from app.inventory.purchase_cycle import lock_purchase_receipts, purchase_unit_cost, receive_purchase
 from app.inventory.models import InventoryComponentFormat, InventoryItem, InventoryMovement
 from app.purchasing.schemas import (
     CompanyCode,
@@ -55,8 +55,15 @@ SearchFilter = Annotated[str | None, Query(max_length=120)]
 AttachmentFile = Annotated[UploadFile, File()]
 
 
-async def _purchase_or_404(db: AsyncSession, purchase_id: int) -> PurchaseOrder:
-    purchase = await db.get(PurchaseOrder, purchase_id)
+async def _purchase_or_404(
+    db: AsyncSession, purchase_id: int, *, for_update: bool = False,
+) -> PurchaseOrder:
+    if for_update:
+        purchase = await db.scalar(select(PurchaseOrder).where(
+            PurchaseOrder.id == purchase_id,
+        ).with_for_update().execution_options(populate_existing=True))
+    else:
+        purchase = await db.get(PurchaseOrder, purchase_id)
     if not purchase or purchase.is_deleted:
         raise HTTPException(status_code=404, detail="Compra não encontrada.")
     return purchase
@@ -353,6 +360,8 @@ async def create_order(
     db: DbSession,
 ):
     _require_sensitive_values(user)
+    if payload.status == "delivered":
+        await lock_purchase_receipts(db)
     supplier = await db.get(Supplier, payload.supplier_id)
     if not supplier or not supplier.is_active:
         raise HTTPException(status_code=400, detail="Fornecedor inválido.")
@@ -393,9 +402,13 @@ async def create_order(
         title=f"{'Material recebido' if purchase.status == 'delivered' else 'Compra registrada'} · {purchase.code}",
         message=f"{user.name} {'confirmou a chegada' if purchase.status == 'delivered' else 'registrou a compra'} de {purchase.quantity}x {purchase.product_name}.",
         severity="success" if purchase.status == "delivered" else "info")
-    await db.commit()
+    # Valida a resposta dentro da transação; falhas de leitura/serialização
+    # não devem aparecer como erro depois de a compra já ter sido confirmada.
+    await db.flush()
     await db.refresh(purchase)
-    return _purchase_output(purchase, include_sensitive_values=True)
+    result = _purchase_output(purchase, include_sensitive_values=True)
+    await db.commit()
+    return result
 
 
 @router.put("/orders/{purchase_id}", response_model=PurchaseOutput)
@@ -406,11 +419,23 @@ async def update_order(
     db: DbSession,
 ):
     _require_sensitive_values(user)
+    if payload.status == "delivered":
+        await lock_purchase_receipts(db)
     purchase = await db.scalar(select(PurchaseOrder).where(
         PurchaseOrder.id == purchase_id, PurchaseOrder.is_deleted.is_(False),
-    ).with_for_update())
+    ).with_for_update().execution_options(populate_existing=True))
     if purchase is None:
         raise HTTPException(404, "Compra não encontrada.")
+    # Clientes anteriores não recebiam estes campos no GET. Um campo ausente
+    # não significa que o usuário pediu para remover o vínculo do estoque.
+    payload = payload.model_copy(update={
+        field: getattr(purchase, field)
+        for field in (
+            "inventory_destination", "inventory_item_id", "inventory_name", "inventory_mode",
+            "inventory_serial", "inventory_category", "inventory_format_id", "delivered_at",
+        )
+        if field not in payload.model_fields_set
+    })
     prior_receipt = await db.scalar(select(InventoryMovement).where(InventoryMovement.purchase_order_id == purchase_id))
     if prior_receipt is not None and (
         payload.status != "delivered" or payload.quantity != purchase.quantity
@@ -436,9 +461,14 @@ async def update_order(
     for field, value in payload.model_dump().items():
         setattr(purchase, field, value)
     purchase.supplier_name = supplier.name
-    if purchase.status == "delivered" and purchase.delivered_at is None:
+    if (purchase.status == "delivered" and previous_status != "delivered"
+            and purchase.delivered_at is None):
         purchase.delivered_at = date.today()
-    if purchase.status == "delivered":
+    # Registros recebidos antes da integração de Estoque podem não ter uma
+    # movimentação. Editar uma observação não é um novo recebimento físico.
+    if purchase.status == "delivered" and (
+        previous_status != "delivered" or prior_receipt is not None
+    ):
         linked_requests = (await db.scalars(select(MaterialRequest).where(
             MaterialRequest.purchase_reference == purchase.code,
             MaterialRequest.company_code == purchase.company_code,
@@ -464,9 +494,11 @@ async def update_order(
         title=f"{'Material chegou' if previous_status != 'delivered' and purchase.status == 'delivered' else 'Compra atualizada'} · {purchase.code}",
         message=f"{user.name} {'confirmou a entrega' if previous_status != 'delivered' and purchase.status == 'delivered' else 'alterou os dados'} de {purchase.quantity}x {purchase.product_name}.",
         severity="success" if purchase.status == "delivered" else "info")
-    await db.commit()
+    await db.flush()
     await db.refresh(purchase)
-    return _purchase_output(purchase, include_sensitive_values=True)
+    result = _purchase_output(purchase, include_sensitive_values=True)
+    await db.commit()
+    return result
 
 
 @router.delete("/orders/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -476,7 +508,7 @@ async def delete_order(
     db: DbSession,
 ):
     _require_sensitive_values(user)
-    purchase = await _purchase_or_404(db, purchase_id)
+    purchase = await _purchase_or_404(db, purchase_id, for_update=True)
     if await db.scalar(select(InventoryMovement.id).where(InventoryMovement.purchase_order_id == purchase.id)):
         raise HTTPException(409, "Compra já recebida em estoque; não é possível excluí-la sem estorno auditado.")
     purchase.is_deleted = True
@@ -686,13 +718,15 @@ async def create_standalone_material_request(
     ))
     await material_request_activity(db, actor=user, request=request, action="material_requested",
         title=f"Solicitação {request.code} criada", message=f"{user.name} solicitou {request.quantity}x {request.item_name}.")
-    await db.commit()
+    await db.flush()
     await db.refresh(request)
-    return (await output_rows(
+    result = (await output_rows(
         db,
         [request],
         include_sensitive_values=user_can_view_sensitive_values(user.role),
     ))[0]
+    await db.commit()
+    return result
 
 
 @router.patch("/material-requests/{request_id}", response_model=MaterialRequestOutput)
@@ -702,7 +736,11 @@ async def update_material_request(
     user: CurrentUser,
     db: DbSession,
 ):
-    request = await db.scalar(select(MaterialRequest).where(MaterialRequest.id == request_id).with_for_update())
+    if payload.status == "received":
+        await lock_purchase_receipts(db)
+    request = await db.scalar(select(MaterialRequest).where(
+        MaterialRequest.id == request_id,
+    ).with_for_update().execution_options(populate_existing=True))
     if not request:
         raise HTTPException(status_code=404, detail="Solicitação de material não encontrada.")
 
@@ -710,7 +748,8 @@ async def update_material_request(
     previous_receipt = await db.scalar(select(InventoryMovement).where(InventoryMovement.material_request_id == request.id))
     if previous_receipt is not None and payload.status not in {"received", "delivered_to_lab"}:
         raise HTTPException(409, "Material já recebido em estoque; alteração de status requer estorno controlado.")
-    if previous_receipt is not None and payload.unit_cost is not None and payload.unit_cost != request.unit_cost:
+    if (previous_receipt is not None and "unit_cost" in payload.model_fields_set
+            and payload.unit_cost != request.unit_cost):
         raise HTTPException(409, "Material recebido não permite modificar o custo histórico de entrada.")
     stock_fields = (
         "inventory_destination", "inventory_item_id", "inventory_name", "inventory_mode",
@@ -727,27 +766,29 @@ async def update_material_request(
                 setattr(request, field, getattr(payload, field))
     validate_transition(previous, payload.status)
     can_view_values = user_can_view_sensitive_values(user.role)
-    if payload.unit_cost is not None and not can_view_values:
+    if "unit_cost" in payload.model_fields_set and not can_view_values:
         _require_sensitive_values(user)
-    if payload.status == "purchased" and not can_view_values:
+    if payload.status == "purchased" and previous != "purchased" and not can_view_values:
         _require_sensitive_values(user)
-    if payload.status == "purchased" and (payload.unit_cost is None or payload.unit_cost <= 0):
+    effective_cost = (
+        payload.unit_cost if "unit_cost" in payload.model_fields_set else request.unit_cost
+    )
+    if payload.status == "purchased" and (effective_cost is None or effective_cost <= 0):
         raise HTTPException(
             status_code=422,
             detail="Informe o valor unitário antes de marcar a solicitação como Comprado.",
         )
     request.status = payload.status
-    request.supplier_name = payload.supplier_name
-    request.purchase_reference = payload.purchase_reference
-    request.purchase_link = payload.purchase_link
-    request.tracking_code = payload.tracking_code
-    if can_view_values:
+    for field in (
+        "supplier_name", "purchase_reference", "purchase_link", "tracking_code",
+        "expected_delivery_date",
+    ):
+        if field in payload.model_fields_set:
+            setattr(request, field, getattr(payload, field))
+    if can_view_values and "unit_cost" in payload.model_fields_set:
         request.unit_cost = payload.unit_cost
-    request.expected_delivery_date = payload.expected_delivery_date
     apply_status_timestamps(request, previous, payload.status, user.id)
-    if payload.status == "received" and previous_receipt is None:
-        if previous == "received":
-            raise HTTPException(409, "Recebimento antigo sem movimentação no Estoque. Exige conciliação manual, sem lançar novamente.")
+    if payload.status == "received" and previous_receipt is None and previous != "received":
         if request.inventory_destination not in {"new", "existing"}:
             raise HTTPException(422, "Antes de confirmar a entrega, escolha um item existente ou novo no Estoque.")
         linked_orders = (await db.scalars(select(PurchaseOrder).where(
@@ -793,13 +834,15 @@ async def update_material_request(
         severity="success" if request.status in {"approved", "purchased", "received", "delivered_to_lab"} else "info",
         details=payload.note)
     await recalculate_work_order_parts_cost(db, request.work_order_id)
-    await db.commit()
+    await db.flush()
     await db.refresh(request)
-    return (await output_rows(
+    result = (await output_rows(
         db,
         [request],
         include_sensitive_values=can_view_values,
     ))[0]
+    await db.commit()
+    return result
 
 
 @router.get("/material-requests/{request_id}/events", response_model=list[MaterialRequestEventOutput])

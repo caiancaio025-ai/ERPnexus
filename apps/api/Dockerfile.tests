@@ -1,0 +1,8 @@
+FROM python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app/apps/api
+COPY apps/api/pyproject.toml apps/api/requirements-v48.lock ./
+COPY apps/api/app ./app
+RUN pip install --no-cache-dir -c requirements-v48.lock ".[auth,ai,dev]"
+COPY . /app
+CMD ["python", "scripts/run_v48_tests.py"]

@@ -1,8 +1,9 @@
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CompanyCode = str
 LaboratoryPriority = Literal["low", "normal", "high", "urgent"]
@@ -80,14 +81,14 @@ class TechnicianOutput(BaseModel):
 
 class WorkOrderInput(BaseModel):
     company_code: CompanyCode = Field(min_length=2, max_length=40, pattern=r"^[a-z0-9_]+$")
-    customer_id: int | None = None
+    customer_id: int | None = Field(default=None, ge=1)
     customer_name: str = Field(min_length=1, max_length=180)
-    serial_number: str | None = None
-    manufacturer: str | None = None
-    model: str | None = None
-    equipment_type: str | None = None
-    power: str | None = None
-    voltage: str | None = None
+    serial_number: str | None = Field(default=None, max_length=120)
+    manufacturer: str | None = Field(default=None, max_length=120)
+    model: str | None = Field(default=None, max_length=160)
+    equipment_type: str | None = Field(default=None, max_length=120)
+    power: str | None = Field(default=None, max_length=80)
+    voltage: str | None = Field(default=None, max_length=80)
     entry_invoice: str | None = Field(default=None, max_length=80)
     entry_invoice_2: str | None = Field(default=None, max_length=80)
     entry_invoice_3: str | None = Field(default=None, max_length=80)
@@ -112,7 +113,7 @@ class WorkOrderInput(BaseModel):
     warranty_exit_invoice_access_key_2: str | None = None
     warranty_exit_invoice_access_key_3: str | None = None
     storage_location: str | None = None
-    assigned_technician_id: int | None = None
+    assigned_technician_id: int | None = Field(default=None, ge=1)
     priority: LaboratoryPriority = "normal"
     reported_defect: str = Field(min_length=1)
     entry_condition: str | None = None
@@ -122,6 +123,26 @@ class WorkOrderInput(BaseModel):
     approved_value: str | None = None
     internal_notes: str | None = None
     customer_notes: str | None = None
+
+    @field_validator("parts_cost", "quoted_value", "approved_value", mode="before")
+    @classmethod
+    def validate_money(cls, value) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        text = str(value).strip()
+        if "," in text:
+            if not re.fullmatch(r"(?:\d{1,3}(?:\.\d{3})+|\d+),\d{1,2}", text):
+                raise ValueError("Informe um valor monetário válido, por exemplo 1.234,56.")
+            text = text.replace(".", "").replace(",", ".")
+        try:
+            amount = Decimal(text)
+        except InvalidOperation as exc:
+            raise ValueError("Informe um valor monetário válido.") from exc
+        if not amount.is_finite() or amount < 0 or amount > Decimal("999999999999.99"):
+            raise ValueError("O valor deve estar entre 0 e 999.999.999.999,99.")
+        if amount != amount.quantize(Decimal("0.01")):
+            raise ValueError("O valor monetário deve ter no máximo duas casas decimais.")
+        return format(amount, ".2f")
 
     @field_validator(
         "entry_invoice_access_key", "exit_invoice_access_key",
@@ -154,7 +175,19 @@ class WorkOrderInput(BaseModel):
 
 
 class WorkOrderUpdate(WorkOrderInput):
-    version: int
+    """PATCH: somente os campos enviados são alterados; a versão é obrigatória."""
+
+    company_code: CompanyCode | None = Field(default=None, min_length=2, max_length=40, pattern=r"^[a-z0-9_]+$")
+    customer_name: str | None = Field(default=None, min_length=1, max_length=180)
+    reported_defect: str | None = Field(default=None, min_length=1)
+    version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def non_nullable_fields(self):
+        for name in ("company_code", "customer_name", "reported_defect"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"O campo {name} não pode ser nulo.")
+        return self
 
 
 class InactivateWorkOrderInput(BaseModel):

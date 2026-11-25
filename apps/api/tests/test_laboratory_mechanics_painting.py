@@ -87,8 +87,8 @@ def test_painting_photos_use_existing_laboratory_document_storage_safely() -> No
 
 def test_mechanics_tab_is_immediately_before_history() -> None:
     source = DASHBOARD.read_text(encoding="utf-8")
-    mechanics = source.index('onClick={() => onTab("mechanics")}>Mecânica</TabButton>')
-    history = source.index('onClick={() => onTab("history")}>Histórico</TabButton>')
+    mechanics = source.index('onClick={() => void leaveDetail(() => onTab("mechanics"))}>Mecânica</TabButton>')
+    history = source.index('onClick={() => void leaveDetail(() => onTab("history"))}>Histórico</TabButton>')
     assert mechanics < history
     assert 'tab === "mechanics" && <MechanicsPanel workOrderId={detail.id}' in source
 

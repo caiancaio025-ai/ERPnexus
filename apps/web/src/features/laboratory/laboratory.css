@@ -1277,3 +1277,16 @@ html[data-sentico-theme="claro"] .lab-quote-editor .lab-quote-save-confirmation 
   .lab-paint-photo-actions > * { min-height:42px; }
 }
 .lab-paint-photo-count { margin-left:auto; color:#8baac0; font-size:.78rem; white-space:nowrap; }
+
+.lab-alert .lab-reload-detail {
+  margin-left: .5rem;
+  padding: .35rem .65rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lab-alert .lab-reload-detail:disabled { opacity: .6; cursor: wait; }

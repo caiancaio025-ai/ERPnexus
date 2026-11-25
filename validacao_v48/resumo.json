@@ -1,0 +1,46 @@
+{
+  "release": "SENTICO V48",
+  "data": "2026-11-25",
+  "base": "SENTICO_V47_CABECALHOS_FIXOS_TABELAS_20261123.zip",
+  "python": {
+    "total": 672,
+    "aprovados": 665,
+    "falhas": 0,
+    "erros": 0,
+    "ignorados": 7,
+    "api_aprovados": 602,
+    "instalador_aprovados": 63,
+    "motivo_ignorados": "CSVs privados finance_reconcile_data ausentes no ZIP recebido"
+  },
+  "javascript": {
+    "testes_aprovados": 18,
+    "verificacoes_orcamento_aprovadas": 20,
+    "verificacoes_preferencias_temas_aprovadas": 41
+  },
+  "navegador_api_controlada": {
+    "aprovados": 18,
+    "erros_javascript": 0
+  },
+  "navegador_api_postgresql_reais": {
+    "aprovados": 12,
+    "erros_javascript": 0,
+    "respostas_http_de_erro": 0,
+    "leituras_canceladas_na_navegacao": 3
+  },
+  "compilacao_typescript_vite": "aprovada",
+  "migracoes": {
+    "quantidade": 50,
+    "revisao_final": "20261123_02"
+  },
+  "ambiente_executado": {
+    "sistema": "Linux",
+    "python": "3.12.14",
+    "postgresql": "17.12",
+    "node": "24.22.3"
+  },
+  "nao_executado": [
+    "Docker Desktop e PowerShell no Windows",
+    "Banco operacional do usuário",
+    "Web Push e serviços externos sem credenciais configuradas"
+  ]
+}
