@@ -57,7 +57,9 @@ export type FinancialEntry = {
   work_order_links_lock_reason?: string | null;
   work_order_amount?: number | string | null;
 };
+export type IncomeTotals = { amount: number; settled: number; pending: number; overdue: number };
 export type FinancialEntryPage = {
+  income_totals?: IncomeTotals | null;
   items: FinancialEntry[];
   page: number;
   page_size: number;
