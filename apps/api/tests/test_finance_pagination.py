@@ -1,11 +1,13 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from itertools import chain, repeat
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.finance.models import FinancialEntry
 from app.finance.router import list_entries
@@ -24,9 +26,12 @@ class ScalarRows:
 
 class FakeDB:
     def __init__(self, *, total: int, rows=None):
-        self.scalar = AsyncMock(return_value=total)
+        aggregate = Mock()
+        aggregate.mappings.return_value.one.return_value = {
+            "count": total, "amount": 1500, "settled": 500, "pending": 1000, "overdue": 250,
+        }
         self.scalars = AsyncMock(return_value=ScalarRows(rows or []))
-        self.execute = AsyncMock(return_value=ScalarRows([]))
+        self.execute = AsyncMock(side_effect=chain([aggregate], repeat(ScalarRows([]))))
 
 
 def make_entry(entry_id: int = 1) -> FinancialEntry:
@@ -89,6 +94,7 @@ async def test_entries_are_paginated_and_report_total():
     assert result.page_size == 50
     assert result.total == 101
     assert result.pages == 3
+    assert result.income_totals.model_dump() == {"amount": 1500, "settled": 500, "pending": 1000, "overdue": 250}
     assert [item.id for item in result.items] == [51]
 
     data_sql = compile_sql(db.scalars.await_args.args[0])
@@ -113,7 +119,7 @@ async def test_overdue_and_work_order_search_are_server_side():
 
     await call_list(db, overdue=True, search="OS-123")
 
-    count_sql = compile_sql(db.scalar.await_args.args[0])
+    count_sql = compile_sql(db.execute.await_args_list[0].args[0])
     assert "financial_entries.status = 'pending'" in count_sql
     assert "financial_entries.due_date <" in count_sql
     assert "laboratory_work_orders.number ILIKE '%%OS-123%%'" in count_sql
@@ -128,5 +134,46 @@ async def test_overdue_rejects_incompatible_settled_status():
         await call_list(db, overdue=True, entry_status="received")
 
     assert exc.value.status_code == 422
-    db.scalar.assert_not_awaited()
+    db.execute.assert_not_awaited()
     db.scalars.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_customer_totals_span_pages_and_clear_with_filter(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(FinancialEntry.__table__.create)
+        async with async_sessionmaker(engine)() as db:
+            rows = [make_entry(i) for i in range(1, 5)]
+            for row in rows:
+                row.counterparty_name = "Estivas"
+                row.due_date = date.today()
+            rows[0].due_date -= timedelta(days=1)
+            rows[1].status = "received"
+            rows[3].counterparty_name = "Outro cliente"
+            rows[3].description = "Referência Estivas"
+            db.add_all(rows)
+            await db.commit()
+
+            # This test exercises the two SQL queries, independently of OS enrichment.
+            async def output_rows(db, entries):
+                return entries
+
+            monkeypatch.setattr("app.finance.router.entry_outputs", output_rows)
+            for page in (1, 2):
+                result = await call_list(db, customer_name=" STIvas ", page=page, page_size=2)
+                assert result.total == 3
+                assert result.income_totals.model_dump() == {
+                    "amount": 1500, "settled": 500, "pending": 1000, "overdue": 500,
+                }
+                assert len(result.items) == (2 if page == 1 else 1)
+                assert all(item.counterparty_name == "Estivas" for item in result.items)
+            missing = await call_list(db, customer_name="inexistente")
+            assert missing.items == []
+            assert all(value == 0 for value in missing.income_totals.model_dump().values())
+            cleared = await call_list(db, customer_name="")
+            assert cleared.total == 4
+            assert cleared.income_totals.amount == 2000
+    finally:
+        await engine.dispose()
