@@ -12,7 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.stock_codes import format_stock_code
-from app.inventory.models import InventoryComponentFormat, InventoryItem, InventoryMovement
+from app.inventory.item_details import canonical_inventory_details
+from app.inventory.models import InventoryItem, InventoryLocationHistory, InventoryMovement
+from app.inventory.validation import valid_category, valid_company, valid_format, valid_slot, valid_subtype
 
 MAX_INDIVIDUAL_RECEIPT = 1000
 
@@ -83,6 +85,7 @@ async def receive_purchase(
     stock_name: str | None = None, stock_mode: str | None = None,
     stock_serial: str | None = None, stock_category: str | None = None,
     stock_format_id: int | None = None,
+    stock_details: dict | None = None,
 ) -> InventoryMovement:
     """Cria lote ou unidades individuais com códigos EST gerados pelo banco.
 
@@ -129,6 +132,20 @@ async def receive_purchase(
                     raise HTTPException(409, "Pedido e solicitação utilizam controles de estoque diferentes.")
                 if serial and any(item.serial_normalized != serial.upper() for item in items.values()):
                     raise HTTPException(409, "A série informada difere da unidade já recebida. Concilie a identificação no Estoque antes de vincular.")
+                if stock_details is not None:
+                    details = canonical_inventory_details(stock_details)
+                    # Compare the original receipt plan, not mutable stock
+                    # metadata (an item may already have moved to another slot).
+                    from app.purchasing.material_models import MaterialRequest
+                    from app.purchasing.models import PurchaseOrder
+                    origin_model = PurchaseOrder if source == "request" else MaterialRequest
+                    original_source = await db.get(origin_model, linked_source_id)
+                    original_details = getattr(original_source, "inventory_details", None)
+                    reference = (canonical_inventory_details(original_details) if original_details is not None
+                                 else {key: getattr(next(iter(items.values())), key) for key in details})
+                    for key, value in details.items():
+                        if value is not None and reference[key] != value:
+                            raise HTTPException(409, "Os detalhes informados diferem do item já recebido pela compra vinculada. Confira o cadastro no Estoque antes de vincular.")
             for row in linked:
                 setattr(row, field, source_id)
             await db.flush()
@@ -158,10 +175,12 @@ async def receive_purchase(
         if mode not in {"bulk", "serialized"}:
             raise HTTPException(422, "Tipo de controle de estoque inválido.")
         category = (stock_category or "componentes").strip().lower()
-        if stock_format_id is not None:
-            fmt = await db.get(InventoryComponentFormat, stock_format_id)
-            if fmt is None or not fmt.is_active or fmt.category != category:
-                raise HTTPException(422, "Formato técnico inválido para a categoria.")
+        details = canonical_inventory_details(stock_details)
+        await valid_company(db, company_code)
+        await valid_category(db, category)
+        await valid_subtype(db, details["subtype_id"], category)
+        await valid_format(db, stock_format_id, category)
+        slot = await valid_slot(db, details["slot_id"])
         item_name = (stock_name or name).strip()[:220]
         if len(item_name) < 2:
             raise HTTPException(422, "Informe o nome que será usado no estoque.")
@@ -170,17 +189,23 @@ async def receive_purchase(
         units = quantity if mode == "serialized" else 1
         items = [InventoryItem(
             stock_code=f"TMP-{uuid4().hex[:24]}", company_code=company_code,
-            name=item_name, category=category, format_id=stock_format_id, mode=mode, unit="UN",
+            name=item_name, category=category, format_id=stock_format_id, mode=mode,
+            **{key: value for key, value in details.items() if key != "notes"},
             manufacturer_serial=serial if mode == "serialized" else None,
             serial_normalized=serial.upper() if mode == "serialized" and serial else None,
             quantity=1 if mode == "serialized" else quantity, unit_cost=Decimal(unit_cost),
-            notes=f"Recebimento automático de Compras: {source_code}"[:4000], created_by=user_id,
+            notes=details["notes"] if stock_details is not None else f"Recebimento automático de Compras: {source_code}"[:4000],
+            created_by=user_id,
         ) for _ in range(units)]
         db.add_all(items)
         try:
             await db.flush()
             for item in items:
                 item.stock_code = format_stock_code(item.id)
+            if slot is not None:
+                db.add_all([InventoryLocationHistory(
+                    item_id=item.id, new_slot_id=slot.id, new_slot_code=slot.code, moved_by=user_id,
+                ) for item in items])
             movements = [InventoryMovement(
                 item_id=item.id, kind="receipt", quantity=item.quantity,
                 receipt_unit_index=index, unit_cost=Decimal(unit_cost), user_id=user_id,

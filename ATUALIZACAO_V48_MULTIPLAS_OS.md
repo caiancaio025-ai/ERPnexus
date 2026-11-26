@@ -1,5 +1,7 @@
 # V48 — faturamento de várias OS e orçamento conjunto
 
+> **Histórico da primeira implementação.** O fluxo foi corrigido: as OS agora são adicionadas no próprio formulário financeiro, inclusive na edição de uma receita, e as caixas da lista do Laboratório foram retiradas. Consulte [a correção vigente e seu passo a passo](CORRECAO_V48_FATURAMENTO_ESTOQUE.md).
+
 Atualização de **26/11/2026**, sobre a V48 com aparência compacta e recebimento individual. A aplicação continua identificada como versão **48**; o commit e a revisão de banco **`20261126_02`** identificam esta atualização.
 
 ## Faturar várias ordens de serviço

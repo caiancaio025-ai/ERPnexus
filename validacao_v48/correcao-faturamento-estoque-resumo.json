@@ -1,0 +1,220 @@
+{
+  "release": "v48-20261126-faturamento-estoque",
+  "version": 48,
+  "schema_revision": "20261126_04",
+  "date": "2026-11-26",
+  "base_commit": "b398461272e8afceffc224525cdbcf41997d72f8",
+  "status": "passed",
+  "api_and_installer": {
+    "command": "SENTICO_MIGRATION_PG_SMOKE=1 RUN_DB_PERFORMANCE_TESTS=1 pytest -q -ra tests ../../testes_instalador",
+    "postgresql": "17.12",
+    "tests": 786,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 7,
+    "passed": 779,
+    "seconds": 56.69,
+    "skips": [
+      {
+        "test": "test_manifest_expected_counts",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_recovered_rows_have_corrected_dates",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_lab_candidates_are_chronologically_valid",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_same_invoice_different_due_is_preserved",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_late_august_rows_are_in_safe_source_manifest",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_august_2026_expected_income_matches_latest_audited_sqlite",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      },
+      {
+        "test": "test_internal_transfers_are_kept_in_safe_manifest",
+        "reason": "Manifestos privados da conciliação histórica não incluídos no pacote."
+      }
+    ],
+    "junit": "correcao-api.xml",
+    "log": "correcao-api.log"
+  },
+  "vps_updater": {
+    "tests": 125,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 125,
+    "seconds": 82.047,
+    "docker_http": "controlled test commands",
+    "postgresql": "real disposable database",
+    "junit": "correcao-vps.xml"
+  },
+  "local_bootstrap": {
+    "tests": 17,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 17,
+    "seconds": 5.176,
+    "native_postgresql_smoke": true,
+    "junit": "correcao-teste-local.xml"
+  },
+  "frontend": {
+    "node_tests_passed": 39,
+    "v41_assertions_passed": 20,
+    "typescript_vite_build": "passed",
+    "browser": "Chromium",
+    "browser_runs": [
+      {
+        "scope": "Compras e Estoque",
+        "backend": "FastAPI + PostgreSQL 17.12 reais",
+        "passed": 10,
+        "report": "correcao-compras-e2e.json"
+      },
+      {
+        "scope": "Financeiro, orçamento conjunto e NF no Laboratório",
+        "backend": "FastAPI + PostgreSQL 17.12 reais",
+        "passed": 11,
+        "report": "correcao-financeiro-e2e.json"
+      },
+      {
+        "scope": "Financeiro em React StrictMode",
+        "backend": "API controlada",
+        "passed": 10,
+        "report": "correcao-financeiro-ui.json"
+      },
+      {
+        "scope": "Orçamento conjunto e NF em React StrictMode",
+        "backend": "API controlada",
+        "passed": 7,
+        "report": "correcao-orcamento-ui.json"
+      }
+    ]
+  },
+  "static_checks": {
+    "ruff_F_changed_python": "passed",
+    "bash_syntax_changed_scripts": "passed",
+    "git_diff_check": "passed"
+  },
+  "source_sha256": {
+    "ATUALIZACAO_V48_MULTIPLAS_OS.md": "4754a1f1df97771e3fb282fdb51feb2bf94ce6e3aee0c89bfcaef64f007d1a78",
+    "COMECE_AQUI_TESTE_V48.txt": "6f9155c9477c2ce25ad68f79b7c3a03e8d7b70a80e82d13703e4cdcdf32531e9",
+    "CORRECAO_V48_FATURAMENTO_ESTOQUE.md": "933e79639cb8882e2e1cfa550d47c3fe5a18109391ba47a1892f1da6967b6bcd",
+    "INSTALAR_SENTICO.ps1": "cd2a10fcd487af28e028c0a7852fcda32fd081df3f7b5afdf8bdd007eca2b4d5",
+    "LEIA_PRIMEIRO_SENTICO.md": "80c43608beb1dfdcb865bcaf810bd0bcab65f4c51c461cb51d2c8a86fecff6c1",
+    "README.md": "8b6f02c3275aca08b1f21528a5d44a436e58910c4778d3551d46ce02044d219b",
+    "apps/api/app/finance/idempotency.py": "d7d519cb31d9fe40eacc1f778da37dd64c9c271e63c62be7532ccacd54b9c37b",
+    "apps/api/app/finance/linked_entries.py": "9d4fb2f50841b5389256f7b56a0abec4de10fdef7432d652412583b46c31c0e8",
+    "apps/api/app/finance/models.py": "d608c9597b08bb6976f4e6c5df733e137d76d1a664a8451cbeea3100ca192ada",
+    "apps/api/app/finance/period_locks.py": "5cb7cf79c385e48afc207b3e53b70225357e4d8e092b94de98fe1167868ad818",
+    "apps/api/app/finance/router.py": "981afa19682693ae839ec3ed7047cf68b04e68ab8e9bd5d1cdfa7d6c140e2e33",
+    "apps/api/app/finance/schemas.py": "ac025559a410303b8783811edc80a2245f704c662f50f190f6706fff8a2d797f",
+    "apps/api/app/finance/work_order_links.py": "f3db5a18579a7c66f13bebbf03cfa9aea703e8278deb6d7a8a3e1afd88731cb0",
+    "apps/api/app/health/router.py": "62b98d049fc5000d3ce25d7b71dd59955082e01f72ede7e3cbc931c93bfe00f6",
+    "apps/api/app/inventory/item_details.py": "cda6a06c86d31903a3e1295cd1569f3cfaead29aca7805ba16a5022f2e3c3e4c",
+    "apps/api/app/inventory/purchase_cycle.py": "6b825cb8afa7794628c24dffc36560179544be2ecc3ea7ed2eec5f269b7f18f5",
+    "apps/api/app/inventory/router.py": "74243b70399806698c7cdded2bfb17fa183b5260ff0314ed988534351f02b96f",
+    "apps/api/app/inventory/schemas.py": "da0183388938493413997555a11aba1055dfae4d0ce53c7df104ac8b96f939e6",
+    "apps/api/app/inventory/validation.py": "1adc4c324edead9c5a68754499735fa078659d53ce53f6b71e3cdc0238e02705",
+    "apps/api/app/laboratory/production_report.py": "1b65d16e5b2b7fe41480c27d17f6845b4e9494ca608b95d591a92caf64307294",
+    "apps/api/app/laboratory/router.py": "e3cfee0b9fbe9a68609ee7775ffd645f30aba92a51a0a9f8d7f84440c0ab685c",
+    "apps/api/app/purchasing/material_models.py": "2ca8b9f29b1dfc071a159d609a7b15846a2a2cbadb22b337345f034bc4f71606",
+    "apps/api/app/purchasing/material_schemas.py": "71a2f45522bac2c6eb5d8aede0668a66c04611ba98083dfd212b8cccdf5561de",
+    "apps/api/app/purchasing/material_service.py": "0f83e0be4ac21db8bc430758ad414dc6361f8dc9fbdd00271c91052c681ee050",
+    "apps/api/app/purchasing/models.py": "78b3e251476ef2d0c7f704ce25d8e59071d7e4531b28152f6cee98da87c652dc",
+    "apps/api/app/purchasing/router.py": "162dc886be65f9886f8fccf57f00cbee138ef3c6ae1abec20ec1a82bd1912b0d",
+    "apps/api/app/purchasing/schemas.py": "7178d2857855ebe1cc0084455fc68e652de942c753f38ea0fbd3bb90174d9105",
+    "apps/api/migrations/versions/20261126_03_financial_entry_work_orders.py": "86edfcc3a6c50cf1d4fc621277fb273dbb7456c6c7b54bcd36cda006cf0e2841",
+    "apps/api/migrations/versions/20261126_04_purchase_inventory_details.py": "19773d49995e5931a80776750280645272c4b1ccc16d90745ba40426c6657092",
+    "apps/api/scripts/verificar_escrita_recuperacao.py": "2401916021fe8331ba7102ec17723d406e72494ad79cb0f83f355c704acdfc8c",
+    "apps/api/tests/inventory_test_catalog.py": "12f4717a654bb12aa7ad788d978c69923b602a323e172ecb81042a31a49d1ac1",
+    "apps/api/tests/test_finance_billing_batches.py": "03076c4921d7bade738016aff2dfb732dd04a9bf1df18b5c2e53ba8d925d5ef8",
+    "apps/api/tests/test_finance_billing_postgres.py": "f81eabadecc239ddcd6c1cedc86f6b0601f7a2c1e5dac60383250ecd8de40cef",
+    "apps/api/tests/test_finance_company_accounts.py": "fc084b73de437b3f9b32dc2ee98a5abf2da566dd071a2952067d08c600791dc8",
+    "apps/api/tests/test_finance_create_idempotency.py": "617ba16aa63a868f800c7aeb372b4667635241ec3515f2b72e905ae607fdbc1f",
+    "apps/api/tests/test_finance_entry_work_orders_postgres.py": "ad6f6028799afb9448e4131569e2bfc68e139994f905212dbd8b2804a7b9f9b6",
+    "apps/api/tests/test_finance_installment_edit_contract.py": "3159d91c8fae9d1b7550659df542b4ac8f4f768b5dfe6c3ddc37998c15218d10",
+    "apps/api/tests/test_finance_pagination.py": "87b7c62cb872690c428d2266ba8ab3e5381e697c6a686d5da97d25fa839bc917",
+    "apps/api/tests/test_grouped_quote_migration.py": "f839e02dbb22e9abfdddae882f891b0ac95a43dd2f2a07d4f2763ee744c04ee3",
+    "apps/api/tests/test_inventory_purchase_cycle.py": "ace1d73a22db32a09b73a6d38b4bfc16acca1b3411191569e78e32241c829d05",
+    "apps/api/tests/test_laboratory_technician_production_report.py": "826d25aff8b2e6ffce1f6d76ad67c8857ca74f73950871b8ced9d44526e8795f",
+    "apps/api/tests/test_material_request_inventory_unification.py": "e84aa1c433e321eccfad65c151f524c0a85377d46f70ca2861eaa90ae07e29b2",
+    "apps/api/tests/test_purchase_inventory_destination.py": "836bdebac49927798d275358ca25a2f3e828b25f2ad4aaff7ba6302b64b05ab3",
+    "apps/api/tests/test_purchase_inventory_details.py": "363f60f486d5c47f6509b021b62e85340328a998b43313f5e6819f3c49aaea24",
+    "apps/api/tests/test_purchase_stock_names_v5.py": "55245100e3aa1434f75b4227cf191d6b3edf8b8fc04929e47b84b4ef7b601651",
+    "apps/api/tests/test_purchasing_save_reliability_v48.py": "aef7a099a8e7964faf6f75ea8616d819ba2a52af82dba9a950d6a34541cd354a",
+    "apps/web/index.html": "38e3a0e67e9cb93d983a0334f3b7002a053dbfe4d22325e14b7a74d3358eb156",
+    "apps/web/src/features/finance/FinanceDashboard.tsx": "d4785a14d5657ffd25f2210ae31f9461350160f1314eaabffaa7055e6383b7c4",
+    "apps/web/src/features/finance/batchBilling.ts": "d857c05cc3712238a3b7512c22597fdd4b1f2206c6d395c802e28ca4752b3c54",
+    "apps/web/src/features/finance/components/WorkOrderBillingSelector.tsx": "be13172dbfed9139b5ee46acc63213383e5fdf7f817bb01eb91b5d3eb62f4d63",
+    "apps/web/src/features/finance/components/workOrderBilling.css": "3c9f2424eef44549f1da51cd91b29300341412601895235f53c49b6a79b882a4",
+    "apps/web/src/features/finance/financialEntrySave.ts": "6263ae3513d0b01dd1b5be8cf22fca0652dd2412f7877983d16a4e64a61ee86c",
+    "apps/web/src/features/finance/types.ts": "eb96c24dfb69a92988401d509180ec8cd4411216832def9b3cba15abb5ee963f",
+    "apps/web/src/features/inventory/InventoryDashboard.tsx": "d084154234b56e04d28797060f4ff0548a0cca256c835e34fd9d27780847ba47",
+    "apps/web/src/features/inventory/InventoryItemFields.tsx": "f37cfa75b780a3a5f1e925908a1bcf56b86e8c738f1f4a835e8acf45333ac38a",
+    "apps/web/src/features/inventory/InventorySlotSearch.tsx": "6cc4fa935f12d26527e7f0a3b78e1981a9c7396340fec635440e12ffd6d8fce3",
+    "apps/web/src/features/inventory/PurchaseStockDestination.tsx": "074d6ad6c2703429afcf8a64f6c59735d901b371584188d7d2bb05a97d74be92",
+    "apps/web/src/features/inventory/inventoryItemFields.css": "9b93b79577e64c67db94d7b6fc55d7be573af04b36f871d7a942cf19937feb84",
+    "apps/web/src/features/inventory/purchaseStockDestination.css": "a9f50ce2ff2d58289cba13f559a73ae7b0fdb7d3582ffba594264bac329e5ec6",
+    "apps/web/src/features/laboratory/LaboratoryDashboard.tsx": "2d80a83c72a2062ccd790ec5c644af683533ebf961a627c93da1f3c5a5b28e70",
+    "apps/web/src/features/laboratory/components/GroupedQuoteCreateDialog.tsx": "c08253405614b9fcfe2f38f632a9f8c85dce875a33e0323101388f81c624a2d6",
+    "apps/web/src/features/laboratory/components/GroupedQuotesPanel.tsx": "b561d0e68a62061b5094fed9e9e0aa576b798a50080500c4ed8e9733423cc2c5",
+    "apps/web/src/features/laboratory/components/groupedQuotes.css": "f8ac70674a35cf01463229bf511e8534fdbceddf8f4f7e552ad7bfb6e073f0f3",
+    "apps/web/src/features/purchasing/MaterialRequestsPanel.tsx": "996fd94bfa4263074e4648a36de3f14efe04c90d736ac14bef87305a60d33406",
+    "apps/web/src/features/purchasing/PurchasingDashboard.tsx": "7a139c0204801595d43a8f0b88cfcfbead7e36689506fd7b4e17d0100ad37d9a",
+    "apps/web/src/features/purchasing/materialRequestSave.ts": "19f495a1271027be3db0064705a031c7da96812680626ec67196f86bffabc740",
+    "apps/web/src/features/purchasing/types.ts": "8ca9188d106436759ac26840363acfb71920f8718108b6e0774b88e06a1464be",
+    "apps/web/tests/batch-billing.test.mjs": "b914d2bc664091d5b31aad84d39ea332ce25362b139def97c346a2977bf7c27b",
+    "apps/web/tests/batch-ui-browser.py": "ee5af26c1bd48d3d9f77d24720d6449e1d6433de70e28d9cea3c98e3b59393b0",
+    "apps/web/tests/finance-links-browser.py": "4eefa5810b184a894619daf05aec171272b5c59710d1724465230a28d1936ac2",
+    "apps/web/tests/financial-entry-save.test.mjs": "542a6b0bc2b413a70aff8d7be80b64428a0d846a4988793a6d1207db607bb15c",
+    "apps/web/tests/grouped-quotes-billing-browser.py": "9ac9bea15097aaa509bdd73e94ddf461f9bce09e99671e6fda69e3f85f2e51f2",
+    "apps/web/tests/material-request-save.test.mjs": "608c6d4343041e0f8ad256cced59da250a9a5e571b673c1ebc972dbb7b07a984",
+    "apps/web/tests/purchase-stock-fields-browser.py": "8fffb8022db70d8092a41bb132671d0d963fae64e6621036063fbd2f8aaf64fe",
+    "apps/web/tests/v48-appearance-stock-browser.py": "1381f08b08536b85ca645eff621bced9f8f7a162542fa0169f59ae6f58524479",
+    "infra/teste-local/bootstrap_v48.py": "a49554ee61fcc1f82063791d0e7389203ca26a342df32c1cab859435768db6b0",
+    "infra/teste-local/tests/test_local_v48_bootstrap.py": "80cec5f169834528bc01c74b658d1d26b397c84b56aadd4b68a42529467144db",
+    "infra/vps/LEIA-ME-DEPLOY.md": "36c08983f3705881b41545479d91d77bf21ca1d5d81d58c2760dbe363f5ce9bb",
+    "infra/vps/atualizar.sh": "4f9bb44e3c22fe188999646c2eccd73dd423a699fc9b2af72e6d077e05d0aeab",
+    "infra/vps/deploy_v48.py": "d76e018dd4f54aebe39720060a6d566539a92e94cea1d250358c3b94a7748632",
+    "infra/vps/tests/fakes/vps_commands.py": "3ef20a10fa2c385a93ad8053eb2af88fb74999ba0dd27f0ecb87fa49b84363d0",
+    "infra/vps/tests/test_deploy_v48_inventory_snapshot.py": "04a140c38d6d3cc73146329ac180469a7e0c1e68a429ca5bf08a1fecb177f26f",
+    "infra/vps/tests/test_v48_vps_update.py": "c1b22ab6fdbf8c30435c0715a304d87efd1300a70b1c9983b59a6b969e9c39c4",
+    "scripts_recuperacao/catalogar_bancos_existentes.sh": "f560a55e139a4d1ce4867337d0e1c4202fbc21977cb966ec6f00d32f1af5c931",
+    "scripts_recuperacao/inspecionar_arquivo_pgdata.sh": "4dedb619a494d402572a93acf72bc82459ec0e60049385e464e61749fc0a1eb8",
+    "testes_instalador/test_push_desktop_v16.py": "8ec5ef2fabd2024f5f115d590ebf1f1fc8bed85f6bd294536237e454f6acc39d"
+  },
+  "evidence_sha256": {
+    "correcao-api.log": "723d84306814c41c77c8eb3904ae4b41427efb1ee34d33ef3f12f639940c3f14",
+    "correcao-api.xml": "f3034ce07e428f896f0347b918dc572747fc60caf3a45d9dbaf29b4907a953b9",
+    "correcao-compras-cadastro.png": "cc1e880c3089c5a02707bfe52a285c0158d3a798481c40c6f3bb79f461b2483c",
+    "correcao-compras-e2e.json": "79503a00a29d6417c2ea3e9b851ee4e47f995f7c0b63b6033aaa293c87ee503d",
+    "correcao-financeiro-e2e.json": "8760e9ff0053a07ec309c8ecddbc9c061953db6fb6d785911e99923e1745e4ee",
+    "correcao-financeiro-edicao.png": "530f3952f53bab5d068019407a8a9407c2a7cbb3bf4a9421505ef720581358dd",
+    "correcao-financeiro-ui.json": "5df32e127edc254bb0b118dd1309793d65011cb32d11e06896c4189e4ddd11ab",
+    "correcao-frontend-build.log": "26ee3873149ff80d089ebaf4078c6e2164982e41abe1dd23280184de04860e75",
+    "correcao-frontend-testes.log": "82f55b9bb7833bb2a7fae5226f3d4abc5a7f4649ab7a20998f45fe2b2b00e145",
+    "correcao-orcamento-ui.json": "d7277475ee7bf57b1aaf826e84a6ef0fcde6b552d92344067e9a23846ac797a2",
+    "correcao-python-lint.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "correcao-teste-local.log": "8b0505cb34180905ce80a63611e70dd8e727968a768dc7e538430fd88b173a7b",
+    "correcao-teste-local.xml": "fdef6da8ef4e6ae3936089cb51bf333e4454db1454588206606390264bea3f9a",
+    "correcao-vps.log": "531c9f170a7531fc1e54a3acecdc12be7b40b7e874f5e7465d81bc7f5bb40e18",
+    "correcao-vps.xml": "dde2b7e025706de98a3305cbe808386994ccf801716aaa98aff2ab3bf8d32ad0"
+  },
+  "limits": [
+    "A VPS Hostinger e dados de produção não foram acessados.",
+    "Os cenários de Docker/HTTP do atualizador usam comandos controlados; PostgreSQL e migrações foram executados de fato.",
+    "PowerShell não foi executado operacionalmente em Windows.",
+    "Os casos de conciliação indicados em skips dependem de arquivos externos ausentes.",
+    "A limpeza final removeu apenas imports Python sem uso e renomeou um parâmetro de teste; não alterou a lógica aprovada nos testes."
+  ]
+}

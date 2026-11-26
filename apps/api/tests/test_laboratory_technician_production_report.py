@@ -55,8 +55,11 @@ def test_sensitive_values_are_not_queried_for_unauthorized_roles() -> None:
     marker = "if include_sensitive_values and work_order_ids:"
     assert marker in source
     before, after = source.split(marker, 1)
-    assert "FinancialEntry.work_order_id.in_(work_order_ids)" not in before
-    assert "FinancialEntry.work_order_id.in_(work_order_ids)" in after
+    assert "allocations = allocation_rows()" not in before
+    assert "allocations.c.work_order_id.in_(work_order_ids)" not in before
+    assert "allocations = allocation_rows()" in after
+    assert "allocations.c.work_order_id.in_(work_order_ids)" in after
+    assert "func.sum(allocations.c.amount)" in after
 
 
 def test_report_schema_keeps_money_nullable() -> None:

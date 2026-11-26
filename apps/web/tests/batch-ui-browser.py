@@ -1,6 +1,9 @@
-"""Focused Chromium regressions for joint billing and grouped quotes.
+"""Chromium regressions for grouped quotes and laboratory invoice fields.
 
 Runs the built UI with synthetic API responses. No real customer or server data.
+Creates quotes through the search/add dialog and covers recovery, revisions,
+history, mobile layout, and the laboratory Values tab. Financial entry linking
+is covered separately by finance-links-browser.py.
 Usage: python tests/batch-ui-browser.py --chromium /path/to/chromium --artifacts /tmp/report
 """
 import argparse
@@ -18,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from playwright.sync_api import expect, sync_playwright
 
 WEB = Path(__file__).resolve().parents[1]
+SUITE = 'grouped-quotes-and-laboratory-invoices'
 spec = importlib.util.spec_from_file_location('fixtures', WEB / 'tests/browser-reliability.py')
 fixtures = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixtures)
@@ -32,13 +36,9 @@ class Api(fixtures.FixtureApi):
         self.orders[2].update(customer_id=2, customer_name='Outro cliente')
         self.groups = []
         self.group_keys = []
+        self.group_payloads = []
         self.group_updates = []
-        self.batch_keys = []
-        self.batch_payloads = []
         self.conflict_next_update = False
-
-    def option(self, row):
-        return {**{key: row[key] for key in ('id', 'number', 'company_code', 'customer_id', 'customer_name', 'version', 'status', 'approved_value', 'exit_invoice', 'exit_invoice_2', 'exit_invoice_3')}, 'equipment_label': row['model'], 'total_registered': 0, 'remaining_to_issue': row['approved_value']}
 
     def group(self):
         return dict(id=1, group_id=1, code='OC-000001', revision=1, version=1, status='draft', title='Orçamento conjunto', company_code='universo_eletronica', customer_id=1, customer_name='Cliente de teste', work_order_ids=[100, 101],
@@ -54,7 +54,12 @@ class Api(fixtures.FixtureApi):
         query = parse_qs(parsed.query)
         data = None
         if path == '/laboratory/work-orders':
-            data = {'items': self.orders, 'page': 1, 'page_size': 25, 'total': 3, 'pages': 1}
+            search = query.get('search', [''])[0].strip().casefold()
+            company = query.get('company_code', [None])[0]
+            rows = [row for row in self.orders if (company is None or row['company_code'] == company)
+                and (not search or search in ' '.join(str(row.get(key) or '') for key in ('number', 'customer_name', 'equipment_serial', 'manufacturer', 'model')).casefold())]
+            page_size = int(query.get('page_size', ['25'])[0])
+            data = {'items': rows[:page_size], 'page': 1, 'page_size': page_size, 'total': len(rows), 'pages': 1}
         elif re.fullmatch(r'/laboratory/work-orders/\d+', path):
             row = next(row for row in self.orders if row['id'] == int(path.rsplit('/', 1)[1]))
             if method == 'PATCH':
@@ -62,23 +67,9 @@ class Api(fixtures.FixtureApi):
                 row.update(req.post_data_json)
                 row['version'] += 1
             data = row
-        elif path == '/finance/work-orders':
-            ids = query.get('ids', [None])[0]
-            data = [self.option(row) for row in self.orders if ids is None or str(row['id']) in ids.split(',')]
-        elif path.endswith('/billing-readiness'):
-            row = next(row for row in self.orders if row['id'] == int(path.split('/')[-2]))
-            data = {'work_order_id': row['id'], 'work_order_number': row['number'], 'customer_id': row['customer_id'], 'customer_name': row['customer_name'], 'approved_value': row['approved_value'], 'items': []}
-        elif path == '/finance/entries':
-            data = {'items': [], 'page': 1, 'page_size': 50, 'total': 0, 'pages': 1}
-        elif path == '/finance/billing-batches' and method == 'POST':
-            self.batch_keys.append(req.headers.get('idempotency-key'))
-            self.batch_payloads.append(req.post_data_json)
-            if len(self.batch_keys) == 1:
-                route.abort('failed')  # Commit may have happened; retry must reuse the key and body.
-                return
-            data = {'batch_id': 'batch-test', 'total_amount': '200.00', 'exit_invoice': 'NF-TESTE', 'work_orders': [{'work_order_id': row['id'], 'work_order_number': row['number'], 'amount': '100.00', 'obligation': {'id': row['id'], 'installments': []}} for row in self.orders[:2]]}
         elif path == '/laboratory/grouped-quotes' and method == 'POST':
             self.group_keys.append(req.headers.get('idempotency-key'))
+            self.group_payloads.append(req.post_data_json)
             if not self.groups:
                 self.groups = [self.group()]
                 route.abort('failed')
@@ -121,7 +112,7 @@ class Api(fixtures.FixtureApi):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--chromium', required=True)
     parser.add_argument('--artifacts', required=True)
     parser.add_argument('--dev', action='store_true')
@@ -145,30 +136,47 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch(executable_path=args.chromium, headless=True, args=['--no-sandbox'])
             page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            page.set_default_timeout(10000)
             api = Api()
             # Dev-mode source paths also contain /shared/api/; only mock HTTP API routes.
             page.route('**/api/**', lambda route: api.handle(route) if urlparse(route.request.url).path.startswith('/api/') else route.continue_())
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(base + '/laboratorio')
             try:
-                page.get_by_role('checkbox', name='Selecionar OS-00100', exact=True).check(timeout=10000)
+                page.get_by_role('button', name='Orçamentos conjuntos', exact=True).click()
+                page.get_by_role('button', name='Novo orçamento conjunto', exact=True).click()
+                selector = page.locator('dialog.grouped-quote-create')
+                expect(selector.get_by_role('heading', name='Adicionar OS ao orçamento', exact=True)).to_be_visible()
+                expect(selector.get_by_role('button', name='Criar orçamento com 0 OS', exact=True)).to_be_disabled()
+                search = selector.get_by_label('Buscar OS, cliente ou série', exact=True)
+                search.fill('OS-00100')
+                expect(selector.locator('.grouped-quote-candidates > article')).to_have_count(1)
+                selector.get_by_role('button', name='Adicionar OS-00100 ao orçamento', exact=True).click()
+                expect(selector.get_by_role('button', name='Criar orçamento com 1 OS', exact=True)).to_be_disabled()
+                search.fill('Outro cliente')
+                expect(selector.get_by_role('button', name='Adicionar OS-00102 ao orçamento', exact=True)).to_be_disabled()
+                expect(selector.get_by_text('Escolha OS do mesmo cliente e empresa', exact=True)).to_be_visible()
+                search.fill('SERIE-2')
+                selector.get_by_role('button', name='Adicionar OS-00101 ao orçamento', exact=True).click()
+                expect(selector.get_by_role('button', name='Remover OS-00100 do orçamento', exact=True)).to_be_visible()
+                expect(selector.get_by_role('button', name='Remover OS-00101 do orçamento', exact=True)).to_be_visible()
+                expect(selector.get_by_role('button', name='Adicionar OS-00100 ao orçamento', exact=True)).to_be_disabled()
             except Exception:
                 (out / 'failure.html').write_text(page.content())
                 page.screenshot(path=str(out / 'failure.png'))
                 print(json.dumps({'page_errors': errors, 'unhandled_routes': api.unknown}, ensure_ascii=False), flush=True)
                 raise
             expect(page.locator('.lab-detail')).to_have_count(0)
-            expect(page.get_by_role('checkbox', name='Selecionar OS-00102', exact=True)).to_be_disabled()
-            page.get_by_role('checkbox', name='Selecionar OS-00101', exact=True).check()
-            checks.append('row checkboxes preserve list; a different customer cannot join the selection')
-            page.get_by_role('button', name='Criar orçamento conjunto', exact=True).click()
-            dialog = page.locator('.grouped-quote-dialog')
+            checks.append('new grouped-quote dialog searches by OS/customer/serial, adds two OS and blocks a different customer or duplicate selection')
+            selector.get_by_role('button', name='Criar orçamento com 2 OS', exact=True).click()
+            dialog = page.locator('dialog.grouped-quote-dialog:not(.grouped-quote-create)')
             page.wait_for_function("() => document.querySelector('.grouped-quote-dialog')?.textContent.includes('Recarregar orçamento') || document.querySelector('.grouped-quote-dialog h2')?.textContent.includes('OC-000001')")
             if dialog.get_by_role('button', name='Recarregar orçamento').count():
                 dialog.get_by_role('button', name='Recarregar orçamento').click()
             expect(dialog.get_by_role('heading', name='OC-000001 · Cliente de teste')).to_be_visible()
             assert len(api.group_keys) >= 2 and len(set(api.group_keys)) == 1 and api.group_keys[0]
-            checks.append('ambiguous grouped-quote creation reuses its idempotency key')
+            assert len(api.groups) == 1 and all(payload == {'work_order_ids': [100, 101]} for payload in api.group_payloads)
+            checks.append('ambiguous grouped-quote creation reuses its idempotency key and selected OS payload')
             dialog.get_by_label('Descrição — OS-00100', exact=True).fill('Reparo do inversor A')
             dialog.get_by_label('Valor unitário (R$)', exact=True).nth(0).fill('125,50')
             dialog.get_by_role('textbox', name='Diagnóstico técnico / laudo', exact=True).fill('Diagnóstico comum preservado')
@@ -205,23 +213,11 @@ def main():
             checks.append('mobile dialog fits; emitted revision locks; new revision retains content')
             page.get_by_role('button', name='Orçamentos conjuntos', exact=True).click()
             page.locator('.grouped-quotes-list > button').first.click()
+            expect(dialog.get_by_role('combobox', name='Revisão', exact=True)).to_have_value('2')
+            expect(dialog.get_by_label('Título do documento')).to_be_enabled()
             expect(dialog.get_by_role('textbox', name='Diagnóstico técnico / laudo', exact=True)).to_have_value('Diagnóstico comum preservado')
             dialog.get_by_role('button', name='Fechar orçamento conjunto', exact=True).click()
             checks.append('group history reopens the latest editable revision')
-            page.goto(base + '/financeiro?faturar_os=100,101')
-            modal = page.locator('.finance-modal')
-            expect(modal.get_by_label('Valor a faturar — OS-00100', exact=True)).to_have_value('100,00')
-            modal.get_by_label('NFS-e', exact=True).fill('NF-TESTE')
-            expect(modal.get_by_label('NF de saída nas OS', exact=True)).to_have_value('NF-TESTE')
-            modal.get_by_role('button', name='Faturar 2 OS', exact=True).click()
-            expect(modal.get_by_role('button', name='Faturar 2 OS', exact=True)).to_be_enabled()
-            modal.get_by_role('button', name='Faturar 2 OS', exact=True).click()
-            expect(page.locator('.billing-batch-success')).to_be_visible()
-            assert len(api.batch_keys) == 2 and api.batch_keys[0] == api.batch_keys[1] and api.batch_keys[0]
-            assert api.batch_payloads[0] == api.batch_payloads[1]
-            assert [row['work_order_id'] for row in api.batch_payloads[-1]['work_orders']] == [100, 101]
-            assert api.batch_payloads[-1]['exit_invoice'] == 'NF-TESTE'
-            checks.append('billing deep-link loads exact IDs, syncs invoice field and preserves retry key/body')
             page.goto(base + '/laboratorio?os=100&aba=financial')
             detail = page.locator('.lab-detail')
             expect(detail.get_by_label('NF de saída 3', exact=True)).to_be_visible()
@@ -231,7 +227,7 @@ def main():
             assert api.patches[-1] == {'version': 1, 'exit_invoice_2': 'NF-SEGUNDA'}
             checks.append('three exit invoice fields are visible; existing OS PATCH sends only changed field/version')
             assert not errors, errors
-            result = {'backend': 'synthetic API', 'react_mode': 'development StrictMode' if args.dev else 'production', 'passed': len(checks), 'checks': checks, 'page_errors': errors}
+            result = {'suite': SUITE, 'scope': 'Grouped quote creation, save recovery, conflict, revisions, history, mobile layout and laboratory Values invoice fields', 'backend': 'synthetic API', 'react_mode': 'development StrictMode' if args.dev else 'production', 'passed': len(checks), 'checks': checks, 'page_errors': errors}
             (out / 'results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False, indent=2))
             browser.close()

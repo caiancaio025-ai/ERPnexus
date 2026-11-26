@@ -1,0 +1,53 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> nexus-web@0.1.0 test
+> node --test tests/*.test.mjs && node tests/test_quote_save_guard_v41.cjs
+
+✔ billing starts from remaining amount and sums Brazilian values in cents (1.299393ms)
+✔ joint billing checks customer IDs, company and duplicate IDs rather than displayed names (0.422806ms)
+✔ billing keeps historical single-OS customerless records but refuses to group them (0.177296ms)
+✔ one invoice permits zero-cent allocation cells while retaining a positive OS total and at most 1000 cells (0.23322ms)
+✔ editing one installment uses the full invoice allocation and preserves other installments (0.975366ms)
+✔ allocations require the existing document total and equal division conserves every cent (1.388728ms)
+✔ missing, malformed, negative and overprecision amounts are refused (0.178738ms)
+✔ exit invoice suggestion is explicit when invoice kinds have different numbers (0.124597ms)
+✔ nullable historical checklist fields become empty controls without losing true confirmations (0.194262ms)
+✔ automatic description fits the API limit even with 50 OS (0.420843ms)
+✔ financial reconciliation compares allocation and checklist intent, excluding incremented versions (8.924354ms)
+✔ installment reconciliation uses obligation allocation, not the selected installment share (0.285919ms)
+✔ lost PUT acknowledgement is confirmed by a read without a second financial write (0.365109ms)
+✔ conflicting content and failed confirmation preserve the original conflict and version (0.58567ms)
+✔ grouped quote rounds each fractional line HALF_UP before adding rows (1.033733ms)
+✔ grouped quote percent and amount discounts use rounded cents (0.24643ms)
+✔ lost PUT acknowledgement recognizes matching persisted content despite server IDs and decimals (1.230309ms)
+✔ reconciliation refuses to replace local changes with different concurrent content (0.290867ms)
+✔ acknowledges a lost receipt response only when persisted destination and item details match (1.90327ms)
+✔ existing item receipt can adopt its canonical name but cannot acknowledge a different stock target (0.49255ms)
+✔ a request snapshot cannot prove delivery of a separate audit note (0.804249ms)
+✔ converte números digitados em pt-BR e valores monetários da API (1.25747ms)
+✔ salva R02 de R$ 22.000 e mantém quantidades e total da revisão (0.622826ms)
+✔ detecta retorno antigo com valores concretos para diagnóstico (15.38833ms)
+✔ quantidade 2 × R$ 1.500 = R$ 3.000 (0.286631ms)
+✔ arredondamento de quantidade em 3 casas coincide com NUMERIC em centavos (0.196615ms)
+✔ API URL uses a single API prefix with relative and absolute installations (1.186854ms)
+✔ GET retries a temporary proxy failure and returns the recovered JSON (13.257487ms)
+✔ GET retries a disconnected read once, with bounded attempts (0.733984ms)
+✔ POST never automatically repeats an acknowledged or ambiguous write (0.803958ms)
+✔ DELETE is not replayed after a timeout and the timer aborts the request (5.331784ms)
+✔ caller cancellation is propagated without retrying or masquerading as a network fault (0.616607ms)
+✔ successful HTML or malformed JSON is rejected instead of reported as saved (1.332919ms)
+✔ 204 deletion and JSON validation errors retain their exact semantics (0.708495ms)
+✔ purchase and OS monetary fields accept Brazilian and API decimal values (0.422706ms)
+✔ OS sends only changed fields and preserves an explicit clearing (0.371178ms)
+✔ version conflict from quote/stock can safely rebase an unrelated OS edit once (0.464939ms)
+✔ concurrent modification of the same field blocks overwrite and keeps the local draft (0.36573ms)
+✔ ambiguous write failures never trigger version rebase or a second mutation (0.248063ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 230.146185
+20 verificações V41 passaram: moeda brasileira, salvamento confirmado, falha preservada e botão geral integrado.

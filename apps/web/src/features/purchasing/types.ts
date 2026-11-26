@@ -1,3 +1,5 @@
+import type { InventoryReceiptDetails } from "../inventory/PurchaseStockDestination";
+
 export type CompanyCode = "universo_eletronica" | "universo_automacao" | "solucoes_eletronica";
 export type PurchaseOrigin = "national" | "international";
 export type PurchaseStatus =
@@ -36,6 +38,7 @@ export type PurchaseOrder = {
   inventory_serial?: string | null;
   inventory_category?: string | null;
   inventory_format_id?: number | null;
+  inventory_details?: Partial<InventoryReceiptDetails> | null;
   quantity: number;
   total_amount: number | null;
   origin: PurchaseOrigin;
@@ -82,6 +85,7 @@ export type MaterialRequest = {
   inventory_destination: "new" | "existing" | null; inventory_item_id: number | null;
   inventory_name: string | null; inventory_mode: "bulk" | "serialized" | null;
   inventory_serial: string | null; inventory_category: string | null; inventory_format_id: number | null;
+  inventory_details?: Partial<InventoryReceiptDetails> | null;
   status: MaterialRequestStatus; supplier_name: string | null; purchase_reference: string | null;
   purchase_link: string | null; tracking_code: string | null; unit_cost: number | null;
   expected_delivery_date: string | null; purchased_at: string | null; received_at: string | null;

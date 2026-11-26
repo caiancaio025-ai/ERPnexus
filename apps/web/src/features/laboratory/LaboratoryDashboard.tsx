@@ -16,7 +16,7 @@ import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type { AuthUser } from "../auth/AuthCard";
 import { ActionButton } from "./components/ActionButton";
 import { QuoteEditor, type QuoteEditorHandle } from "./components/QuoteEditor";
-import { GroupedQuoteDialog, GroupedQuotesPanel } from "./components/GroupedQuotesPanel";
+import { GroupedQuotesPanel } from "./components/GroupedQuotesPanel";
 import { CustomerSearchSelect } from "./components/CustomerSearchSelect";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { EquipmentDocumentsPanel } from "./components/EquipmentDocumentsPanel";
@@ -167,8 +167,6 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [showInactive, setShowInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("orders");
-  const [selectedOrders, setSelectedOrders] = useState<WorkOrder[]>([]);
-  const [groupedQuoteOrders, setGroupedQuoteOrders] = useState<number[] | null>(null);
   const [locationMap, setLocationMap] = useState<LaboratoryLocationMap | null>(null);
   const [locationMapUpdatedAt, setLocationMapUpdatedAt] = useState<Date | null>(null);
   const [locationFilter, setLocationFilter] = useState<"all" | "occupied" | "free" | "urgent" | "attention" | "critical">("all");
@@ -201,20 +199,6 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const transitionPendingRef = useRef(false);
   const locationSuggestionPendingRef = useRef(false);
   const [suggestingLocation, setSuggestingLocation] = useState(false);
-
-  useEffect(() => { setSelectedOrders([]); }, [company, statusFilter, monthFilter, yearFilter, search, showInactive, view]);
-  function selectionReason(order: WorkOrder): string | null {
-    if (order.is_inactive) return "OS inativa não pode ser selecionada";
-    if (selectedOrders.some(row => row.id === order.id)) return null;
-    if (selectedOrders.length >= 50) return "Selecione no máximo 50 OS";
-    if (selectedOrders.length && order.company_code !== selectedOrders[0].company_code) return "Selecione OS da mesma empresa emissora";
-    if (selectedOrders.length && (!order.customer_id || order.customer_id !== selectedOrders[0].customer_id)) return "Selecione OS do mesmo cadastro de cliente";
-    return null;
-  }
-  function toggleOrderSelection(order: WorkOrder) {
-    if (selectionReason(order)) return;
-    setSelectedOrders(current => current.some(row => row.id === order.id) ? current.filter(row => row.id !== order.id) : [...current, order]);
-  }
 
   const query = useMemo(() => {
     const normalizedSearch = search.trim();
@@ -717,18 +701,9 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
           <ActionButton icon={<Plus size={18} />} onClick={() => setShowForm(true)}>Nova O.S.</ActionButton>
         </section>
 
-        {canManageQuote && selectedOrders.length > 0 && <section className="lab-batch-selection" aria-label="OS selecionadas">
-          <header><strong>{selectedOrders.length} OS selecionada(s) · {selectedOrders[0].customer_name}</strong><button type="button" onClick={() => setSelectedOrders([])}>Limpar seleção</button></header>
-          <div>{selectedOrders.map(order => <button type="button" className="lab-batch-chip" key={order.id} onClick={() => toggleOrderSelection(order)} aria-label={`Remover ${order.number} da seleção`}>{order.number}<X size={14} /></button>)}</div>
-          <p>A seleção permanece entre páginas e é limpa ao mudar os filtros. Confira as OS acima antes de continuar.</p>
-          <div>{canViewValues && <button type="button" onClick={() => navigate(`/financeiro?faturar_os=${selectedOrders.map(order => order.id).join(",")}`)}><BadgeDollarSign size={17} /> Faturar selecionadas</button>}<button type="button" disabled={selectedOrders.length < 2 || !selectedOrders[0].customer_id} onClick={() => setGroupedQuoteOrders(selectedOrders.map(order => order.id))}><FileText size={17} /> Criar orçamento conjunto</button></div>
-          {!selectedOrders[0].customer_id && <p>Vincule esta OS a um cadastro de cliente para agrupá-la com outras OS.</p>}
-        </section>}
-
         <section className="lab-table-card lab-work-orders-table">
-          <table><thead><tr>{canManageQuote && <th>Selecionar</th>}<th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>Localização</th><th>NF entrada</th><th>NF saída</th><th>Garantia (1–3)</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
+          <table><thead><tr><th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>Localização</th><th>NF entrada</th><th>NF saída</th><th>Garantia (1–3)</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
             <tbody>{filteredItems.map((order) => <tr key={order.id} className={`lab-order-row priority-${order.priority}${order.is_inactive ? " lab-order-inactive" : ""}`} onClick={() => void openOrder(order.id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) void openOrder(order.id); }}>
-              {canManageQuote && <td className="lab-cell-select" data-label="Selecionar" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedOrders.some(row => row.id === order.id)} disabled={Boolean(selectionReason(order))} title={selectionReason(order) || `Selecionar ${order.number}`} aria-label={`Selecionar ${order.number}`} onChange={() => toggleOrderSelection(order)} /></td>}
               <td className="lab-cell-order" data-label="O.S."><button className="lab-order-link">{order.number}</button></td>
               <td className="lab-cell-customer" data-label="Cliente">{order.customer_name}</td>
               <td className="lab-cell-equipment" data-label="Equipamento / série">{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td>
@@ -773,7 +748,6 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       />}
 
       {showForm && <OrderForm form={form} setForm={setForm} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
-      {groupedQuoteOrders && <GroupedQuoteDialog workOrderIds={groupedQuoteOrders} onClose={() => { setGroupedQuoteOrders(null); setSelectedOrders([]); }} onChanged={load} />}
       {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} onTab={(nextTab) => void switchDetailTab(nextTab)} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} history={history} locationHistory={locationHistory} workflowOptions={workflowOptions} loading={detailLoading || detailSaving} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onOpenReceivables={() => void openFinanceFromDetail()} onOpenReceivableEntry={(entryId) => void openFinanceFromDetail(entryId)} onLocationPreview={(location) => void openLocationPreview(location)} onSave={() => void saveDetail()} onInactivate={() => void inactivateSelected()} canInactivate={canManageQuote} onStatus={(status, note) => void changeStatus(status, false, note ?? "")} onSubstatus={(code, active) => void toggleSubstatus(code, active)} onClose={() => void closeDetail()} onInventoryChange={refreshOpenDetail} onSuggestLocation={() => void suggestDetailLocation()} suggestingLocation={suggestingLocation} error={error} onReload={() => void reloadDetail()} />}
       {showSettings && <SettingsModal company={company === "all" ? (companies[0]?.company_code || "universo_eletronica") : company} companies={companies} locationConfig={locationConfig} customers={customers} technicians={technicians} workflowOptions={workflowOptions} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={async () => { await Promise.all([load(), loadMasterData()]); }} canManageTechnicians={canManageTechnicians} />}
     </main>
@@ -1083,7 +1057,7 @@ function OrderReceivablesPanel({ workOrderId, onOpenReceivables, onOpenEntry }: 
     {data && <>
       <div className="lab-order-receivables-totals"><span>Lançado<strong>{currency(String(data.total_registered))}</strong></span><span>Recebido<strong>{currency(String(data.total_received))}</strong></span><span>A receber<strong>{currency(String(data.total_pending))}</strong></span><span>Falta lançar<strong>{data.remaining_to_issue == null ? "Sem valor aprovado" : currency(String(data.remaining_to_issue))}</strong></span></div>
       <div className="lab-order-receivables-items">
-        {data.installments.map((item) => <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)}><b>{item.obligation_id ? `Parcela ${item.installment_number}` : "Receita avulsa"}</b><span>Vence {new Date(`${item.due_date}T12:00:00`).toLocaleDateString("pt-BR")}</span><strong>{currency(String(item.amount))}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? "Recebido" : "Pendente"}</em></button>)}
+        {data.installments.map((item) => <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)}><b>{item.obligation_id ? `Parcela ${item.installment_number}` : "Receita avulsa"}</b><span>Vence {new Date(`${item.due_date}T12:00:00`).toLocaleDateString("pt-BR")}</span><strong>{currency(String(item.work_order_amount ?? item.amount))}{item.work_order_amount != null && Number(item.work_order_amount) !== Number(item.amount) && <small>Total da receita: {currency(String(item.amount))}</small>}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? "Recebido" : "Pendente"}</em></button>)}
         {!data.installments.length && <p>Nenhuma receita cadastrada para esta OS.</p>}
       </div>
       {data.remaining_to_issue !== null && Number(data.remaining_to_issue) < 0 && <p className="lab-order-receivables-error">O total lançado supera o valor aprovado. Confira os títulos vinculados antes de criar novos.</p>}

@@ -136,16 +136,20 @@ infra/vps/LEIA-ME-DEPLOY.md. O inicializador local atende apenas esta avaliaçã
 7. NOVA ATUALIZAÇÃO: VÁRIAS OS
 
 Cadastre três OS com o mesmo cadastro de cliente e a mesma empresa.
-Na lista do Laboratório, marque as caixas e use Criar orçamento conjunto.
+Abra Orçamentos conjuntos e clique em Novo orçamento conjunto.
+Busque e adicione as OS dentro da janela do documento.
 Preencha serviços e valores; confira Visualizar PDF e Salvar e emitir PDF.
 Use Nova revisão para alterar uma proposta já emitida. O histórico aparece
 na seção Orçamentos conjuntos e dentro da aba Orçamento de cada OS.
 
-Para faturar, selecione novamente as OS e use Faturar selecionadas.
+Para faturar, abra Nova receita ou uma receita existente no Financeiro.
+Busque e adicione as OS no próprio formulário e distribua o total entre elas.
 Confira os valores individuais, as notas fiscais e os vencimentos.
 Ao concluir, abra Laboratório → Valores e confira as NF de saída.
-O fluxo completo está em ATUALIZACAO_V48_MULTIPLAS_OS.md.
+O fluxo completo está em CORRECAO_V48_FATURAMENTO_ESTOQUE.md.
 
-Se esse teste local já estava preparado na revisão 20261126_01, o
-inicializador aplica a revisão 20261126_02 preservando seu usuário, senha
+Se esse teste local já estava preparado nas revisões 20261126_01 a 20261126_03, o
+inicializador aplica a revisão 20261126_04 preservando seu usuário, senha
 e dados; não é necessário criar outro ambiente de avaliação.
+
+Detalhes da correção vigente: CORRECAO_V48_FATURAMENTO_ESTOQUE.md

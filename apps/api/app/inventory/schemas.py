@@ -1,6 +1,6 @@
 """Contratos públicos do estoque; custo monetário filtrado por perfil no router."""
 from decimal import Decimal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class TypeInput(BaseModel):

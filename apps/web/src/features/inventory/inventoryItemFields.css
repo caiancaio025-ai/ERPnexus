@@ -1,0 +1,36 @@
+.inventory-item-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0;color:inherit}
+.inventory-item-fields .wide{grid-column:1/-1}
+.inventory-item-fields label{display:grid;gap:6px;font-size:13px;font-weight:600;min-width:0;color:inherit;align-content:start}
+.inventory-item-fields :is(input,select,textarea){box-sizing:border-box;width:100%;min-width:0;border:1px solid #365e79;border-radius:9px;padding:11px 12px;background:#09243a;color:#eaf6ff;font:inherit;min-height:44px}
+.inventory-item-fields textarea{resize:vertical}
+.inventory-item-fields input::placeholder,.inventory-item-fields textarea::placeholder{color:#9db6c9}
+.inventory-item-fields :is(input,select,textarea):focus-visible{outline:2px solid #61bcef;outline-offset:2px}
+.inventory-item-fields :is(input,select,textarea):disabled{opacity:.7;cursor:default}
+.inventory-item-details{border:1px solid #35607b;padding:13px;border-radius:10px;background:#0c2b40}
+.inventory-item-details summary{cursor:pointer;color:#bbdff7;font-size:13px;font-weight:600}
+.inventory-item-details>.inventory-item-fields{margin-top:16px}
+.inventory-item-fields .inv-slot-search{display:grid;gap:6px;min-width:0;position:relative;align-content:start;font-size:13px;font-weight:600}
+.inventory-item-fields .inv-slot-search__field{position:relative;min-width:0;display:flex;align-items:center}
+.inventory-item-fields .inv-slot-search__field>svg{position:absolute;left:11px;z-index:1;color:#74b6d9;pointer-events:none}
+.inventory-item-fields .inv-slot-search__field input{padding-left:38px;padding-right:42px}
+.inventory-item-fields .inv-slot-search__field input::-webkit-search-cancel-button{display:none}
+.inventory-item-fields .inv-slot-search__clear{position:absolute;right:5px;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:7px;color:#9fdaf5;background:#17364c;cursor:pointer}
+.inventory-item-fields .inv-slot-search__selected{display:flex;align-items:center;gap:5px;color:#7de1ba;line-height:1.4;font-size:11px}
+.inventory-item-fields .inv-slot-search__results{position:absolute;z-index:140;top:calc(100% + 4px);left:0;right:0;max-height:min(315px,48dvh);overflow:auto;border:1px solid #357396;border-radius:10px;padding:5px;background:#0b2539;box-shadow:0 16px 38px #0009}
+.inventory-item-fields .inv-slot-search__results button{display:flex;text-align:left;align-items:center;gap:9px;padding:10px;width:100%;min-height:44px;border:0;border-radius:7px;background:transparent;color:#e8f6ff;cursor:pointer}
+.inventory-item-fields .inv-slot-search__results button:is(:hover,.is-active){background:#174462}
+.inventory-item-fields .inv-slot-search__results button>svg{flex:none;color:#65c8f3}
+.inventory-item-fields .inv-slot-search__results button>span{display:grid;gap:3px;min-width:0;flex:1;overflow-wrap:anywhere}
+.inventory-item-fields .inv-slot-search__results button strong{font-size:12px}
+.inventory-item-fields .inv-slot-search__results button small{font-size:11px;font-weight:400;color:#a0bdd1}
+.inventory-item-fields .inv-slot-search__results button em{font-size:10px;color:#9de7c6;font-style:normal}
+.inventory-item-fields .inv-slot-search__results p{padding:12px;font-size:12px;color:#a6c5d9}
+.inventory-item-fields .inv-slot-search__none{color:#bed1df;border-bottom:1px solid #264b65!important;border-radius:0!important}
+@media(max-width:600px){.inventory-item-fields{grid-template-columns:minmax(0,1fr)}}
+
+html[data-sentico-theme="claro"] .inventory-item-fields :is(input,select,textarea){background:#fff;color:#17394f;border-color:#b8cede}
+html[data-sentico-theme="claro"] .inventory-item-details{background:#edf5fa;border-color:#bdd2e0}
+html[data-sentico-theme="claro"] .inventory-item-details summary{color:#315d77}
+html[data-sentico-theme="claro"] .inventory-item-fields .inv-slot-search__results{background:#fff;border-color:#b8cede}
+html[data-sentico-theme="claro"] .inventory-item-fields .inv-slot-search__results button{color:#17394f}
+html[data-sentico-theme="claro"] .inventory-item-fields .inv-slot-search__results button:is(:hover,.is-active){background:#e4f2fa}

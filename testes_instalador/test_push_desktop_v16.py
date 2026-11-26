@@ -27,11 +27,11 @@ def test_compartilhamento_de_maquina_revoga_subscricao_no_logout():
 def test_migracao_instalador_reconhece_v18_e_preserva_revisao_anterior():
     installer = (ROOT / 'INSTALAR_SENTICO.ps1').read_text(encoding='utf-8-sig')
     assert "'20261112_01','20261116_01'" in installer
-    assert "$escolha.Revisao -ne '20261126_02'" in installer
-    assert "-notmatch '20261126_02'" in installer
+    assert "$escolha.Revisao -ne '20261126_04'" in installer
+    assert "-notmatch '20261126_04'" in installer
     for f in ('catalogar_bancos_existentes.sh', 'inspecionar_arquivo_pgdata.sh'):
         s = (ROOT / 'scripts_recuperacao' / f).read_text()
-        assert '20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01|20261126_02' in s
+        assert '20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01|20261126_02|20261126_03|20261126_04' in s
 
 
 def test_experiencia_mobile_isolada_do_desktop():

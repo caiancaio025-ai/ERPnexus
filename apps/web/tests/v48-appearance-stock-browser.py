@@ -162,8 +162,8 @@ def main():
             modal = page.locator('.material-request-modal')
             expect(modal.get_by_role('heading', name=request['item_name'], exact=True)).to_be_visible()
             modal.get_by_label('Destino do material').select_option('new')
-            modal.get_by_label('Nome no Estoque', exact=True).fill('Fita adesiva individual UI V48')
-            modal.get_by_label('Controle', exact=False).select_option('serialized')
+            modal.get_by_label('Nome do item', exact=True).fill('Fita adesiva individual UI V48')
+            modal.get_by_label('Controle', exact=True).select_option('serialized')
             expect(modal.locator('.purchase-stock-receipt-summary')).to_contain_text('10 unidades')
             expect(modal.get_by_label('Série do fabricante (opcional)', exact=True)).to_have_count(0)
             page.screenshot(path=str(out/'request-individual-10.png'), full_page=True)
@@ -173,7 +173,7 @@ def main():
             assert saved_request['quantity'] == 10 and saved_request['inventory_mode'] == 'serialized'
             page.goto(request_url)
             modal = page.locator('.material-request-modal')
-            expect(modal.get_by_label('Controle', exact=False)).to_have_value('serialized')
+            expect(modal.get_by_label('Controle', exact=True)).to_have_value('serialized')
             with page.expect_response(lambda r: urlparse(r.url).path == request_path and r.request.method == 'PATCH') as received:
                 modal.get_by_role('button', name='Recebido', exact=True).click()
             assert decode(received.value)['status'] == 'received'
@@ -210,9 +210,9 @@ def main():
                 page.get_by_label('Quantidade*', exact=True).fill(str(quantity))
                 page.get_by_label('Valor total (R$)*', exact=True).fill(str(quantity*4)+',00')
                 page.get_by_label('Loja/fornecedor*', exact=False).select_option(str(supplier['id']))
-                page.get_by_label('Quando chegar, enviar para:', exact=False).select_option('new')
-                page.get_by_label('Nome técnico do novo item no Estoque (independente do pedido)', exact=True).fill(name)
-                page.get_by_label('Tipo de controle', exact=False).select_option(mode)
+                page.get_by_label('Destino do material', exact=True).select_option('new')
+                page.get_by_label('Nome do item', exact=True).fill(name)
+                page.get_by_label('Controle', exact=True).select_option(mode)
                 page.get_by_label('Status atual', exact=False).select_option('delivered')
                 if mode == 'serialized' and quantity == 1:
                     expect(page.get_by_label('Série do fabricante (opcional)', exact=True)).to_have_value('')

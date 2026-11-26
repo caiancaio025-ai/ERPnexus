@@ -1,0 +1,17 @@
+{
+  "suite": "grouped-quotes-and-laboratory-invoices",
+  "scope": "Grouped quote creation, save recovery, conflict, revisions, history, mobile layout and laboratory Values invoice fields",
+  "backend": "synthetic API",
+  "react_mode": "development StrictMode",
+  "passed": 7,
+  "checks": [
+    "new grouped-quote dialog searches by OS/customer/serial, adds two OS and blocks a different customer or duplicate selection",
+    "ambiguous grouped-quote creation reuses its idempotency key and selected OS payload",
+    "lost PUT acknowledgement is reconciled by GET; OS items/common fields/Brazilian money stay saved without write replay",
+    "different concurrent content preserves local draft until explicit reload",
+    "mobile dialog fits; emitted revision locks; new revision retains content",
+    "group history reopens the latest editable revision",
+    "three exit invoice fields are visible; existing OS PATCH sends only changed field/version"
+  ],
+  "page_errors": []
+}

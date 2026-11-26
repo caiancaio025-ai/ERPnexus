@@ -9,6 +9,7 @@ from sqlalchemy import case, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.finance.models import FinancialEntry
+from app.finance.work_order_links import allocation_rows
 from app.laboratory.models import (
     LaboratoryEquipment,
     LaboratoryReleaseEvent,
@@ -185,15 +186,16 @@ async def build_technician_production_report(
 
     # Monetary data is not queried at all for roles without sensitive-value access.
     if include_sensitive_values and work_order_ids:
+        allocations = allocation_rows()
         finance_rows = (
             await db.execute(
                 select(
-                    FinancialEntry.work_order_id,
-                    func.coalesce(func.sum(FinancialEntry.amount), 0).label("invoiced_total"),
+                    allocations.c.work_order_id,
+                    func.coalesce(func.sum(allocations.c.amount), 0).label("invoiced_total"),
                     func.coalesce(
                         func.sum(
                             case(
-                                (FinancialEntry.status == "received", FinancialEntry.amount),
+                                (FinancialEntry.status == "received", allocations.c.amount),
                                 else_=0,
                             )
                         ),
@@ -202,20 +204,21 @@ async def build_technician_production_report(
                     func.coalesce(
                         func.sum(
                             case(
-                                (FinancialEntry.status == "pending", FinancialEntry.amount),
+                                (FinancialEntry.status == "pending", allocations.c.amount),
                                 else_=0,
                             )
                         ),
                         0,
                     ).label("receivable_total"),
                 )
+                .join(FinancialEntry, FinancialEntry.id == allocations.c.entry_id)
                 .where(
-                    FinancialEntry.work_order_id.in_(work_order_ids),
+                    allocations.c.work_order_id.in_(work_order_ids),
                     FinancialEntry.entry_type == "income",
                     FinancialEntry.is_deleted.is_(False),
                     FinancialEntry.status != "cancelled",
                 )
-                .group_by(FinancialEntry.work_order_id)
+                .group_by(allocations.c.work_order_id)
             )
         ).all()
         finance_by_work_order = {

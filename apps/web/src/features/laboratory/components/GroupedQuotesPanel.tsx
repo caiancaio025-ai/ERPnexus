@@ -8,6 +8,7 @@ import { ActionButton } from "./ActionButton";
 import { quoteNumber } from "./quoteSaveGuard";
 import { quoteDiscountCents, quoteLineCents } from "./groupedQuoteMoney";
 import { groupedQuoteContentMatches } from "./groupedQuoteSave";
+import { GroupedQuoteCreateDialog } from "./GroupedQuoteCreateDialog";
 import type { GroupedQuote, GroupedQuoteItem } from "../types";
 import "./groupedQuotes.css";
 
@@ -24,6 +25,8 @@ export function GroupedQuotesPanel({ workOrderId, companyCode, onChanged, readOn
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newOrderIds, setNewOrderIds] = useState<number[] | null>(null);
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
@@ -40,7 +43,7 @@ export function GroupedQuotesPanel({ workOrderId, companyCode, onChanged, readOn
   }, [workOrderId, companyCode, search, reload]);
   const groups = [...new Map([...quotes].sort((a, b) => a.revision - b.revision).map(quote => [quote.group_id, quote])).values()].sort((a, b) => b.id - a.id);
   return <section className="grouped-quotes-panel">
-    <header><div><small>PROPOSTAS COM VÁRIAS OS</small><h2>Orçamentos conjuntos</h2><p>{workOrderId ? "Documentos conjuntos que incluem esta OS." : "Selecione duas ou mais OS na lista de ordens de serviço para criar um documento único."}</p></div><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}><RefreshCw size={16} /> Atualizar</button></header>
+    <header><div><small>PROPOSTAS COM VÁRIAS OS</small><h2>Orçamentos conjuntos</h2><p>{workOrderId ? "Documentos conjuntos que incluem esta OS." : "Crie um documento e adicione nele as OS do mesmo cliente e empresa."}</p></div><div className="grouped-quotes-actions">{!readOnly && <button type="button" onClick={() => setCreating(true)}><Plus size={16} /> Novo orçamento conjunto</button>}<button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}><RefreshCw size={16} /> Atualizar</button></div></header>
     {!workOrderId && <label className="grouped-quotes-search"><Search size={17} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar código, cliente ou OS..." aria-label="Pesquisar orçamentos conjuntos" /></label>}
     {error && <p role="alert" className="grouped-quote-error">{error}</p>}
     {loading && <p role="status">Consultando orçamentos conjuntos…</p>}
@@ -50,6 +53,8 @@ export function GroupedQuotesPanel({ workOrderId, companyCode, onChanged, readOn
     {!loading && !error && !groups.length && <p className="grouped-quotes-empty">Nenhum orçamento conjunto encontrado.</p>}
     {quotes.length >= 200 && <small>Mostrando até 200 revisões. Use a pesquisa para localizar um documento específico.</small>}
     {selected != null && <GroupedQuoteDialog quoteId={selected} readOnly={readOnly} onClose={() => { setSelected(null); setReload(value => value + 1); }} onChanged={async () => { setReload(value => value + 1); await onChanged?.(); }} />}
+    {creating && <GroupedQuoteCreateDialog companyCode={companyCode} workOrderId={workOrderId} onClose={() => setCreating(false)} onCreate={ids => { setCreating(false); setNewOrderIds(ids); }} />}
+    {newOrderIds && <GroupedQuoteDialog workOrderIds={newOrderIds} onClose={() => { setNewOrderIds(null); setReload(value => value + 1); }} onChanged={async () => { setReload(value => value + 1); await onChanged?.(); }} />}
   </section>;
 }
 

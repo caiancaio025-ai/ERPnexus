@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.auth.models import User  # noqa: F401
@@ -89,6 +89,9 @@ async def test_new_serialized_purchase_has_unique_serial_and_quantity_one():
     engine = create_engine("sqlite+pysqlite:///:memory:");Base.metadata.create_all(engine)
     with Session(engine) as session:
         db=Adapter(session)
+        from inventory_test_catalog import receipt_catalog_rows
+        session.add_all(receipt_catalog_rows())
+        session.flush()
         base=dict(source="order", source_id=91, company_code="universo_eletronica",name="Compra drive",
                   quantity=1,unit_cost=Decimal("300.00"),user_id=1,source_code="PC-91",destination="new",
                   stock_name="Módulo SINAMICS",stock_mode="serialized",stock_serial="SN-002",stock_category="modulo")

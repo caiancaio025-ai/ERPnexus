@@ -22,7 +22,8 @@ from app.core.db import get_db
 from app.core.file_validation import InvalidUpload
 from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.commercial.models import CommercialCompanyProfile
-from app.finance.models import FinancialEntry
+from app.finance.models import FinancialEntry, FinancialObligation
+from app.finance.work_order_links import allocation_rows
 from app.laboratory.models import (
     LaboratoryArea,
     LaboratoryAuditEvent,
@@ -101,7 +102,6 @@ from app.laboratory.schemas import (
 )
 from app.notifications.events import work_order_activity, material_request_activity
 from app.laboratory.service import (
-    TERMINAL_STATUSES,
     apply_work_order_update,
     find_or_create_equipment,
     list_work_orders_page,
@@ -119,9 +119,7 @@ from app.laboratory.production_report import build_technician_production_report
 from app.laboratory.location_dwell import location_dwell_level, location_dwell_seconds
 from app.laboratory.status_flow import (
     BUSINESS_STATUS_TARGETS,
-    LEGACY_SUBSTATUS_TARGETS,
     WORK_ORDER_STATUSES,
-    can_transition,
 )
 
 router = APIRouter(prefix="/laboratory", dependencies=[Depends(require_module("laboratorio"))])
@@ -546,15 +544,32 @@ async def _sync_finance_on_status_change(
         work_order.invoiced_at = datetime.now(UTC)
 
     if new_status == "cancelled":
+        allocations = allocation_rows()
+        linked_ids = select(allocations.c.entry_id).where(allocations.c.work_order_id == work_order.id)
+        shared_ids = select(allocations.c.entry_id).group_by(allocations.c.entry_id).having(func.count(allocations.c.work_order_id) > 1)
+        shared = await db.scalar(select(FinancialEntry.id).where(
+            FinancialEntry.id.in_(linked_ids), FinancialEntry.id.in_(shared_ids),
+            FinancialEntry.is_deleted.is_(False), FinancialEntry.status == "pending",
+        ).limit(1))
+        if shared is not None:
+            raise HTTPException(409, "A OS pertence a uma receita compartilhada pendente. Ajuste seus vínculos no Financeiro antes de cancelar esta OS.")
         entries = list((await db.scalars(
             select(FinancialEntry).where(
-                FinancialEntry.work_order_id == work_order.id,
+                FinancialEntry.id.in_(linked_ids),
                 FinancialEntry.is_deleted.is_(False),
                 FinancialEntry.status == "pending",
             )
         )).all())
+        for obligation_id in sorted({entry.obligation_id for entry in entries if entry.obligation_id is not None}):
+            obligation = await db.scalar(select(FinancialObligation).where(FinancialObligation.id == obligation_id).with_for_update())
+            if obligation is not None:
+                obligation.version += 1
+        from app.finance.router import _assert_period_open
+        for company_code, posting_date in sorted({(entry.company_code, entry.posting_date) for entry in entries}):
+            await _assert_period_open(db, company_code, posting_date)
         for entry in entries:
             entry.status = "cancelled"
+            entry.version += 1
 
 
 def _quote_totals(payload: QuoteInput) -> tuple[Decimal, Decimal]:
@@ -1730,9 +1745,10 @@ async def inactivate_work_order(
         raise HTTPException(status_code=409, detail="A OS já está inativada.")
     if work_order.version != payload.version:
         raise HTTPException(status_code=409, detail="A OS foi alterada. Recarregue antes de inativar.")
+    allocations = allocation_rows()
     linked_finance = await db.scalar(
         select(FinancialEntry.id).where(
-            FinancialEntry.work_order_id == work_order_id,
+            FinancialEntry.id.in_(select(allocations.c.entry_id).where(allocations.c.work_order_id == work_order_id)),
             FinancialEntry.is_deleted.is_(False),
         ).limit(1)
     )
@@ -2859,7 +2875,7 @@ async def delete_document(
 
 # ------------------------------------------------------- material requests ---
 
-from app.purchasing.material_models import MaterialRequest, MaterialRequestEvent
+from app.purchasing.material_models import MaterialRequest
 from app.purchasing.material_schemas import MaterialRequestCreate, MaterialRequestOutput
 from app.purchasing.material_service import event as material_event, next_material_request_code, output_rows
 
@@ -2907,6 +2923,7 @@ async def create_material_request_for_work_order(
         **payload.model_dump(include={
             "inventory_destination", "inventory_item_id", "inventory_name", "inventory_mode",
             "inventory_serial", "inventory_category", "inventory_format_id",
+            "inventory_details",
         }),
         priority=payload.priority,
         technical_note=payload.technical_note,

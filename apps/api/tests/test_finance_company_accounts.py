@@ -1,4 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi import HTTPException
 
 from app.finance.models import FinancialAccount
 from app.finance.service import build_finance_summary
@@ -32,19 +37,14 @@ def test_financial_account_name_is_not_globally_unique() -> None:
     )
 
 
-def test_financial_entry_validates_account_company() -> None:
-    router_path = Path(__file__).parents[1] / "app" / "finance" / "router.py"
+@pytest.mark.asyncio
+async def test_financial_entry_validates_account_company() -> None:
+    from app.finance.router import _validate_entry_account_company
 
-    source = router_path.read_text(encoding="utf-8")
-    normalized = " ".join(source.split())
-
-    assert "FinancialAccount" in normalized, (
-        "O router financeiro ainda não consulta a conta financeira."
-    )
-    assert "account.company_code != payload.company_code" in normalized, (
-        "Ainda não existe validação impedindo lançamento em conta "
-        "de outra empresa."
-    )
-    assert normalized.count("await _validate_entry_account_company(db, payload)") == 2, (
-        "A validação da conta precisa ocorrer tanto na criação quanto na edição."
-    )
+    db = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(company_code="universo_automacao")))
+    payload = SimpleNamespace(account_id=7, company_code="universo_eletronica")
+    with pytest.raises(HTTPException) as error:
+        await _validate_entry_account_company(db, payload)
+    assert error.value.status_code == 422 and "outra empresa" in error.value.detail
+    db.get.return_value.company_code = payload.company_code
+    await _validate_entry_account_company(db, payload)

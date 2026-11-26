@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Search, X } from "lucide-react";
 
 export type SearchableSlot = {
@@ -40,6 +40,9 @@ export function InventorySlotSearch({ value, onChange, slots, containers, areas,
   const [query, setQuery] = useState(selected ? `${selected.code} · ${selected.name}` : "");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  useEffect(() => {
+    if (value && selected) setQuery(`${selected.code} · ${selected.name}`);
+  }, [value, selected?.code, selected?.name]);
   const details = useMemo(() => {
     const containerById = new Map(containers.map((container) => [container.id, container]));
     const areaById = new Map(areas.map((area) => [area.id, area]));

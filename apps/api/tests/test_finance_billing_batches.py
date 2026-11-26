@@ -88,7 +88,7 @@ def test_outgoing_document_is_never_overwritten_or_duplicated():
 @pytest.mark.parametrize("mutation,message", [
     (lambda data: data["work_orders"][1].update(work_order_id=1), "mesma OS"),
     (lambda data: data["work_orders"][0].update(amount="99.99"), "soma dos valores por OS"),
-    (lambda data: data.update(work_order_id=1), "lista work_orders"),
+    (lambda data: data.update(work_order_id=1), "vínculo singular"),
 ])
 def test_invalid_batch_contract_cannot_reach_database(mutation, message):
     data = batch_payload()
@@ -99,9 +99,10 @@ def test_invalid_batch_contract_cannot_reach_database(mutation, message):
 
 def test_optional_invoice_fields_preserve_historical_idempotency_fingerprint():
     data = batch_payload()
+    data.pop("work_orders")  # Cliente antigo envia apenas o vínculo singular.
     data.update(amount="300.00", due_date="2026-12-26", work_order_id=1)
     payload = FinancialEntryInput.model_validate(data)
-    legacy = payload.model_dump(mode="json", exclude={"exit_invoice", "work_order_version"})
+    legacy = payload.model_dump(mode="json", exclude={"exit_invoice", "work_order_version", "work_orders"})
     assert finance_request_fingerprint(payload) == fingerprint_mapping(legacy)
     changed = payload.model_copy(update={"exit_invoice": "321"})
     assert finance_request_fingerprint(changed) != finance_request_fingerprint(payload)

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.auth.models import User  # noqa: F401
@@ -38,8 +38,8 @@ class Adapter:
     def add(self, model):
         self.session.add(model)
 
-    def add_all(self, models):
-        self.session.add_all(models)
+    def add_all(self, objects):
+        self.session.add_all(objects)
 
 
 def test_stock_target_optional_at_request_creation_and_editable_until_received():
@@ -58,6 +58,9 @@ def test_receipt_mapping_is_required_for_new_requests_but_optional_during_reques
         Base.metadata.create_all(engine)
         try:
             with Session(engine) as session:
+                from inventory_test_catalog import receipt_catalog_rows
+                session.add_all(receipt_catalog_rows())
+                session.flush()
                 db = Adapter(session)
                 params = dict(source="request", source_id=101, company_code="universo_eletronica", name="Kit comprado", quantity=5, unit_cost=Decimal("1.50"), user_id=1, source_code="SC-101")
                 with pytest.raises(HTTPException) as info:

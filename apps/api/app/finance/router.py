@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
@@ -29,6 +30,11 @@ from app.finance.billing_batches import (
     outgoing_invoice_slot,
 )
 from app.finance.idempotency import finance_request_fingerprint
+from app.finance.period_locks import lock_period
+from app.finance.linked_entries import create_entry_with_links, create_obligation_with_links, update_entry_with_links, validate_selection
+from app.finance.work_order_links import (
+    aggregate_allocations, allocation_rows, allocation_snapshot, entry_outputs, lock_scope, raw_allocations, registered_totals, replace_allocations, rescale_allocations,
+)
 from app.finance.installment_edit import (
     INDIVIDUAL_FIELDS as GROUPED_INSTALLMENT_INDIVIDUAL_FIELDS,
     PROTECTED_FIELDS as GROUPED_INSTALLMENT_PROTECTED_FIELDS,
@@ -67,6 +73,7 @@ from app.finance.schemas import (
     FinancialEntryOutput,
     FinancialEntryPage,
     FinancialEntryUpdate,
+    FinancialWorkOrderAllocationInput,
     FinancialAlertAcknowledgmentInput,
     FinancialAlertAcknowledgmentOutput,
     FinancialObligationInput,
@@ -189,6 +196,7 @@ def _require_finance_manager(user: User) -> None:
 
 
 async def _assert_period_open(db: AsyncSession, company_code: str, posting_date: date) -> None:
+    await lock_period(db, company_code, posting_date.year, posting_date.month)
     closure = await db.scalar(
         select(FinancialPeriodClosure).where(
             FinancialPeriodClosure.company_code == company_code,
@@ -225,6 +233,7 @@ async def _obligation_output(
     )
     return FinancialObligationOutput(
         id=obligation.id,
+        version=getattr(obligation, "version", 1) or 1,
         entry_type=obligation.entry_type,
         company_code=obligation.company_code,
         nfse_number=obligation.nfse_number,
@@ -236,10 +245,10 @@ async def _obligation_output(
         installment_count=obligation.installment_count,
         work_order_id=obligation.work_order_id,
         created_at=obligation.created_at,
-        installments=[
-            FinancialEntryOutput.model_validate(item)
-            for item in installments
-        ],
+        installments=(outputs := await entry_outputs(db, installments)),
+        work_orders=outputs[0].obligation_work_orders if outputs else [],
+        work_order_links_editable=all(row.work_order_links_editable for row in outputs),
+        work_order_links_lock_reason=next((row.work_order_links_lock_reason for row in outputs if row.work_order_links_lock_reason), None),
     )
 
 
@@ -512,6 +521,7 @@ async def close_financial_period(
     db: AsyncSession = DB_DEP,
 ):
     _require_finance_manager(user)
+    await lock_period(db, payload.company_code, payload.year, payload.month, exclusive=True)
     existing = await db.scalar(select(FinancialPeriodClosure).where(
         FinancialPeriodClosure.company_code == payload.company_code,
         FinancialPeriodClosure.year == payload.year,
@@ -562,6 +572,7 @@ async def reopen_financial_period(
     db: AsyncSession = DB_DEP,
 ):
     _require_finance_manager(user)
+    await lock_period(db, payload.company_code, payload.year, payload.month, exclusive=True)
     closure = await db.scalar(select(FinancialPeriodClosure).where(
         FinancialPeriodClosure.company_code == payload.company_code,
         FinancialPeriodClosure.year == payload.year,
@@ -669,17 +680,7 @@ async def finance_work_orders(
 
 
 async def _registered_work_order_totals(db: AsyncSession, work_order_ids: list[int]) -> dict[int, Decimal]:
-    if not work_order_ids:
-        return {}
-    rows = await db.execute(select(
-        FinancialEntry.work_order_id, func.sum(FinancialEntry.amount),
-    ).where(
-        FinancialEntry.work_order_id.in_(work_order_ids),
-        FinancialEntry.entry_type == "income",
-        FinancialEntry.is_deleted.is_(False),
-        FinancialEntry.status.in_(("pending", "received")),
-    ).group_by(FinancialEntry.work_order_id))
-    return {work_order_id: amount for work_order_id, amount in rows}
+    return await registered_totals(db, work_order_ids)
 
 
 @router.get("/work-orders/{work_order_id}/receivables", response_model=WorkOrderReceivablesOutput)
@@ -696,16 +697,18 @@ async def work_order_receivables(
     order = await db.get(LaboratoryWorkOrder, work_order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="OS não encontrada.")
+    allocations = allocation_rows()
     installments = list((await db.scalars(
         select(FinancialEntry).where(
-            FinancialEntry.work_order_id == order.id,
+            FinancialEntry.id.in_(select(allocations.c.entry_id).where(allocations.c.work_order_id == order.id, allocations.c.amount > 0)),
             FinancialEntry.entry_type == "income",
             FinancialEntry.is_deleted.is_(False),
             FinancialEntry.status.in_(("pending", "received")),
         ).order_by(FinancialEntry.due_date, FinancialEntry.installment_number, FinancialEntry.id)
     )).all())
     approved = order.approved_value
-    amounts = summarize_receivables(installments, approved)
+    outputs = await entry_outputs(db, installments, work_order_id=order.id)
+    amounts = summarize_receivables([SimpleNamespace(amount=row.work_order_amount, status=row.status) for row in outputs], approved)
     return WorkOrderReceivablesOutput(
         work_order_id=order.id,
         work_order_number=order.number,
@@ -713,7 +716,7 @@ async def work_order_receivables(
         customer_name=order.customer_name,
         approved_value=approved,
         **amounts,
-        installments=[FinancialEntryOutput.model_validate(item) for item in installments],
+        installments=outputs,
     )
 
 
@@ -965,6 +968,7 @@ async def list_entries(
     if search:
         term = f"%{search.strip()}%"
         work_order_ids = select(LaboratoryWorkOrder.id).where(LaboratoryWorkOrder.number.ilike(term))
+        allocations = allocation_rows()
         conditions.append(or_(
             FinancialEntry.description.ilike(term), FinancialEntry.counterparty_name.ilike(term),
             FinancialEntry.series.ilike(term),
@@ -972,6 +976,7 @@ async def list_entries(
             FinancialEntry.nfse_number.ilike(term),
             FinancialEntry.nfe_number.ilike(term), FinancialEntry.bank_name.ilike(term),
             FinancialEntry.work_order_id.in_(work_order_ids),
+            FinancialEntry.id.in_(select(allocations.c.entry_id).where(allocations.c.work_order_id.in_(work_order_ids))),
         ))
 
     total = int(await db.scalar(
@@ -989,7 +994,7 @@ async def list_entries(
     )
     items = list((await db.scalars(ordered)).all())
     return FinancialEntryPage(
-        items=items, page=resolved_page, page_size=page_size, total=total, pages=pages
+        items=await entry_outputs(db, items), page=resolved_page, page_size=page_size, total=total, pages=pages
     )
 
 
@@ -1016,7 +1021,7 @@ async def date_bounds(
 
 @router.get("/entries/{entry_id}", response_model=FinancialEntryOutput)
 async def get_entry(entry_id: int, _: User = CURRENT_USER_DEP, db: AsyncSession = DB_DEP):
-    return await _entry_or_404(db, entry_id)
+    return (await entry_outputs(db, [await _entry_or_404(db, entry_id)]))[0]
 
 
 async def _billing_batch_output(
@@ -1028,6 +1033,7 @@ async def _billing_batch_output(
     grouped: dict[int, list[FinancialEntry]] = {}
     for entry in entries:
         grouped.setdefault(entry.obligation_id, []).append(entry)
+    projected = {entry.id: entry for entry in await entry_outputs(db, [row for row in entries if not row.is_deleted])}
     outputs = []
     exit_invoice = None
     for obligation in obligations:
@@ -1038,12 +1044,14 @@ async def _billing_batch_output(
         ), None)
         if metadata is None:
             raise HTTPException(status_code=409, detail="O faturamento já existe, mas seu vínculo de lote precisa ser revisado.")
-        original = next((row for row in metadata["work_orders"] if row["work_order_id"] == obligation.work_order_id), None)
+        original_id = int(obligation.idempotency_key.rsplit(":", 1)[1])
+        original = next((row for row in metadata["work_orders"] if row["work_order_id"] == original_id), None)
         if original is None:
             raise HTTPException(status_code=409, detail="A OS de um faturamento existente foi removida. Revise o vínculo no Financeiro.")
         exit_invoice = metadata["exit_invoice"]
         output = FinancialObligationOutput(
             id=obligation.id,
+            version=obligation.version,
             entry_type=obligation.entry_type,
             company_code=obligation.company_code,
             nfse_number=obligation.nfse_number,
@@ -1055,10 +1063,13 @@ async def _billing_batch_output(
             installment_count=obligation.installment_count,
             work_order_id=obligation.work_order_id,
             created_at=obligation.created_at,
-            installments=[FinancialEntryOutput.model_validate(entry) for entry in siblings if not entry.is_deleted],
+            installments=(active_outputs := [projected[entry.id] for entry in siblings if not entry.is_deleted]),
+            work_orders=active_outputs[0].obligation_work_orders if active_outputs else [],
+            work_order_links_editable=all(row.work_order_links_editable for row in active_outputs),
+            work_order_links_lock_reason=next((row.work_order_links_lock_reason for row in active_outputs if row.work_order_links_lock_reason), None),
         )
         outputs.append(BillingBatchWorkOrderOutput(
-            work_order_id=obligation.work_order_id,
+            work_order_id=original_id,
             work_order_number=original["work_order_number"],
             amount=obligation.total_amount,
             obligation=output,
@@ -1095,7 +1106,6 @@ async def create_billing_batch(
         return await _billing_batch_output(db, batch_id, existing)
 
     await _validate_obligation_account_company(db, payload)
-    await _assert_period_open(db, payload.company_code, payload.posting_date)
     allocations = sorted(payload.work_orders, key=lambda row: row.work_order_id)
     orders = list((await db.scalars(select(LaboratoryWorkOrder).where(
         LaboratoryWorkOrder.id.in_([row.work_order_id for row in allocations]),
@@ -1123,6 +1133,7 @@ async def create_billing_batch(
                 )
         confirmations[order.id] = await _validate_billing_confirmation(db, order, allocation.billing_confirmation)
 
+    await _assert_period_open(db, payload.company_code, payload.posting_date)
     installments = sorted(payload.installments, key=lambda row: row.installment_number)
     amounts = allocate_installments([row.amount for row in allocations], [row.amount for row in installments])
     metadata = {
@@ -1200,6 +1211,8 @@ async def create_obligation(
     db: AsyncSession = DB_DEP,
     idempotency_key: str | None = IDEMPOTENCY_KEY_HEADER,
 ):
+    if payload.work_orders is not None:
+        return await create_obligation_with_links(db, user, payload, idempotency_key)
     normalized_key = idempotency_key.strip() if idempotency_key else None
     fingerprint = finance_request_fingerprint(payload) if normalized_key else None
 
@@ -1218,7 +1231,6 @@ async def create_obligation(
             return await _obligation_output(db, existing)
 
     await _validate_obligation_account_company(db, payload)
-    await _assert_period_open(db, payload.company_code, payload.posting_date)
 
     work_order = None
     billing_compliance = None
@@ -1245,6 +1257,7 @@ async def create_obligation(
             payload.billing_confirmation,
         )
 
+    await _assert_period_open(db, payload.company_code, payload.posting_date)
     obligation = FinancialObligation(
         entry_type=payload.entry_type,
         company_code=payload.company_code,
@@ -1379,15 +1392,11 @@ async def create_obligation(
 
 
 async def _editable_income_obligation(db: AsyncSession, obligation_id: int):
-    obligation = await db.scalar(select(FinancialObligation).where(
-        FinancialObligation.id == obligation_id,
-    ).with_for_update())
+    scope = await lock_scope(db, obligation_id=obligation_id)
+    obligation = scope.obligation
     if obligation is None or obligation.entry_type != "income":
         raise HTTPException(status_code=404, detail="Parcelamento de receita não encontrado.")
-    entries = list((await db.scalars(select(FinancialEntry).where(
-        FinancialEntry.obligation_id == obligation_id,
-        FinancialEntry.is_deleted.is_(False),
-    ).order_by(FinancialEntry.installment_number.asc()).with_for_update())).all())
+    entries = sorted(scope.entries, key=lambda row: (row.installment_number or 0, row.id))
     if not entries:
         raise HTTPException(status_code=409, detail="Parcelamento sem parcelas ativas.")
     if any(item.status != "pending" or item.settlement_date is not None for item in entries):
@@ -1414,6 +1423,10 @@ async def update_obligation_schedule(
     db: AsyncSession = DB_DEP,
 ):
     obligation, entries = await _editable_income_obligation(db, obligation_id)
+    if payload.version is not None and payload.version != obligation.version:
+        raise HTTPException(409, "O parcelamento foi alterado. Recarregue antes de reorganizar as parcelas.")
+    allocations_before = await raw_allocations(db, [row.id for row in entries])
+    totals_before = aggregate_allocations(allocations_before, entries)
     # Retirar a numeração temporariamente evita colisão da constraint UNIQUE quando
     # uma parcela é excluída e outra passa a ocupar seu número anterior.
     before = [{"id": item.id, "number": item.installment_number, "amount": str(item.amount),
@@ -1424,6 +1437,7 @@ async def update_obligation_schedule(
     ordered = sorted(payload.installments, key=lambda item: item.installment_number)
     original_by_id = {item.id: item for item in entries}
     used_ids: set[int] = set()
+    saved_entries: list[FinancialEntry] = []
     for spec in ordered:
         if spec.entry_id is not None:
             if spec.entry_id not in original_by_id or spec.entry_id in used_ids:
@@ -1461,6 +1475,7 @@ async def update_obligation_schedule(
             db.add(item)
             await db.flush()
             db.add(_audit(item, "created", "Parcela adicionada ao parcelamento", user.id, after=_snapshot(item)))
+        saved_entries.append(item)
     for removed in (item for item in entries if item.id not in used_ids):
         previous = _snapshot(removed)
         removed.is_deleted = True
@@ -1468,14 +1483,28 @@ async def update_obligation_schedule(
         db.add(_audit(removed, "deleted", "Parcela removida do parcelamento", user.id, before=previous))
     obligation.installment_count = len(ordered)
     obligation.total_amount = payload.total_amount
+    obligation.version += 1
+    for item in entries:
+        item.version += 1
+    totals_after = rescale_allocations(totals_before, payload.total_amount) if totals_before else {}
+    if totals_after:
+        from app.finance.work_order_links import order_rows
+        orders = await order_rows(db, list(totals_after), lock=True)
+        specs = [FinancialWorkOrderAllocationInput(work_order_id=key, amount=row["amount"], version=orders[key].version)
+                 for key, row in totals_after.items()]
+        totals_after, _ = await validate_selection(db, specs, total=payload.total_amount, company_code=obligation.company_code,
+            previous=totals_before, entries=list({row.id: row for row in entries + saved_entries}.values()), orders=orders)
+        await replace_allocations(db, saved_entries, totals_after)
     db.add(FinancialAuditEvent(
         entity_type="financial_obligation", entity_id=obligation.id, action="updated",
         description="Cronograma do parcelamento de receita alterado",
-        user_id=user.id, before_data={"installments": before},
-        after_data={"total_amount": str(payload.total_amount), "installment_count": len(ordered)},
+        user_id=user.id, before_data={"installments": before, "work_orders": allocation_snapshot(totals_before)},
+        after_data={"total_amount": str(payload.total_amount), "installment_count": len(ordered), "work_orders": allocation_snapshot(totals_after)},
     ))
+    await db.flush()
+    output = await _obligation_output(db, obligation)
     await db.commit()
-    return await _obligation_output(db, obligation)
+    return output
 
 
 @router.delete("/obligations/{obligation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1485,11 +1514,13 @@ async def delete_income_obligation(
     db: AsyncSession = DB_DEP,
 ):
     obligation, entries = await _editable_income_obligation(db, obligation_id)
+    obligation.version += 1
     for item in entries:
         before = _snapshot(item)
         item.is_deleted = True
         item.deleted_at = datetime.now(UTC)
         item.installment_number = None
+        item.version += 1
         db.add(_audit(item, "deleted", "Exclusão do parcelamento da receita", user.id, before=before))
     db.add(FinancialAuditEvent(
         entity_type="financial_obligation", entity_id=obligation.id,
@@ -1507,6 +1538,8 @@ async def create_entry(
     db: AsyncSession = DB_DEP,
     idempotency_key: str | None = IDEMPOTENCY_KEY_HEADER,
 ):
+    if payload.work_orders is not None:
+        return await create_entry_with_links(db, user, payload, idempotency_key)
     normalized_key = idempotency_key.strip() if idempotency_key else None
     fingerprint = finance_request_fingerprint(payload) if normalized_key else None
 
@@ -1523,9 +1556,8 @@ async def create_entry(
             return existing
 
     await _validate_entry_account_company(db, payload)
-    await _assert_period_open(db, payload.company_code, payload.posting_date)
 
-    data = payload.model_dump(exclude={"billing_confirmation", "exit_invoice", "work_order_version"})
+    data = payload.model_dump(exclude={"billing_confirmation", "exit_invoice", "work_order_version", "work_orders"})
     work_order_id = data.pop("work_order_id", None)
     work_order = None
     billing_compliance = None
@@ -1548,6 +1580,7 @@ async def create_entry(
             db, work_order, payload.billing_confirmation
         )
 
+    await _assert_period_open(db, payload.company_code, payload.posting_date)
     entry = FinancialEntry(
         **data,
         work_order_id=work_order_id,
@@ -1601,62 +1634,19 @@ async def update_entry(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    entry = await _entry_or_404(db, entry_id)
-    await _validate_entry_account_company(db, payload)
-
-    if entry.obligation_id is not None:
-        await _update_grouped_installment(db, entry, payload, user)
-    else:
-        before = _snapshot(entry)
-        await _assert_period_open(db, entry.company_code, entry.posting_date)
-        await _assert_period_open(db, payload.company_code, payload.posting_date)
-        data = payload.model_dump(exclude={"billing_confirmation", "exit_invoice", "work_order_version"})
-        work_order_id = data.pop("work_order_id", None)
-        work_order = None
-        exit_invoice = _updated_exit_invoice(entry, payload)
-        if payload.entry_type == "income" and work_order_id:
-            work_order = await _work_order_or_404(db, work_order_id, for_update=True)
-            assert_work_order_version(work_order, payload.work_order_version)
-            if work_order.company_code != payload.company_code:
-                raise HTTPException(status_code=422, detail="A OS pertence a outra empresa do grupo.")
-            outgoing_invoice_slot(work_order, exit_invoice)
-            entry.billing_compliance = await _validate_billing_confirmation(
-                db, work_order, payload.billing_confirmation
-            )
-        elif payload.entry_type != "income":
-            entry.billing_compliance = None
-        entry.work_order_id = work_order_id
-        for field, value in data.items():
-            setattr(entry, field, value)
-        if work_order is not None:
-            await _mark_work_order_invoiced(db, work_order, user.id, entry, exit_invoice=exit_invoice)
-        db.add(
-            _audit(
-                entry,
-                "updated",
-                f"Lançamento editado: {entry.description}",
-                user.id,
-                before,
-                _snapshot(entry),
-            )
-        )
-    await notify_activity(db, actor=user, activity_module="financeiro", action="finance_entry_updated",
-        title=f"Lançamento financeiro · {entry.description}", message=f"{user.name} alterou um lançamento financeiro.",
-        target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
-        work_order_id=entry.work_order_id)
-    await db.commit()
-    await db.refresh(entry)
-    return entry
+    return await update_entry_with_links(db, user, entry_id, payload)
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: AsyncSession = DB_DEP):
-    entry = await _entry_or_404(db, entry_id)
+    scope = await lock_scope(db, entry_id=entry_id)
+    entry = scope.entry
     _block_grouped_entry_delete(entry)
     await _assert_period_open(db, entry.company_code, entry.posting_date)
     before = _snapshot(entry)
     entry.is_deleted = True
     entry.deleted_at = datetime.now(UTC)
+    entry.version += 1
     db.add(
         _audit(
             entry,
@@ -1681,11 +1671,21 @@ async def settle_entry(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    entry = await _entry_or_404(db, entry_id)
+    scope = await lock_scope(db, entry_id=entry_id)
+    entry = scope.entry
     await _assert_period_open(db, entry.company_code, entry.posting_date)
+    settled_status = "received" if entry.entry_type == "income" else "paid"
+    if entry.status == settled_status and entry.settlement_date == payload.settlement_date:
+        return (await entry_outputs(db, [entry]))[0]
+    if entry.status != "pending":
+        raise HTTPException(409, "Somente lançamentos pendentes podem receber baixa. Recarregue o título para conferir seu estado atual.")
     before = _snapshot(entry)
-    entry.status = "received" if entry.entry_type == "income" else "paid"
+    entry.status = settled_status
     entry.settlement_date = payload.settlement_date
+    for sibling in scope.entries:
+        sibling.version += 1
+    if scope.obligation:
+        scope.obligation.version += 1
     db.add(
         _audit(
             entry,
@@ -1700,18 +1700,28 @@ async def settle_entry(
         title="Lançamento financeiro baixado", message=f"{user.name} registrou a baixa de {entry.description}.",
         target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
         work_order_id=entry.work_order_id)
+    await db.flush()
+    output = (await entry_outputs(db, [entry]))[0]
     await db.commit()
-    await db.refresh(entry)
-    return entry
+    return output
 
 
 @router.post("/entries/{entry_id}/unsettle", response_model=FinancialEntryOutput)
 async def unsettle_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: AsyncSession = DB_DEP):
-    entry = await _entry_or_404(db, entry_id)
+    scope = await lock_scope(db, entry_id=entry_id)
+    entry = scope.entry
     await _assert_period_open(db, entry.company_code, entry.posting_date)
+    if entry.status == "pending" and entry.settlement_date is None:
+        return (await entry_outputs(db, [entry]))[0]
+    if entry.status != ("received" if entry.entry_type == "income" else "paid"):
+        raise HTTPException(409, "Somente lançamentos baixados podem ter a baixa desfeita. Um título cancelado permanece cancelado.")
     before = _snapshot(entry)
     entry.status = "pending"
     entry.settlement_date = None
+    for sibling in scope.entries:
+        sibling.version += 1
+    if scope.obligation:
+        scope.obligation.version += 1
     db.add(
         _audit(
             entry,
@@ -1726,9 +1736,10 @@ async def unsettle_entry(entry_id: int, user: User = CURRENT_USER_DEP, db: Async
         title="Baixa financeira desfeita", message=f"{user.name} reabriu o lançamento {entry.description}.",
         target="/financeiro", entity_type="financial_entry", entity_id=entry.id,
         work_order_id=entry.work_order_id)
+    await db.flush()
+    output = (await entry_outputs(db, [entry]))[0]
     await db.commit()
-    await db.refresh(entry)
-    return entry
+    return output
 
 
 @router.post("/entries/{entry_id}/attachment", response_model=FinancialEntryOutput)
@@ -1738,7 +1749,8 @@ async def upload_attachment(
     user: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
-    entry = await _entry_or_404(db, entry_id)
+    scope = await lock_scope(db, entry_id=entry_id)
+    entry = scope.entry
     previous_path = Path(entry.attachment_path) if entry.attachment_path else None
     try:
         streamed = await persist_streamed_upload(
@@ -1764,6 +1776,10 @@ async def upload_attachment(
         str(target),
         streamed.mime_type,
     )
+    for sibling in scope.entries:
+        sibling.version += 1
+    if scope.obligation:
+        scope.obligation.version += 1
     db.add(
         _audit(
             entry,
@@ -1775,8 +1791,9 @@ async def upload_attachment(
         )
     )
     try:
+        await db.flush()
+        output = (await entry_outputs(db, [entry]))[0]
         await db.commit()
-        await db.refresh(entry)
     except Exception:
         target.unlink(missing_ok=True)
         raise
@@ -1788,7 +1805,7 @@ async def upload_attachment(
             # A troca já foi confirmada no banco; falha de limpeza do arquivo
             # antigo não deve invalidar o anexo novo.
             pass
-    return entry
+    return output
 
 
 @router.get("/entries/{entry_id}/attachment")

@@ -17,8 +17,8 @@ from sqlalchemy.pool import NullPool
 
 
 BASELINE = "20261009_01"
-TARGET = "20261126_02"
-READY_UPGRADES = {"20261126_01"}
+TARGET = "20261126_04"
+READY_UPGRADES = {"20261126_01", "20261126_02", "20261126_03"}
 DATABASE = "sentico_v48_test"
 USERNAME = "teste_v48"
 MARKER = "sentico_local_test_bootstrap"

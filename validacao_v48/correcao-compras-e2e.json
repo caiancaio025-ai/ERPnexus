@@ -1,0 +1,59 @@
+{
+  "backend": "real FastAPI and disposable migrated PostgreSQL; no API mocks",
+  "checks": [
+    {
+      "check": "SC draft saves complete stock details without receiving; lost acknowledgement reconciled by GET with one PATCH"
+    },
+    {
+      "check": "save/reopen/receive SC quantity10 without OEM; ten unique codes; repeated receipt unchanged",
+      "stock_codes": [
+        "EST-10",
+        "EST-09",
+        "EST-08",
+        "EST-07",
+        "EST-06",
+        "EST-05",
+        "EST-04",
+        "EST-03",
+        "EST-02",
+        "EST-01"
+      ]
+    },
+    {
+      "check": "add optional manufacturer serial later through stock UI; internal identity preserved"
+    },
+    {
+      "check": "Direct stock entry uses the same fields and saves a bulk item"
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "serialized",
+      "quantity": 3,
+      "items": 3
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "serialized",
+      "quantity": 1,
+      "items": 1
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "bulk",
+      "quantity": 10,
+      "items": 1
+    },
+    {
+      "check": "Existing-item destination adds quantity to the same stock identity"
+    },
+    {
+      "check": "Shared stock fields fit a mobile purchase editor"
+    },
+    {
+      "check": "header logout ends session"
+    }
+  ],
+  "page_errors": [],
+  "http_errors": [],
+  "status": "passed"
+}

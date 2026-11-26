@@ -18,16 +18,21 @@ class ScalarRows:
     def all(self):
         return self._rows
 
+    def mappings(self):
+        return iter(self._rows)
+
 
 class FakeDB:
     def __init__(self, *, total: int, rows=None):
         self.scalar = AsyncMock(return_value=total)
         self.scalars = AsyncMock(return_value=ScalarRows(rows or []))
+        self.execute = AsyncMock(return_value=ScalarRows([]))
 
 
 def make_entry(entry_id: int = 1) -> FinancialEntry:
     return FinancialEntry(
         id=entry_id,
+        version=1,
         entry_type="income",
         company_code="universo_eletronica",
         nfse_number="100",

@@ -19,7 +19,7 @@
 .grouped-quote-dialog label { display: grid; gap: 7px; font-size: 12px; font-weight: 600; min-width: 0; }
 .grouped-quote-dialog input, .grouped-quote-dialog textarea, .grouped-quote-dialog select { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; border: 1px solid #365b74; border-radius: 9px; padding: 10px 12px; background: #102e43; color: inherit; min-height: 42px; }
 .grouped-quote-dialog textarea { resize: vertical; line-height: 1.5; }
-.grouped-quote-dialog :is(button, input, select, textarea):focus-visible, .grouped-quotes-panel button:focus-visible, .lab-batch-selection button:focus-visible { outline: 3px solid #76caff; outline-offset: 2px; }
+.grouped-quote-dialog :is(button, input, select, textarea):focus-visible, .grouped-quotes-panel button:focus-visible { outline: 3px solid #76caff; outline-offset: 2px; }
 .grouped-quote-dialog button:disabled { cursor: not-allowed; opacity: .5; }
 .grouped-quote-dialog fieldset:disabled { opacity: .8; }
 .grouped-quote-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 18px; }
@@ -52,22 +52,12 @@
 .grouped-quote-notice, .grouped-quote-lock, .grouped-quote-dirty { padding: 12px; border-radius: 9px; background: #17433f; color: #c0eee0; font-size: 13px; line-height: 1.5; }
 .grouped-quote-lock { background: #293a4c; color: #c2d5e4; }
 .grouped-quote-dirty { background: #4b4024; color: #f3dc9a; }
-.lab-batch-selection { display: grid; gap: 12px; margin: 14px 0; padding: 16px; border: 1px solid #3a7b98; border-radius: 12px; background: #12364a; color: #e5f1fa; }
-.lab-batch-selection > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-.lab-batch-selection > div { display: flex; flex-wrap: wrap; gap: 8px; }
-.lab-batch-selection > p { margin: 0; color: #b5d2e0; font-size: 12px; }
-.lab-batch-selection button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; min-height: 38px; border-radius: 9px; border: 1px solid #568ca3; background: #174d64; color: inherit; font-weight: 600; cursor: pointer; }
-.lab-batch-selection .lab-batch-chip { font-size: 12px; background: transparent; padding: 5px 10px; }
-.lab-batch-selection button:disabled { opacity: .5; cursor: not-allowed; }
-.lab-work-orders-table .lab-cell-select { width: 46px; text-align: center; }
-.lab-cell-select input { width: 20px; height: 20px; cursor: pointer; }
-.lab-cell-select input:disabled { cursor: not-allowed; opacity: .4; }
 .lab-exit-invoices { padding: 16px; margin-bottom: 18px; border: 1px solid #31536b; border-radius: 12px; }
 .lab-exit-invoices > p { color: #a8c2d5; font-size: 12px; line-height: 1.5; }
-html[data-sentico-theme="claro"] :is(.grouped-quotes-panel, .grouped-quote-dialog, .lab-batch-selection) { background: #f7fbfe; color: #16384e; border-color: #bacee0; }
-html[data-sentico-theme="claro"] :is(.grouped-quotes-panel p, .grouped-quotes-panel small, .grouped-quote-dialog > header p, .grouped-quote-section > p, .lab-batch-selection > p, .lab-exit-invoices > p) { color: #526e82; }
+html[data-sentico-theme="claro"] :is(.grouped-quotes-panel, .grouped-quote-dialog) { background: #f7fbfe; color: #16384e; border-color: #bacee0; }
+html[data-sentico-theme="claro"] :is(.grouped-quotes-panel p, .grouped-quotes-panel small, .grouped-quote-dialog > header p, .grouped-quote-section > p, .lab-exit-invoices > p) { color: #526e82; }
 html[data-sentico-theme="claro"] :is(.grouped-quote-dialog input, .grouped-quote-dialog textarea, .grouped-quote-dialog select, .grouped-quotes-search input, .grouped-quotes-list > button, .grouped-quote-order) { background: #fff; color: #16384e; border-color: #c5d7e5; }
-html[data-sentico-theme="claro"] :is(.grouped-quotes-panel > header button, .grouped-quote-dialog > header button, .grouped-quote-dialog > footer > button, .grouped-quote-add, .grouped-quote-item > button, .lab-batch-selection button) { background: #e5f0f7; color: #204b66; border-color: #b8cfdf; }
+html[data-sentico-theme="claro"] :is(.grouped-quotes-panel > header button, .grouped-quote-dialog > header button, .grouped-quote-dialog > footer > button, .grouped-quote-add, .grouped-quote-item > button) { background: #e5f0f7; color: #204b66; border-color: #b8cfdf; }
 html[data-sentico-theme="claro"] :is(.grouped-quote-order > header > div > span, .grouped-quote-order > header small) { color: #547286; }
 html[data-sentico-theme="claro"] .grouped-quote-total { background: #e1f2ef; color: #134b43; }
 html[data-sentico-theme="claro"] .grouped-quote-total > small { color: #426c64; }
@@ -88,6 +78,24 @@ html[data-sentico-theme="claro"] .grouped-quote-notice { background: #e3f6ed; co
   .grouped-quotes-panel > header { flex-wrap: wrap; }
   .grouped-quotes-list > button { flex-wrap: wrap; }
   .grouped-quotes-list > button > b { margin-left: 34px; }
-  .lab-batch-selection button { min-height: 44px; }
-  .lab-work-orders-table .lab-cell-select { width: auto; text-align: left; }
 }
+
+.grouped-quotes-actions{display:flex;gap:8px;flex-wrap:wrap}
+.grouped-quotes-panel .grouped-quotes-actions button{display:inline-flex;align-items:center;gap:7px;padding:10px 12px;border:1px solid #3b6079;border-radius:9px;background:#17394f;color:inherit;cursor:pointer;font:inherit;font-size:13px}
+.grouped-quote-create{max-width:900px}
+.grouped-quote-create-search{margin:18px 0}
+.grouped-quote-create-search>span{display:flex;align-items:center;gap:8px}
+.grouped-quote-selection{display:grid;gap:10px;border:1px solid #35607b;border-radius:10px;padding:14px;background:#103849}
+.grouped-quote-selection>div{display:flex;gap:8px;flex-wrap:wrap}
+.grouped-quote-selection button{display:inline-flex;align-items:center;gap:8px;border:1px solid #47748c;border-radius:20px;background:transparent;color:inherit;padding:7px 12px;cursor:pointer}
+.grouped-quote-candidates{display:grid;gap:10px}
+.grouped-quote-candidates>article{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #31536b;border-radius:10px;padding:14px;background:#112c40}
+.grouped-quote-candidates>article>div{display:grid;gap:6px;min-width:0;overflow-wrap:anywhere}
+.grouped-quote-candidates span,.grouped-quote-candidates small{color:#b1c9da;font-size:12px}
+.grouped-quote-candidates button{display:inline-flex;gap:6px;align-items:center;padding:10px;border:1px solid #3b6079;border-radius:8px;background:#17394f;color:inherit;cursor:pointer;font:inherit;font-size:13px;flex-shrink:0}
+html[data-sentico-theme="claro"] :is(.grouped-quote-selection,.grouped-quote-candidates>article){background:#f0f7fc;color:#16384e;border-color:#bacee0}
+html[data-sentico-theme="claro"] :is(.grouped-quotes-actions button,.grouped-quote-candidates button){background:#e5f0f7;color:#204b66;border-color:#b8cfdf}
+html[data-sentico-theme="claro"] :is(.grouped-quote-candidates span,.grouped-quote-candidates small){color:#526e82}
+@media(max-width:560px){.grouped-quote-candidates>article{flex-direction:column;align-items:stretch}.grouped-quote-candidates button{justify-content:center}}
+
+.lab-order-receivables-items strong small{display:block;font-size:11px;font-weight:400;margin-top:4px;opacity:.8}

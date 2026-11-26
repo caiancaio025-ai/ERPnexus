@@ -1,6 +1,6 @@
 # SÊNTICO / ERPnexus — V48
 
-V48 com correções de gravação em Compras e ordens de serviço. A atualização atual acrescenta **faturamento de várias OS, NF de saída na aba Valores e orçamento conjunto para vários equipamentos**. Veja [o funcionamento e a validação](ATUALIZACAO_V48_MULTIPLAS_OS.md). As mudanças anteriores de [aparência e recebimento individual](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md) estão mantidas.
+V48 com correções de gravação em Compras e ordens de serviço. A atualização atual permite **adicionar várias OS no próprio formulário de faturamento, inclusive em receitas existentes**, e usa **os mesmos campos do cadastro avulso para receber compras no Estoque**. Veja [o funcionamento e a validação](CORRECAO_V48_FATURAMENTO_ESTOQUE.md). As mudanças anteriores de [aparência e recebimento individual](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md) estão mantidas.
 
 ## Experimentar esta atualização no Windows
 
@@ -19,13 +19,14 @@ O projeto do teste manual é `sentico-v48-teste-local`, com volumes próprios. O
 5. Acesse **http://127.0.0.1:5184/** e pressione Ctrl+F5.
 6. Confira **http://127.0.0.1:5184/api/health/version**: deve informar `"version":"48"`.
 
-O instalador preserva o projeto operacional `sentico-v14-recuperado` e reutiliza os volumes existentes de PostgreSQL e uploads. Não remova volumes para atualizar. Esta atualização aplica a migração incremental `20261126_02`, que acrescenta as tabelas dos orçamentos conjuntos. Se necessário, aplica antes `20261126_01`, relativa ao recebimento individual. Os registros existentes são preservados.
+O instalador preserva o projeto operacional `sentico-v14-recuperado` e reutiliza os volumes existentes de PostgreSQL e uploads. Não remova volumes para atualizar. Esta atualização aplica as migrações incrementais até `20261126_04`, com vínculos de OS no mesmo título financeiro e detalhes do cadastro planejado de estoque. Aplica as revisões anteriores quando necessárias. Os registros existentes são preservados.
 
 Leia o procedimento completo em [LEIA_PRIMEIRO_SENTICO.md](LEIA_PRIMEIRO_SENTICO.md).
 
 ## Correções principais
 
-- Seleção de várias OS do mesmo cliente para faturamento, com valores e parcelas por OS.
+- Adição de várias OS do mesmo cliente dentro da criação e edição de uma receita, com rateio e total preservados.
+- Entrada de Compras com os mesmos campos do cadastro avulso, quantidade herdada e códigos automáticos por unidade.
 - NF de saída sincronizada no faturamento e três campos editáveis no Laboratório → Valores.
 - Orçamento conjunto com vários equipamentos, PDF único e histórico de revisões.
 - Aparência, nome do usuário e Sair ficam no cabeçalho; as opções de tema abrem em um painel compacto.
@@ -75,7 +76,7 @@ git pull --ff-only origin main &&
 bash infra/vps/atualizar.sh
 ```
 
-Ele verifica a instalação, constrói as imagens V48, ativa manutenção temporária e faz backup. Ensaia a migração em uma cópia isolada antes de aplicá-la no banco existente; depois troca API/interface e confere os arquivos servidos. A revisão final é `20261126_02`. Em caso de falha, tenta recuperar as imagens anteriores sem restaurar ou rebaixar o banco.
+Ele verifica a instalação, constrói as imagens V48, ativa manutenção temporária e faz backup. Ensaia a migração em uma cópia isolada antes de aplicá-la no banco existente; depois troca API/interface e confere os arquivos servidos. A revisão final é `20261126_04`, com identificação `v48-20261126-faturamento-estoque`. Em caso de falha, tenta recuperar as imagens anteriores sem restaurar ou rebaixar o banco.
 
 Aguarde **`SENTICO_V48_ATUALIZADO=OK`**. Publicar ou baixar o código pelo Git ainda não executa essa implantação; é necessário rodar o atualizador no servidor. Veja [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md) para resultados, limitações e registros de recuperação.
 

@@ -22,9 +22,27 @@
 .billing-orders-total { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #35566d; }
 .billing-orders-total > span { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .billing-orders-total strong { font-size: 20px; }
+.billing-orders-total.has-difference { border-color: #c48945; }
+.billing-orders-total.has-difference > span:last-of-type { color: #ffd69f; }
+.billing-orders-total > button { justify-self: start; padding: 9px 12px; border-radius: 8px; border: 1px solid #467d9d; background: #17394d; color: #e8f5ff; cursor: pointer; }
+.billing-orders-total > button:disabled { opacity: .5; cursor: not-allowed; }
+.billing-order-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.billing-order-links a { display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid #356b8c; border-radius: 8px; color: #8ed7ff; font-size: 12px; text-decoration: none; }
+.billing-order-links a:hover { background: #17415b; }
+.billing-orders-scope { padding: 11px; border: 1px solid #467d9d; border-radius: 9px; line-height: 1.6; }
+.billing-orders-scope strong { display: block; color: #e8f5ff; }
+.billing-orders-lock { display: flex; gap: 9px; align-items: flex-start; padding: 11px; border: 1px solid #a27944; border-radius: 9px; background: #3e3020; color: #ffe0b3 !important; line-height: 1.5; }
+.billing-orders-lock svg { flex: 0 0 auto; margin-top: 2px; }
+.billing-orders-lock span { display: grid; gap: 4px; }
+.billing-metadata-warning { color: #ffd69f; font-size: 12px; line-height: 1.5; }
+.billing-order-card > label small { font-size: 11px; font-weight: normal; line-height: 1.5; }
+.billing-order-card input[readonly] { cursor: default; opacity: .8; }
 .billing-orders-total small, .billing-orders-error { font-size: 12px; line-height: 1.5; }
 .billing-orders-error { color: #ffaaa8; }
 .finance-modal-error { margin: 0 22px 12px; padding: 12px; border: 1px solid #8c424a; border-radius: 10px; background: #482730; }
+.finance-modal-error p { margin: 0 0 7px; }
+.finance-modal-error p:last-child { margin-bottom: 0; }
+.finance-modal-error button { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 8px; padding: 7px 10px; cursor: pointer; }
 .billing-batch-success { padding: 14px; border: 1px solid #3b9b82; border-radius: 12px; background: #103d35; margin: 16px 0; }
 .billing-batch-success > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .billing-batch-success button { padding: 8px 12px; border-radius: 8px; border: 1px solid #76bca8; background: transparent; color: inherit; }
@@ -32,5 +50,13 @@ html[data-sentico-theme="claro"] .billing-orders-selector > p, html[data-sentico
 html[data-sentico-theme="claro"] .billing-orders-results > button { background: #f1f7fb; color: #18394d; border-color: #c5d6e4; }
 html[data-sentico-theme="claro"] .billing-order-card, html[data-sentico-theme="claro"] .billing-order-checklist, html[data-sentico-theme="claro"] .billing-orders-total { border-color: #c5d6e4; }
 html[data-sentico-theme="claro"] .billing-orders-error { color: #b52b35; }
+html[data-sentico-theme="claro"] .billing-order-links a { color: #165b83; border-color: #94bfd7; }
+html[data-sentico-theme="claro"] .billing-order-links a:hover { background: #e1f1fa; }
+html[data-sentico-theme="claro"] .billing-orders-total > button { background: #e3f3fc; color: #174c6a; }
+html[data-sentico-theme="claro"] .billing-orders-scope strong { color: #1f4c67; }
+html[data-sentico-theme="claro"] .billing-orders-lock { color: #67451b !important; background: #fff3df; }
+html[data-sentico-theme="claro"] .billing-orders-total.has-difference > span:last-of-type,
+html[data-sentico-theme="claro"] .billing-metadata-warning { color: #895517; }
+html[data-sentico-theme="claro"] .finance-modal-error { background: #ffeded; border-color: #dca0a4; }
 html[data-sentico-theme="claro"] .billing-batch-success { background: #eaf8f0; color: #164b38; }
-@media (max-width: 600px) { .billing-order-card { padding: 11px; } .billing-order-card > header button { min-width: 44px; min-height: 44px; } .billing-order-values { grid-template-columns: 1fr; } .billing-order-values > span { display: flex; justify-content: space-between; gap: 12px; } }
+@media (max-width: 600px) { .billing-order-card { padding: 11px; } .billing-order-card > header button { min-width: 44px; min-height: 44px; } .billing-order-values { grid-template-columns: 1fr; } .billing-order-values > span { display: flex; justify-content: space-between; gap: 12px; } .billing-order-links a { min-height: 44px; } .billing-orders-total strong { font-size: 16px; } .billing-orders-lock { font-size: 12px; } }

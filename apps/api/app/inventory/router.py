@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,10 @@ from app.inventory.service import move_stock
 from app.notifications.service import notify_activity
 from app.laboratory.models import LaboratoryWorkOrder
 from app.inventory.drawer_batch import missing_drawer_numbers
+from app.inventory.validation import (
+    valid_category as _valid_category, valid_company as _valid_company,
+    valid_format as _valid_format, valid_slot as _valid_slot, valid_subtype as _valid_subtype,
+)
 
 router = APIRouter(prefix="/inventory", dependencies=[Depends(require_any_module("estoque", "laboratorio"))])
 STORAGE = Path(settings.storage_root) / "inventory"
@@ -65,16 +69,6 @@ def _readable_location(code: str) -> str:
         if code.startswith(prefix):
             return f"{name} {code[len(prefix):]}"
     return code
-
-
-async def _valid_slot(db: AsyncSession, slot_id: int | None) -> None:
-    if slot_id is not None:
-        slot = await db.get(InventorySlot, slot_id)
-        if slot is None or not slot.is_active:
-            raise HTTPException(422, "Posição de estoque inválida.")
-        container = await db.get(InventoryContainer, slot.container_id)
-        if container is None or not container.is_active:
-            raise HTTPException(422, "Local de estoque inativo.")
 
 
 @router.get("/map")
@@ -181,23 +175,6 @@ async def edit_subtype(subtype_id: int, payload: SubtypeInput, db: AsyncSession 
     return _model(subtype)
 
 
-async def _valid_category(db: AsyncSession, category: str) -> None:
-    code = category.strip().lower()
-    result = await db.scalar(select(InventoryComponentCategory.id).where(
-        InventoryComponentCategory.code == code, InventoryComponentCategory.is_active.is_(True),
-    ))
-    if result is None:
-        raise HTTPException(422, "Tipo de componente inexistente. Cadastre-o nas configurações do Estoque.")
-
-
-async def _valid_subtype(db: AsyncSession, subtype_id: int | None, category: str) -> None:
-    if subtype_id is None:
-        return
-    subtype = await db.get(InventoryComponentSubtype, subtype_id)
-    if subtype is None or not subtype.is_active or subtype.category != category.strip().lower():
-        raise HTTPException(422, "Subtipo incompatível ou inativo para o componente.")
-
-
 @router.post("/formats", status_code=201)
 async def create_format(payload: FormatInput, db: AsyncSession = DB, user: User = Depends(require_module("estoque"))):
     await _valid_category(db, payload.category)
@@ -226,14 +203,6 @@ async def edit_format(format_id: int, payload: FormatInput, active: bool = True,
         await db.rollback()
         raise HTTPException(409, "Já existe um formato com esse código nessa categoria.") from None
     return _model(row)
-
-
-async def _valid_format(db: AsyncSession, format_id: int | None, category: str) -> None:
-    if format_id is None:
-        return
-    row = await db.get(InventoryComponentFormat, format_id)
-    if row is None or not row.is_active or row.category != category.strip().lower():
-        raise HTTPException(422, "Formato não pertence à categoria informada ou está inativo.")
 
 
 @router.post("/areas", status_code=201)
@@ -478,12 +447,7 @@ async def create_item(payload: ItemInput, db: AsyncSession = DB, user: User = De
     await _valid_category(db, payload.category)
     await _valid_subtype(db, payload.subtype_id, payload.category)
     await _valid_format(db, payload.format_id, payload.category)
-    active_company = await db.scalar(select(CommercialCompanyProfile.id).where(
-        CommercialCompanyProfile.company_code == payload.company_code,
-        CommercialCompanyProfile.is_active.is_(True),
-    ))
-    if active_company is None:
-        raise HTTPException(422, "Empresa do estoque inválida ou inativa.")
+    await _valid_company(db, payload.company_code)
     if payload.unit_cost and not _money_allowed(user):
         raise HTTPException(403, "Somente Gestão pode definir custos de peças.")
     serial = (payload.manufacturer_serial or "").strip() or None
@@ -522,23 +486,30 @@ async def edit_item(item_id: int, payload: ItemUpdate, db: AsyncSession = DB, us
     ).with_for_update().execution_options(populate_existing=True))
     if item is None:
         raise HTTPException(404, "Item não encontrado.")
-    await _valid_slot(db, payload.slot_id)
-    await _valid_category(db, payload.category)
-    await _valid_subtype(db, payload.subtype_id, payload.category)
-    await _valid_format(db, payload.format_id, payload.category)
+    data = payload.model_dump(exclude_unset=True, exclude={"unit_cost", "manufacturer_serial"})
+    data["category"] = payload.category.strip().lower()
+    changing_category = data["category"] != item.category.strip().lower()
+    if changing_category:
+        await _valid_category(db, data["category"])
+        # Old clients may omit technical selectors; changing the category must
+        # not keep an incompatible format or subtype from the previous one.
+        for field in ("subtype_id", "format_id"):
+            if field not in data:
+                data[field] = None
+    for field, validator in (("subtype_id", _valid_subtype), ("format_id", _valid_format)):
+        effective = data.get(field, getattr(item, field))
+        if changing_category or effective != getattr(item, field):
+            await validator(db, effective, data["category"])
+    if data.get("slot_id", item.slot_id) != item.slot_id:
+        await _valid_slot(db, data.get("slot_id"))
     # O contrato ItemUpdate não permite alterar a empresa de um item que já
     # possui série, saldo ou movimentações vinculadas a uma OS. A empresa é fixa.
     if payload.unit_cost is not None and not _money_allowed(user):
         raise HTTPException(403, "Somente Gestão pode editar custo de peças.")
     old_slot = item.slot_id
-    # Clientes V5 não enviam subtype_id: preservar o subtipo salvo ao editar
-    # outros campos, exceto quando a categoria técnica é modificada.
-    changing_category = payload.category.strip().lower() != item.category.strip().lower()
-    for key, value in payload.model_dump(exclude={"unit_cost", "manufacturer_serial"}).items():
-        if key == "subtype_id" and key not in payload.model_fields_set:
-            if changing_category:
-                item.subtype_id = None
-            continue
+    # Unchanged legacy links remain usable even after their catalogue entry is
+    # inactive. Correcting a name/OEM/description never silently removes them.
+    for key, value in data.items():
         setattr(item, key, value)
     # A identificação EST não muda. A série OEM pode ser preenchida depois;
     # clientes antigos que omitem o campo não apagam a série cadastrada.

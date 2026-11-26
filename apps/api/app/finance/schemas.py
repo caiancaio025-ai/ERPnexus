@@ -190,14 +190,55 @@ class BillingConfirmation(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
 
 
+class FinancialWorkOrderAllocationInput(BaseModel):
+    work_order_id: int = Field(ge=1)
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    version: int = Field(ge=1)
+    billing_confirmation: BillingConfirmation | None = None
+
+
+class FinancialWorkOrderAllocationOutput(BaseModel):
+    work_order_id: int
+    work_order_number: str
+    company_code: str
+    customer_id: int | None = None
+    customer_name: str
+    equipment_label: str
+    amount: Decimal
+    version: int
+    approved_value: Decimal | None = None
+    exit_invoice: str | None = None
+    exit_invoice_2: str | None = None
+    exit_invoice_3: str | None = None
+    billing_confirmation: dict | None = None
+
+
+def _validate_allocation_ids(payload):
+    rows = payload.work_orders
+    if rows is None:
+        return payload
+    if rows and payload.entry_type != "income":
+        raise ValueError("Vínculos de OS são permitidos somente em receitas.")
+    ids = [row.work_order_id for row in rows]
+    if len(ids) != len(set(ids)):
+        raise ValueError("A mesma OS não pode aparecer duas vezes no rateio.")
+    if payload.work_order_id is not None and ids != [payload.work_order_id]:
+        raise ValueError("O vínculo singular deve corresponder à lista de OS selecionadas.")
+    return payload
+
+
 class FinancialEntryInput(FinancialEntryBase):
     work_order_id: int | None = None
     billing_confirmation: BillingConfirmation | None = None
     exit_invoice: str | None = Field(default=None, max_length=80)
     work_order_version: int | None = Field(default=None, ge=1)
+    work_orders: list[FinancialWorkOrderAllocationInput] | None = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def require_invoice_for_new_income(self):
+        _validate_allocation_ids(self)
+        if self.work_orders and sum((row.amount for row in self.work_orders), Decimal("0.00")) != self.amount:
+            raise ValueError("A soma dos valores por OS deve ser igual ao valor da receita.")
         # Regra apenas para NOVOS lançamentos. Registros históricos importados
         # podem não possuir NFS-e/NF-e e precisam continuar editáveis.
         if self.entry_type == "income" and not self.nfse_number and not self.nfe_number:
@@ -210,6 +251,14 @@ class FinancialEntryUpdate(FinancialEntryBase):
     billing_confirmation: BillingConfirmation | None = None
     exit_invoice: str | None = Field(default=None, max_length=80)
     work_order_version: int | None = Field(default=None, ge=1)
+    work_orders: list[FinancialWorkOrderAllocationInput] | None = Field(default=None, max_length=50)
+    version: int | None = Field(default=None, ge=1)
+    obligation_version: int | None = Field(default=None, ge=1)
+    obligation_total_amount: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+
+    @model_validator(mode="after")
+    def validate_allocation_ids(self):
+        return _validate_allocation_ids(self)
 
 
 class FinancialEntryOutput(BaseModel):
@@ -221,6 +270,7 @@ class FinancialEntryOutput(BaseModel):
     """
 
     id: int
+    version: int = 1
     obligation_id: int | None = None
     installment_number: int | None = None
     entry_type: EntryType
@@ -247,6 +297,13 @@ class FinancialEntryOutput(BaseModel):
     attachment_name: str | None = None
     attachment_mime: str | None = None
     work_order_id: int | None = None
+    work_orders: list[FinancialWorkOrderAllocationOutput] = Field(default_factory=list)
+    obligation_version: int | None = None
+    obligation_total_amount: Decimal | None = None
+    obligation_work_orders: list[FinancialWorkOrderAllocationOutput] = Field(default_factory=list)
+    work_order_links_editable: bool = True
+    work_order_links_lock_reason: str | None = None
+    work_order_amount: Decimal | None = None
     billing_compliance: dict | None = None
     created_at: datetime
     updated_at: datetime
@@ -307,10 +364,17 @@ class FinancialObligationInput(BaseModel):
     billing_confirmation: BillingConfirmation | None = None
     exit_invoice: str | None = Field(default=None, max_length=80)
     work_order_version: int | None = Field(default=None, ge=1)
+    work_orders: list[FinancialWorkOrderAllocationInput] | None = Field(default=None, max_length=50)
     installments: list[FinancialInstallmentInput] = Field(min_length=1, max_length=120)
 
     @model_validator(mode="after")
     def validate_obligation(self):
+        _validate_allocation_ids(self)
+        if self.work_orders:
+            if sum((row.amount for row in self.work_orders), Decimal("0.00")) != self.total_amount:
+                raise ValueError("A soma dos valores por OS deve ser igual ao valor total do faturamento.")
+            if len(self.work_orders) * len(self.installments) > 1000:
+                raise ValueError("O rateio pode ter no máximo 1.000 combinações de OS e parcelas.")
         if (
             self.company_code == "universo_automacao"
             and self.bank_name.strip().casefold() == "brasil"
@@ -399,6 +463,7 @@ class FinancialScheduleInstallmentInput(FinancialInstallmentInput):
 
 
 class FinancialScheduleUpdate(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     total_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     installments: list[FinancialScheduleInstallmentInput] = Field(min_length=1, max_length=120)
 
@@ -416,6 +481,7 @@ class FinancialScheduleUpdate(BaseModel):
 
 class FinancialObligationOutput(BaseModel):
     id: int
+    version: int = 1
     entry_type: EntryType
     company_code: CompanyCode
     nfse_number: str | None = None
@@ -426,6 +492,9 @@ class FinancialObligationOutput(BaseModel):
     total_amount: Decimal
     installment_count: int
     work_order_id: int | None = None
+    work_orders: list[FinancialWorkOrderAllocationOutput] = Field(default_factory=list)
+    work_order_links_editable: bool = True
+    work_order_links_lock_reason: str | None = None
     created_at: datetime
     installments: list[FinancialEntryOutput]
 

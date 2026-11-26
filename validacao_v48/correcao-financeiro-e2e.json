@@ -1,0 +1,44 @@
+{
+  "backend": "Real FastAPI, disposable migrated PostgreSQL and Chromium; no API mocks",
+  "status": "passed",
+  "checks": [
+    {
+      "check": "Laboratory list has no selection boxes; quote-specific search adds three OS and rejects another customer"
+    },
+    {
+      "check": "One draft for three same-model equipment units, exact discount and totals by OS",
+      "total": "300.01"
+    },
+    {
+      "check": "Lost PUT response after real commit is reconciled without a duplicate save"
+    },
+    {
+      "check": "Stale grouped quote edit returns conflict and preserves unsaved typing"
+    },
+    {
+      "check": "PDF preview leaves every OS and draft unchanged"
+    },
+    {
+      "check": "Emitted PDF stores one immutable document and each OS keeps its approved amount",
+      "sha256": "6026da9005992d3ac76a9a07257a016461424c06f3cbebceae0cee2e6d75d5de"
+    },
+    {
+      "check": "New revision is editable while the original issued document stays available"
+    },
+    {
+      "check": "Three OS added inside the financial modal share one obligation and three installments, with exact allocation and safe retry",
+      "obligation_id": 1
+    },
+    {
+      "check": "Existing receipt accepts three OS in its own editor, preserves ID and total, and reconciles a lost PUT acknowledgement"
+    },
+    {
+      "check": "Laboratory exposes all three exit invoices, saves edits and keeps issued quote bytes unchanged"
+    },
+    {
+      "check": "Grouped history reopens from a linked OS and its editor fits a mobile viewport"
+    }
+  ],
+  "page_errors": [],
+  "server_errors": []
+}

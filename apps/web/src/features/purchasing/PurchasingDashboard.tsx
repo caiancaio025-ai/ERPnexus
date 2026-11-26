@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
 import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
-import { StockReceiptSummary, individualReceiptLimit, individualReceiptLimitMessage } from "../inventory/PurchaseStockDestination";
+import { PurchaseStockDestination, stockDestinationPayload, emptyInventoryReceiptDetails, type InventoryReceiptDetails, individualReceiptLimit, individualReceiptLimitMessage } from "../inventory/PurchaseStockDestination";
 import { AnimatePresence, motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 
@@ -83,6 +83,7 @@ type FormState = {
   inventory_serial: string;
   inventory_category: string;
   inventory_format_id: string;
+  inventory_details: InventoryReceiptDetails;
   quantity: string;
   total_amount: string;
   origin: PurchaseOrigin;
@@ -131,6 +132,7 @@ const emptyForm = (): FormState => ({
   inventory_serial: "",
   inventory_category: "componentes",
   inventory_format_id: "",
+  inventory_details: emptyInventoryReceiptDetails,
   quantity: "1",
   total_amount: "",
   origin: "national",
@@ -196,7 +198,6 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
-  const [stockFormats, setStockFormats] = useState<StockFormat[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [stockError, setStockError] = useState("");
   const selectedStock = stockOptions.find((item) => String(item.id) === form.inventory_item_id);
@@ -292,7 +293,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         const data = await apiClient.request<StockLookup>(
           `/api/purchasing/stock-options?company_code=${encodeURIComponent(form.company_code)}&search=${encodeURIComponent(q)}${selectedId ? `&selected_id=${selectedId}` : ""}`,
         );
-        if (active) { setStockOptions(data.items); setStockFormats(data.formats); }
+        if (active) { setStockOptions(data.items); }
       } catch (cause) {
         if (active) setStockError(cause instanceof Error ? cause.message : "Consulta de estoque indisponível.");
       } finally {
@@ -368,6 +369,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       inventory_serial: order.inventory_serial || "",
       inventory_category: order.inventory_category || "componentes",
       inventory_format_id: order.inventory_format_id ? String(order.inventory_format_id) : "",
+      inventory_details: { ...emptyInventoryReceiptDetails, ...order.inventory_details, unit: order.inventory_details?.unit || "UN" },
       quantity: String(order.quantity),
       total_amount: String(order.total_amount ?? "").replace(".", ","),
       origin: order.origin,
@@ -415,15 +417,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         ...form,
         supplier_id: Number(form.supplier_id),
         quantity: Number(form.quantity),
-        inventory_destination: form.inventory_destination || null,
-        inventory_item_id: form.inventory_destination === "existing" ? Number(form.inventory_item_id) || null : null,
-        inventory_name: form.inventory_destination === "new" ? form.inventory_name.trim() || null
-          : form.inventory_destination === "existing" ? (editing?.status === "delivered" ? form.inventory_name || null : selectedStock?.name || form.inventory_name || null)
-          : null,
-        inventory_mode: form.inventory_destination === "new" ? form.inventory_mode : null,
-        inventory_serial: form.inventory_destination === "new" && form.inventory_mode === "serialized" && Number(form.quantity) === 1 ? form.inventory_serial.trim() || null : null,
-        inventory_category: form.inventory_destination === "new" ? form.inventory_category : null,
-        inventory_format_id: form.inventory_destination === "new" && form.inventory_format_id ? Number(form.inventory_format_id) : null,
+        ...stockDestinationPayload(form, Number(form.quantity)),
         total_amount: totalAmount,
         equipment_serial: form.equipment_serial || null,
         invoice_number: form.invoice_number || null,
@@ -440,6 +434,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           inventory_serial: editing.inventory_serial ?? null,
           inventory_category: editing.inventory_category ?? null,
           inventory_format_id: editing.inventory_format_id ?? null,
+          inventory_details: editing.inventory_details ?? null,
         } : {}),
       };
       const order = await apiClient.request<PurchaseOrder>(
@@ -667,50 +662,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
                 </div>)}
                 {!stockOptions.length && !stockLoading && !stockError && <p>Nenhum item encontrado. É possível cadastrar um novo ao receber.</p>}
               </div>
-              <div className="purchase-stock-choice">
-                <label>Quando chegar, enviar para:
-                  <select value={form.inventory_destination} disabled={editing?.status === "delivered"} onChange={(e) => setForm((f) => ({ ...f, inventory_destination: e.target.value as FormState["inventory_destination"], inventory_item_id: "", inventory_name: e.target.value === "existing" ? "" : f.inventory_name }))}>
-                    <option value="">Definir no recebimento (opcional agora)</option>
-                    <option value="existing">Somar quantidade em item existente</option>
-                    <option value="new">Criar novo item no Estoque</option>
-                  </select>
-                </label>
-                {form.inventory_destination === "existing" && <label>Item que receberá o saldo
-                  <select required={form.status === "delivered"} disabled={editing?.status === "delivered"} value={form.inventory_item_id} onChange={(e) => { const chosen = stockOptions.find(item => String(item.id) === e.target.value); setForm((f) => ({ ...f, inventory_item_id: e.target.value, inventory_name: chosen?.name || "" })); }}>
-                    <option value="">Selecione um componente cadastrado</option>
-                    {stockOptions.filter((item) => item.mode === "bulk").map((item) => <option key={item.id} value={item.id}>{item.stock_code} · {item.name} — saldo {item.quantity}</option>)}
-                    {form.inventory_item_id && !stockOptions.some((item) => String(item.id) === form.inventory_item_id) && <option value={form.inventory_item_id}>Item selecionado #{form.inventory_item_id} (fora do filtro)</option>}
-                  </select>
-                </label>}
-                {form.inventory_destination === "existing" && <label>Nome adotado do item já cadastrado
-                  <input readOnly value={stockDisplayName} aria-label="Nome no Estoque (cadastro existente)" title="O nome vem do cadastro selecionado no Estoque" />
-                </label>}
-                {form.inventory_destination === "new" && <>
-                  <label>Nome técnico do novo item no Estoque (independente do pedido)
-                    <input required={form.status === "delivered"} value={form.inventory_name} disabled={editing?.status === "delivered"} maxLength={220} onChange={(e) => setForm((f) => ({ ...f, inventory_name: e.target.value }))} placeholder="Ex.: Capacitor 470uF 450V"/>
-                  </label>
-                  <label>Tipo de controle
-                    <select disabled={editing?.status === "delivered"} value={form.inventory_mode} onChange={(e) => setForm((f) => ({ ...f, inventory_mode: e.target.value as "bulk" | "serialized", inventory_serial: "" }))}>
-                      <option value="bulk">Por quantidade · mesma etiqueta</option>
-                      <option value="serialized">Individual · etiqueta por unidade</option>
-                    </select>
-                  </label>
-                  <label>Categoria técnica
-                    <input disabled={editing?.status === "delivered"} maxLength={80} value={form.inventory_category} onChange={(e) => setForm((f) => ({ ...f, inventory_category: e.target.value, inventory_format_id: "" }))} placeholder="resistor, capacitor, transistor..."/>
-                  </label>
-                  <label>Formato / encapsulamento
-                    <select disabled={editing?.status === "delivered"} value={form.inventory_format_id} onChange={(e) => setForm((f) => ({ ...f, inventory_format_id: e.target.value }))}>
-                      <option value="">Sem formato especificado</option>
-                      {stockFormats.filter((v) => v.category === form.inventory_category.trim().toLowerCase()).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
-                  </label>
-                  <StockReceiptSummary quantity={Number(form.quantity)} mode={form.inventory_mode} />
-                  {form.inventory_mode === "serialized" && Number(form.quantity) === 1 && <label>Série do fabricante (opcional)
-                    <input disabled={editing?.status === "delivered"} maxLength={120} value={form.inventory_serial} onChange={(e) => setForm((f) => ({ ...f, inventory_serial: e.target.value }))} placeholder="Preencha somente se o fabricante informar" />
-                  </label>}
-                </>}
-              </div>
-              <p className="purchase-stock-footnote">A confirmação de Entregue exige decidir o destino. A entrada mantém custo histórico e número da compra. O local físico poderá ser definido depois no mapa do Estoque.</p>
+              <PurchaseStockDestination companyCode={form.company_code} quantity={Number(form.quantity)} value={form} onChange={next => { setForm(current => ({ ...current, ...next })); setError(""); }} disabled={saving || editing?.status === "delivered"} />
               {editing?.status === "delivered" && <small>Recebimento já registrado: alterações de destino exigem estorno auditado.</small>}
             </div>
             <Field label="Status atual" wide><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as PurchaseStatus })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>

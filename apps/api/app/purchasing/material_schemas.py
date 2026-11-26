@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.purchasing.schemas import CompanyCode
+from app.inventory.item_details import InventoryItemDetails
 
 MaterialPriority = Literal["low", "normal", "high", "urgent"]
 MaterialRequestStatus = Literal[
@@ -28,6 +29,7 @@ class InventoryTargetFields(BaseModel):
     inventory_serial: str | None = Field(default=None, max_length=120)
     inventory_category: str | None = Field(default=None, max_length=80)
     inventory_format_id: int | None = Field(default=None, gt=0)
+    inventory_details: InventoryItemDetails | None = None
 
 
 class MaterialRequestCreate(InventoryTargetFields):

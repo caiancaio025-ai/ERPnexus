@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.inventory.item_details import InventoryItemDetails
+
 CompanyCode = Literal["universo_eletronica", "universo_automacao", "solucoes_eletronica"]
 PurchaseOrigin = Literal["national", "international"]
 PurchaseStatus = Literal[
@@ -41,6 +43,7 @@ class PurchaseInput(BaseModel):
     inventory_serial: str | None = Field(default=None, max_length=120)
     inventory_category: str | None = Field(default=None, max_length=80)
     inventory_format_id: int | None = Field(default=None, gt=0)
+    inventory_details: InventoryItemDetails | None = None
     quantity: int = Field(default=1, ge=1, le=100000)
     total_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     origin: PurchaseOrigin = "national"
@@ -93,6 +96,7 @@ class PurchaseOutput(BaseModel):
     inventory_serial: str | None = None
     inventory_category: str | None = None
     inventory_format_id: int | None = None
+    inventory_details: InventoryItemDetails | None = None
     quantity: int
     total_amount: Decimal | None
     origin: PurchaseOrigin

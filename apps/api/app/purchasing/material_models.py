@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
@@ -31,6 +31,7 @@ class MaterialRequest(Base):
     inventory_serial: Mapped[str | None] = mapped_column(String(120))
     inventory_category: Mapped[str | None] = mapped_column(String(80))
     inventory_format_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_component_formats.id", ondelete="RESTRICT"))
+    inventory_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     priority: Mapped[str] = mapped_column(String(20), default="normal", index=True)
     technical_note: Mapped[str | None] = mapped_column(Text)
     suggested_link: Mapped[str | None] = mapped_column(String(1000))

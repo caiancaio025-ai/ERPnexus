@@ -1,5 +1,5 @@
 """Contrato V5: compra tem título próprio, e estoque mantém nome canônico."""
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,14 +53,19 @@ async def test_existing_stock_uses_authoritative_catalog_name():
 def test_editor_always_distinguishes_purchase_title_from_stock_identity():
     src = (WEB / "purchasing" / "PurchasingDashboard.tsx").read_text(encoding="utf-8")
     assert 'label="Título / descrição da compra*"' in src
-    assert 'Nome técnico do novo item no Estoque' in src
-    assert 'Nome adotado do item já cadastrado' in src
+    assert '<PurchaseStockDestination' in src
     assert 'selectedStock?.name' in src
     assert 'selected_id=' in src
     assert 'purchase-name-comparison' in src
     picker = (WEB / "inventory" / "PurchaseStockDestination.tsx").read_text(encoding="utf-8")
+    assert 'Nome adotado do Estoque' in picker
+    assert '<InventoryItemFields' in picker
+    assert 'name: value.inventory_name' in picker
     assert 'inventory_name: chosen?.name' in picker
     assert 'selected_id=${id}' in picker
+    fields = (WEB / "inventory" / "InventoryItemFields.tsx").read_text(encoding="utf-8")
+    assert 'aria-label="Nome do item"' in fields
+    assert 'value={value.name}' in fields
 
 
 def test_stock_map_and_popups_use_dark_blue_surfaces():

@@ -403,6 +403,49 @@ def _validate_grouped_quote_schema(connection) -> None:
         raise CheckError("As restrições dos orçamentos conjuntos não correspondem à migração esperada.")
 
 
+def _validate_inline_billing_schema(connection, *, with_inventory_details: bool) -> None:
+    from sqlalchemy import bindparam, text
+
+    required = {
+        ("financial_entries", "version"): ("int4", "NO"),
+        ("financial_obligations", "version"): ("int4", "NO"),
+        ("financial_entry_work_orders", "entry_id"): ("int4", "NO"),
+        ("financial_entry_work_orders", "work_order_id"): ("int4", "NO"),
+        ("financial_entry_work_orders", "amount"): ("numeric", "NO"),
+        ("financial_entry_work_orders", "billing_compliance"): ("json", "YES"),
+    }
+    if with_inventory_details:
+        required.update({("purchase_orders", "inventory_details"): ("json", "YES"),
+                         ("material_requests", "inventory_details"): ("json", "YES")})
+    tables = tuple(sorted({table for table, _ in required}))
+    rows = connection.execute(text(
+        "SELECT table_name,column_name,udt_name,is_nullable,column_default "
+        "FROM information_schema.columns WHERE table_schema='public' AND table_name IN :tables"
+    ).bindparams(bindparam("tables", expanding=True)), {"tables": tables}).mappings().all()
+    actual = {(row["table_name"], row["column_name"]): (row["udt_name"], row["is_nullable"]) for row in rows}
+    if any(actual.get(key) != expected for key, expected in required.items()):
+        raise CheckError("As colunas de faturamento e recebimento estão incompletas ou incompatíveis.")
+    if any(str(row["column_default"]) != "1" for row in rows
+           if row["column_name"] == "version" and row["table_name"] in {"financial_entries", "financial_obligations"}):
+        raise CheckError("A versão inicial das receitas não corresponde à migração esperada.")
+    rows = connection.execute(text(
+        "SELECT c.conname,c.contype,c.confdeltype,ft.relname AS target_table, "
+        "ARRAY(SELECT a.attname FROM unnest(c.conkey) WITH ORDINALITY k(num,pos) "
+        "JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.num ORDER BY k.pos) AS columns "
+        "FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid "
+        "JOIN pg_namespace n ON n.oid=t.relnamespace LEFT JOIN pg_class ft ON ft.oid=c.confrelid "
+        "WHERE n.nspname='public' AND t.relname='financial_entry_work_orders' AND c.convalidated"
+    )).mappings().all()
+    keys = {(row["contype"], tuple(row["columns"]), row["target_table"], row["confdeltype"]) for row in rows}
+    expected_keys = {
+        ("p", ("entry_id", "work_order_id"), None, " "),
+        ("f", ("entry_id",), "financial_entries", "c"),
+        ("f", ("work_order_id",), "laboratory_work_orders", "r"),
+    }
+    if not expected_keys.issubset(keys) or not any(row["contype"] == "c" and row["conname"] == "ck_fin_entry_os_amount_nonnegative" for row in rows):
+        raise CheckError("As restrições dos vínculos de faturamento não correspondem à migração esperada.")
+
+
 def inventory_snapshot(revision: str) -> dict:
     """Read-only fingerprints prove that the receipt migration kept every row.
 
@@ -410,7 +453,7 @@ def inventory_snapshot(revision: str) -> dict:
     before hashing, so a legacy snapshot equals the upgraded snapshot only when
     all existing fields and the new default value were preserved.
     """
-    if revision not in {"20261123_02", "20261126_01", "20261126_02"}:
+    if revision not in {"20261123_02", "20261126_01", "20261126_02", "20261126_03", "20261126_04"}:
         raise CheckError("Revisão não suportada para a conferência do estoque.")
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
@@ -432,10 +475,12 @@ def inventory_snapshot(revision: str) -> dict:
                 raise CheckError("A conferência do estoque não está em modo somente leitura.")
             if connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all() != [revision]:
                 raise CheckError("A revisão do estoque mudou durante a conferência.")
-            if revision in {"20261126_01", "20261126_02"}:
+            if revision != "20261123_02":
                 _validate_receipt_schema(connection)
-            if revision == "20261126_02":
+            if revision >= "20261126_02":
                 _validate_grouped_quote_schema(connection)
+            if revision >= "20261126_03":
+                _validate_inline_billing_schema(connection, with_inventory_details=revision >= "20261126_04")
             snapshot = {}
             for table in ("inventory_items", "inventory_movements"):
                 projection = "to_jsonb(t)"

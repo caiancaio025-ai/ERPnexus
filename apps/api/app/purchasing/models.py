@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
@@ -46,6 +46,7 @@ class PurchaseOrder(Base):
     inventory_serial: Mapped[str | None] = mapped_column(String(120))
     inventory_category: Mapped[str | None] = mapped_column(String(80))
     inventory_format_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_component_formats.id", ondelete="RESTRICT"))
+    inventory_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     origin: Mapped[str] = mapped_column(String(20), default="national")

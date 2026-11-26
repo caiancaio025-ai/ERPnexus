@@ -23,7 +23,13 @@ HOST=erp.universoeletronica.com
 INTERNAL_URL=http://127.0.0.1:18089
 BASE_REVISION=20261123_02
 RECEIPT_REVISION=20261126_01
-REVISION=20261126_02
+GROUPED_QUOTES_REVISION=20261126_02
+FINANCE_REVISION=20261126_03
+REVISION=20261126_04
+RELEASE=v48-20261126-faturamento-estoque
+supported_revision() {
+    case "$1" in "$BASE_REVISION"|"$RECEIPT_REVISION"|"$GROUPED_QUOTES_REVISION"|"$FINANCE_REVISION"|"$REVISION") return 0;; *) return 1;; esac
+}
 BACKUP_ROOT=${SENTICO_BACKUP_ROOT:-/root/backups-sentico}
 LOCK_FILE=${SENTICO_LOCK_FILE:-/run/lock/sentico-green-deploy.lock}
 ATTEMPTS=${SENTICO_DEPLOY_ATTEMPTS:-60}
@@ -88,7 +94,7 @@ PG_IMAGE=$(inspect '{{.Image}}' "$DB")
 [[ $(inspect '{{range .Mounts}}{{if eq .Destination "/app/storage"}}{{.Name}}{{end}}{{end}}' "$API") == "$UPLOADS_VOLUME" ]] || fail 'volume de uploads inesperado.'
 docker volume inspect "$DB_VOLUME" "$UPLOADS_VOLUME" >/dev/null
 PREVIOUS_REVISION=$(revision)
-[[ $PREVIOUS_REVISION == "$BASE_REVISION" || $PREVIOUS_REVISION == "$RECEIPT_REVISION" || $PREVIOUS_REVISION == "$REVISION" ]] || fail "o banco precisa estar na revisao $BASE_REVISION, $RECEIPT_REVISION ou $REVISION; nenhuma migracao foi executada."
+supported_revision "$PREVIOUS_REVISION" || fail "o banco precisa estar em uma revisao suportada entre $BASE_REVISION e $REVISION; nenhuma migracao foi executada."
 wait_api "$API" || fail 'a API atual nao esta pronta; diagnostique antes de atualizar.'
 DB_IP=$(inspect '{{(index .NetworkSettings.Networks "sentico-green-hml_green_private").IPAddress}}' "$DB")
 DB_NAME=$(docker exec "$DB" printenv POSTGRES_DB)
@@ -201,7 +207,7 @@ recover() {
     fi
     if [[ -s $B/estoque.anterior.json ]]; then
         current=$(revision) || current=NAO_CONFIRMADA
-        if [[ $current != "$PREVIOUS_REVISION" && $current != "$REVISION" && ! ( $PREVIOUS_REVISION == "$BASE_REVISION" && $current == "$RECEIPT_REVISION" ) ]]; then
+        if ! supported_revision "$current" || [[ $current < $PREVIOUS_REVISION ]]; then
             recover_ok=0
         elif ! real_inventory_snapshot "$current" "$B/estoque.retorno.json" ||
              ! cmp -s "$B/estoque.anterior.json" "$B/estoque.retorno.json"; then
@@ -391,6 +397,7 @@ gateway_get /api/health/ready "$B/ready.v48.json"
 python3 "$HELPER" json-field "$B/ready.v48.json" status ok
 gateway_get /api/health/version "$B/version.v48.json"
 python3 "$HELPER" json-field "$B/version.v48.json" version 48
+python3 "$HELPER" json-field "$B/version.v48.json" revision "$RELEASE"
 docker exec "$WEB" cat /srv/index.html > "$B/index.esperado.html"
 gateway_get / "$B/index.recebido.html"
 cmp -s "$B/index.esperado.html" "$B/index.recebido.html" || fail 'a interface servida difere da imagem V48.'
@@ -405,15 +412,17 @@ done < "$B/assets.txt"
 restore_gateway
 curl -fsS --max-time 15 -H "Host: $HOST" "$INTERNAL_URL/api/health/version" > "$B/version.liberada.json"
 python3 "$HELPER" json-field "$B/version.liberada.json" version 48
+python3 "$HELPER" json-field "$B/version.liberada.json" revision "$RELEASE"
 completed=1
 api_stopped=0
 
 info '[6/6] Conferindo o dominio publico.'
 if curl -fsS --max-time 20 "https://$HOST/api/health/version" -o "$B/version.publica.json" &&
    python3 "$HELPER" json-field "$B/version.publica.json" version 48 &&
+   python3 "$HELPER" json-field "$B/version.publica.json" revision "$RELEASE" &&
    curl -fsS --max-time 20 "https://$HOST/" -o "$B/index.publico.html" &&
    cmp -s "$B/index.esperado.html" "$B/index.publico.html"; then
-    printf 'SENTICO_V48_ATUALIZADO=OK\nCOMMIT=%s\nTAG=%s\nBACKUP=%s\nSITE=https://%s/\n' "$COMMIT" "$NEW_TAG" "$B" "$HOST" | tee "$B/resultado.txt"
+    printf 'SENTICO_V48_ATUALIZADO=OK\nCOMMIT=%s\nREVISAO=%s\nTAG=%s\nBACKUP=%s\nSITE=https://%s/\n' "$COMMIT" "$RELEASE" "$NEW_TAG" "$B" "$HOST" | tee "$B/resultado.txt"
 else
     printf 'V48_INTERNA=OK\nACESSO_PUBLICO=NAO_CONFIRMADO\nBACKUP=%s\nA nova versao esta ativa no gateway interno; confira o proxy externo/DNS.\n' "$B" | tee "$B/resultado.txt" >&2
     exit 2

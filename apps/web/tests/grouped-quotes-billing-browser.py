@@ -115,16 +115,18 @@ def main():
             })))
         selected = orders[:3]
         page.goto(base + '/laboratorio')
+        expect(page.locator('.lab-work-orders-table input[type="checkbox"]')).to_have_count(0)
+        page.get_by_role('button', name='Orçamentos conjuntos', exact=True).click()
+        page.get_by_role('button', name='Novo orçamento conjunto', exact=True).click()
+        selector = page.locator('dialog.grouped-quote-create')
         for order in selected:
-            page.get_by_role('checkbox', name=f"Selecionar {order['number']}", exact=True).check()
-        expect(page.locator('.lab-detail')).to_have_count(0)
-        expect(page.get_by_role('checkbox', name=f"Selecionar {orders[3]['number']}", exact=True)).to_be_disabled()
-        selection = page.get_by_role('region', name='OS selecionadas')
-        expect(selection).to_contain_text('3 OS selecionada(s)')
-        record('Laboratory selection keeps distinct equipment and rejects a different customer')
-
+            selector.locator('.grouped-quote-create-search input').fill(order['number'])
+            selector.get_by_role('button', name=f"Adicionar {order['number']} ao orçamento", exact=True).click()
+        selector.locator('.grouped-quote-create-search input').fill(orders[3]['number'])
+        expect(selector.get_by_role('button', name=f"Adicionar {orders[3]['number']} ao orçamento", exact=True)).to_be_disabled()
+        record('Laboratory list has no selection boxes; quote-specific search adds three OS and rejects another customer')
         with page.expect_response(lambda r: urlparse(r.url).path == '/api/laboratory/grouped-quotes' and r.request.method == 'POST') as created:
-            page.get_by_role('button', name='Criar orçamento conjunto', exact=True).click()
+            selector.get_by_role('button', name='Criar orçamento com 3 OS', exact=True).click()
         quote = decode(created.value)
         quote_path = f"/api/laboratory/grouped-quotes/{quote['id']}"
         dialog = page.locator('dialog.grouped-quote-dialog')
@@ -218,11 +220,16 @@ def main():
         dialog.get_by_role('button', name='Fechar orçamento conjunto', exact=True).click()
         record('New revision is editable while the original issued document stays available')
 
-        for order in selected:
-            page.get_by_role('checkbox', name=f"Selecionar {order['number']}", exact=True).check()
-        page.get_by_role('button', name='Faturar selecionadas', exact=True).click()
+        page.goto(base + '/financeiro')
+        page.get_by_role('button', name='Nova receita', exact=True).click()
         form = page.locator('.finance-modal')
+        form.get_by_label('Valor', exact=True).fill('300,06')
+        for order in selected:
+            form.get_by_placeholder('Digite OS, cliente ou série...').fill(order['number'])
+            form.locator('.billing-orders-results button').filter(has_text=order['number']).click()
         expect(form.locator('.billing-order-card')).to_have_count(3)
+        for index, order in enumerate(selected):
+            form.get_by_label(f"Valor atribuído — {order['number']}", exact=True).fill(f'100,0{index+1}')
         form.get_by_label('Descrição', exact=True).fill('Manutenção conjunta — três inversores')
         form.get_by_label('NFS-e', exact=True).fill('486001')
         expect(form.get_by_label('NF de saída nas OS', exact=False)).to_have_value('486001')
@@ -232,17 +239,17 @@ def main():
         expect(form.locator('.finance-installment-list article')).to_have_count(3)
         form.get_by_role('button', name='Sugerir vencimentos mensais', exact=True).click()
         page.screenshot(path=str(out / 'billing-three-orders.png'), full_page=True)
-        with page.expect_response(lambda r: urlparse(r.url).path == '/api/finance/billing-batches' and r.request.method == 'POST') as billed:
-            form.get_by_role('button', name='Faturar 3 OS', exact=True).click()
-        batch = decode(billed.value)
-        assert len(batch['work_orders']) == 3 and Decimal(batch['total_amount']) == Decimal('300.06')
-        assert all(len(row['obligation']['installments']) == 3 for row in batch['work_orders'])
-        for position in range(3):
-            assert sum(Decimal(row['obligation']['installments'][position]['amount']) for row in batch['work_orders']) == Decimal('100.02')
-        expect(page.locator('.billing-batch-success')).to_contain_text('Faturamento concluído: 3 OS')
-        replay = decode(context.request.post(base + '/api/finance/billing-batches', data=billed.value.request.post_data_json,
+        with page.expect_response(lambda r: urlparse(r.url).path == '/api/finance/obligations' and r.request.method == 'POST') as billed:
+            form.get_by_role('button', name='Salvar 3 parcelas', exact=True).click()
+        obligation = decode(billed.value)
+        assert len(obligation['work_orders']) == 3 and Decimal(obligation['total_amount']) == Decimal('300.06')
+        assert len(obligation['installments']) == 3
+        assert all(Decimal(row['amount']) == Decimal('100.02') for row in obligation['installments'])
+        assert all(sum(Decimal(link['amount']) for link in row['work_orders']) == Decimal(row['amount']) for row in obligation['installments'])
+        replay = decode(context.request.post(base + '/api/finance/obligations', data=billed.value.request.post_data_json,
             headers={'Idempotency-Key': billed.value.request.headers['idempotency-key']}))
-        assert [row['obligation']['id'] for row in replay['work_orders']] == [row['obligation']['id'] for row in batch['work_orders']]
+        assert replay['id'] == obligation['id']
+        assert [row['id'] for row in replay['installments']] == [row['id'] for row in obligation['installments']]
         for index, order in enumerate(selected):
             updated = decode(context.request.get(base + f"/api/laboratory/work-orders/{order['id']}"))
             assert updated['status'] == 'invoiced'
@@ -252,7 +259,51 @@ def main():
                 assert updated['exit_invoice'] == '486001'
             receivables = decode(context.request.get(base + f"/api/finance/work-orders/{order['id']}/receivables"))
             assert Decimal(receivables['total_registered']) == Decimal(order['approved_value'])
-        record('Three OS billed with three installments; exact receivables, NF synchronization and safe retry', batch_id=batch['batch_id'])
+        record('Three OS added inside the financial modal share one obligation and three installments, with exact allocation and safe retry', obligation_id=obligation['id'])
+
+        # The user's reported screen is an existing receipt: add OS there without replacing the entry.
+        editable_orders = []
+        for index in range(3):
+            editable_orders.append(decode(context.request.post(base+'/api/laboratory/work-orders',data={
+                'company_code':COMPANY,'customer_id':customers[0]['id'],'customer_name':customers[0]['legal_name'],
+                'equipment_type':'Ventilador','serial_number':f'EDICAO-REC-{index}','reported_defect':'Teste de edição de receita existente','approved_value':'1000.00',
+            })))
+        original = decode(context.request.post(base+'/api/finance/entries',headers={'Idempotency-Key':'e2e-existing-title'},data={
+            'entry_type':'income','company_code':COMPANY,'work_order_id':editable_orders[0]['id'],
+            'counterparty_name':customers[0]['legal_name'],'description':'Faturamento já existente',
+            'amount':'300.00','nfse_number':'486002','bank_name':'Bradesco',
+            'issue_date':'2026-11-26','posting_date':'2026-11-26','due_date':'2026-12-26',
+        }))
+        entry_path=f"/api/finance/entries/{original['id']}"
+        page.goto(base+f"/financeiro?lancamento={original['id']}")
+        form=page.locator('.finance-modal')
+        expect(form.locator('.billing-order-card')).to_have_count(1)
+        for order in editable_orders[1:]:
+            form.get_by_placeholder('Digite OS, cliente ou série...').fill(order['number'])
+            form.locator('.billing-orders-results button').filter(has_text=order['number']).click()
+        expect(form.get_by_label('Valor',exact=True)).to_have_value('300,00')
+        form.get_by_role('button',name='Dividir total entre as OS',exact=True).click()
+        lost_entry={'commits':0}
+        def lose_entry_response(route):
+            if route.request.method=='PUT' and lost_entry['commits']==0:
+                response=route.fetch()
+                assert response.status==200,response.text()
+                lost_entry['commits']+=1
+                route.abort('failed')
+            else:
+                route.continue_()
+        page.route('**'+entry_path,lose_entry_response)
+        page.screenshot(path=str(out/'editing-existing-receipt.png'),full_page=True)
+        form.get_by_role('button',name='Salvar alterações',exact=True).click()
+        expect(page.locator('.finance-modal')).to_have_count(0)
+        page.unroute('**'+entry_path,lose_entry_response)
+        changed=decode(context.request.get(base+entry_path))
+        assert changed['id']==original['id'] and Decimal(changed['amount'])==Decimal('300.00')
+        assert len(changed['work_orders'])==3 and all(Decimal(row['amount'])==100 for row in changed['work_orders'])
+        assert lost_entry['commits']==1
+        page.goto(base+f"/financeiro?lancamento={original['id']}")
+        expect(page.locator('.finance-modal .billing-order-card')).to_have_count(3)
+        record('Existing receipt accepts three OS in its own editor, preserves ID and total, and reconciles a lost PUT acknowledgement')
 
         page.goto(base + f"/laboratorio?os={selected[0]['id']}&aba=financial")
         detail = page.locator('.lab-detail')

@@ -50,6 +50,9 @@ async def test_received_purchase_is_idempotent_and_request_can_share_the_same_re
         def add(self, obj): self.session.add(obj)
         def add_all(self, objects): self.session.add_all(objects)
     with Session(engine) as session:
+        from inventory_test_catalog import receipt_catalog_rows
+        session.add_all(receipt_catalog_rows())
+        session.flush()
         db = Adapter(session)
         params = dict(company_code="universo_eletronica", name="Capacitor 470uF", quantity=50, unit_cost=Decimal("3.20"), user_id=1)
         original = await receive_purchase(db, source="order", source_id=123, source_code="PC-123", destination="new", **params)

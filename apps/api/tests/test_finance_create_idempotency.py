@@ -15,6 +15,8 @@ from app.finance.schemas import FinancialEntryInput
 class FakeDB:
     def __init__(self):
         self.scalar = AsyncMock(return_value=None)
+        self.execute = AsyncMock()
+        self.get_bind = MagicMock(return_value=SimpleNamespace(dialect=SimpleNamespace(name="postgresql")))
         self.flush = AsyncMock()
         self.commit = AsyncMock()
         self.refresh = AsyncMock()

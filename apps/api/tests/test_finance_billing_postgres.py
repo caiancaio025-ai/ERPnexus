@@ -255,8 +255,10 @@ async def test_editing_a_batch_installment_preserves_each_os_scope_and_batch_tra
     first_obligation = batch["work_orders"][0]["obligation"]
     entry = first_obligation["installments"][0]
     current = (await client.get(f"/laboratory/work-orders/{orders[0]['id']}")).json()
+    # Contrato legado: omite a nova lista, cujo escopo é a obrigação inteira.
+    legacy_payload = {key: value for key, value in entry.items() if key != "work_orders"}
     response = await client.put(f"/finance/entries/{entry['id']}", json={
-        **entry, "nfse_number": "NF-CORRIGIDA", "exit_invoice": "NF-CORRIGIDA",
+        **legacy_payload, "nfse_number": "NF-CORRIGIDA", "exit_invoice": "NF-CORRIGIDA",
         "work_order_version": current["version"], "description": "Correção apenas desta OS",
     })
     assert response.status_code == 200, response.text

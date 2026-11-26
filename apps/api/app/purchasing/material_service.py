@@ -174,6 +174,7 @@ async def output_rows(
             inventory_serial=item.inventory_serial,
             inventory_category=item.inventory_category,
             inventory_format_id=item.inventory_format_id,
+            inventory_details=item.inventory_details,
             priority=item.priority,
             technical_note=item.technical_note,
             suggested_link=item.suggested_link,

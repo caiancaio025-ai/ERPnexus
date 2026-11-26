@@ -233,3 +233,31 @@ def test_grouped_quote_revision_requires_documents_and_integrity_constraints(dam
             helper._validate_grouped_quote_schema(connection)
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("damage,expected_message", [
+    ("ALTER TABLE financial_entries ALTER COLUMN version DROP NOT NULL", "colunas"),
+    ("ALTER TABLE financial_obligations ALTER COLUMN version SET DEFAULT 2", "versão"),
+    ("ALTER TABLE financial_entry_work_orders DROP CONSTRAINT ck_fin_entry_os_amount_nonnegative", "restrições"),
+    ("ALTER TABLE financial_entry_work_orders DROP CONSTRAINT financial_entry_work_orders_pkey", "restrições"),
+    ("ALTER TABLE material_requests RENAME COLUMN inventory_details TO missing_inventory_details", "colunas"),
+])
+def test_inline_billing_and_stock_details_require_complete_schema(damage, expected_message):
+    url = os.environ.get("SENTICO_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires an explicitly configured disposable PostgreSQL database")
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
+    assert os.environ.get("DATABASE_URL") == url and make_url(url).database.endswith("_test")
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            helper._validate_inline_billing_schema(connection, with_inventory_details=True)
+            connection.execute(text("SET LOCAL lock_timeout='3s'"))
+            connection.execute(text(damage))
+            with pytest.raises(helper.CheckError, match=expected_message):
+                helper._validate_inline_billing_schema(connection, with_inventory_details=True)
+            connection.rollback()
+            helper._validate_inline_billing_schema(connection, with_inventory_details=True)
+    finally:
+        engine.dispose()

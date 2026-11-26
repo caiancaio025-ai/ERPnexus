@@ -10,6 +10,7 @@
 .purchase-stock-receipt-summary strong{font-size:13px}
 .purchase-stock-receipt-summary span{font-size:12px}
 .purchase-stock-target:disabled{opacity:.8}
+.purchase-stock-new-item{display:grid;gap:16px;min-width:0}
 
 /* Campos dentro da seleção de Estoque seguem o tema azul-marinho. */
 .purchase-stock-target select,.purchase-stock-target input{background:#09243a;color:#eaf6ff;border-color:#3a7091;}

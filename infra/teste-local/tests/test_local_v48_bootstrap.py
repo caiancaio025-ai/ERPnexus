@@ -91,7 +91,7 @@ def test_native_postgres_fresh_ready_upgrade_repeat_and_foreign_database_refusal
     monkeypatch.setattr(helper, "upgrade", native_upgrade)
     # Reproduce the previous package's ready installation using its real
     # migrations, then update with the current package without re-seeding it.
-    initial_revision = "20261126_01"
+    initial_revision = "20261126_02"
     initial_plan = helper.migration_plan(API)
     initial_plan = initial_plan[:initial_plan.index(initial_revision) + 1]
     with monkeypatch.context() as old_package:

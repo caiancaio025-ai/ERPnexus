@@ -10,15 +10,17 @@ import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import { useLocation, useNavigate } from "react-router-dom";
 import { monthlyInstallmentDates, splitInstallmentAmounts } from "./installmentPlan";
 import { WorkOrderBillingSelector } from "./components/WorkOrderBillingSelector";
-import { billingDraft, billingTotal, suggestedExitInvoice, validateBillingSelection } from "./batchBilling";
+import { billingAmountText, billingDescription, billingDocumentTotal, billingDraft, draftsFromSavedLinks, effectiveBillingRows, normalizeBillingConfirmation, savedBillingLinks, suggestedExitInvoice, validateBillingAllocation } from "./batchBilling";
+import { billingDraftSnapshot, billingLinkSnapshot, persistFinancialUpdate } from "./financialEntrySave";
+import { ApiError } from "../../shared/api/apiError";
 
 import { apiClient } from "../../shared/api/apiClient";
 import { moneyInput } from "../../shared/forms/moneyInput";
 import { CashFlowChart, CompositionDonut } from "./components/FinanceCharts";
 import type { AuthUser } from "../auth/AuthCard";
 import type {
-  AuditEvent, BillingConfirmation, BillingReadiness, CompanyCode, CompanyFilter, DateBasis, EntryStatus, EntryType, ExpenseKind,
-  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables, WorkOrderBillingDraft, BillingBatchResult,
+  AuditEvent, BillingConfirmation, CompanyCode, CompanyFilter, DateBasis, EntryStatus, EntryType, ExpenseKind,
+  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables, WorkOrderBillingDraft,
 } from "./types";
 import "./finance.css";
 
@@ -32,7 +34,7 @@ type EntryForm = {
   document_number: string; payment_code: string; notes: string; work_order_id: string;
 };
 type EntryMode = "single" | "installments";
-type ScheduleEditor = { obligationId: number; rows: (InstallmentDraft & { entry_id?: number })[] };
+type ScheduleEditor = { obligationId: number; version?: number; rows: (InstallmentDraft & { entry_id?: number })[] };
 type InstallmentDraft = {
   installment_number: number; due_date: string; amount: string; payment_code: string; notes: string;
 };
@@ -83,11 +85,16 @@ function initialInstallments(firstDueDate: string): InstallmentDraft[] {
     { installment_number: 2, due_date: "", amount: "", payment_code: "", notes: "" },
   ];
 }
-const emptyBillingConfirmation = (): BillingConfirmation => ({
-  purchase_order_number: "", customer_order_number: "", measurement_reference: "",
-  service_report_confirmed: false, portal_submitted: false, portal_protocol: "",
-  invoice_email_confirmed: false, xml_email_confirmed: false, notes: "",
-});
+function formFromEntry(entry: FinancialEntry): EntryForm {
+  return {
+    entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
+    series: entry.series ?? "", nfse_number: entry.nfse_number ?? "", nfe_number: entry.nfe_number ?? "",
+    counterparty_name: entry.counterparty_name, description: entry.description, amount: billingAmountText(entry.amount),
+    issue_date: entry.issue_date, posting_date: entry.posting_date, due_date: entry.due_date, bank_name: entry.bank_name,
+    expense_kind: entry.expense_kind ?? "fixed", document_number: entry.document_number ?? "",
+    payment_code: entry.payment_code ?? "", notes: entry.notes ?? "", work_order_id: entry.work_order_id ? String(entry.work_order_id) : "",
+  };
+}
 function money(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function companyName(code: CompanyCode) { return companies.find((item) => item.code === code)?.name ?? code; }
 function dateBR(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "—"; }
@@ -219,12 +226,13 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [scheduleEditor, setScheduleEditor] = useState<ScheduleEditor | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null); const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [billingConfirmation, setBillingConfirmation] = useState<BillingConfirmation>(emptyBillingConfirmation());
   const [billingOrders, setBillingOrders] = useState<WorkOrderBillingDraft[]>([]);
   const [billingResolving, setBillingResolving] = useState(false);
   const [exitInvoice, setExitInvoice] = useState("");
   const [exitInvoiceEdited, setExitInvoiceEdited] = useState(false);
-  const [batchResult, setBatchResult] = useState<BillingBatchResult | null>(null);
+  const [billingMetadataError, setBillingMetadataError] = useState("");
+  const [saveConflict, setSaveConflict] = useState(false);
+  const entryRequestSequence = useRef(0);
   const financeSavePending = useRef(false);
   const createSignature = useRef<{ body: string; key: string } | null>(null);
   const [error, setError] = useState("");
@@ -235,6 +243,19 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [linkedReceivablesRevision, setLinkedReceivablesRevision] = useState(0);
   const openedDeepLink = useRef("");
   const linkedWorkOrderId = Number(new URLSearchParams(route.search).get("os")) || 0;
+  const billingTotalAmount = billingDocumentTotal(selected, form.amount);
+  const effectiveOrders = effectiveBillingRows(billingOrders, billingTotalAmount);
+  const billingLinksLocked = Boolean(selected && (selected.work_order_links_editable === false || selected.status !== "pending" || selected.settlement_date));
+  const billingChanged = Boolean(selected && billingDraftSnapshot(effectiveOrders) !== billingLinkSnapshot(savedBillingLinks(selected)));
+
+  function hasUnsavedEntryChanges(): boolean {
+    if (!selected) return false;
+    const baseline = formFromEntry(selected);
+    return billingChanged || Object.entries(form).some(([key, value]) => {
+      if (key === "work_order_id") return false;
+      return key === "amount" ? parseAmount(String(value)) !== Number(selected.amount) : value !== baseline[key as keyof EntryForm];
+    }) || (exitInvoiceEdited && Boolean(exitInvoice.trim()) && effectiveOrders.some(row => ![row.order.exit_invoice, row.order.exit_invoice_2, row.order.exit_invoice_3].includes(exitInvoice.trim())));
+  }
   function refreshLinkedReceivables() {
     if (linkedWorkOrderId > 0) setLinkedReceivablesRevision((value) => value + 1);
   }
@@ -312,13 +333,6 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Vencimento inválido."); }
   }
 
-  // A associação usa o ID da OS salvo no lançamento, nunca nome/descrição,
-  // evitando abrir o orçamento de outro equipamento com dados semelhantes.
-  function openLinkedWorkOrder(workOrderId: number, tab: "quote" | "financial") {
-    setModalOpen(false);
-    navigate(`/laboratorio?os=${workOrderId}&aba=${tab}`);
-  }
-
   const selectedCompany = company === "consolidated" ? "universo_eletronica" : company;
   const availableBanks = companies.find((item) => item.code === form.company_code)?.banks ?? [];
   const closurePeriod = startDate && endDate && startDate.slice(0, 7) === endDate.slice(0, 7)
@@ -371,7 +385,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     const timer = window.setTimeout(() => { setServerSearch(term); setEntryPage(1); }, 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-  useEffect(() => { if (!error) return; const timer = window.setTimeout(() => setError(""), 6500); return () => window.clearTimeout(timer); }, [error]);
+  useEffect(() => { if (!error || modalOpen) return; const timer = window.setTimeout(() => setError(""), 6500); return () => window.clearTimeout(timer); }, [error, modalOpen]);
 
   useEffect(() => {
     const companyScope = company === "consolidated" ? "consolidated=true" : `company_code=${company}`;
@@ -381,58 +395,65 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   }, [company, dateBasis]);
 
   useEffect(() => {
-    if (!exitInvoiceEdited) setExitInvoice(suggestedExitInvoice(form.nfse_number, form.nfe_number));
-  }, [form.nfse_number, form.nfe_number, exitInvoiceEdited]);
+    if (exitInvoiceEdited) return;
+    let suggested = suggestedExitInvoice(form.nfse_number, form.nfe_number);
+    if (!suggested && selected) {
+      const links = savedBillingLinks(selected);
+      const candidates = [...new Set([form.nfse_number.trim(), form.nfe_number.trim()].filter(Boolean))]
+        .filter(number => links.length > 0 && links.every(link => [link.exit_invoice, link.exit_invoice_2, link.exit_invoice_3].includes(number)));
+      if (candidates.length === 1) suggested = candidates[0];
+    }
+    setExitInvoice(suggested);
+  }, [form.nfse_number, form.nfe_number, exitInvoiceEdited, selected?.id, selected?.version]);
 
-  // Reopen the saved link using exact IDs, with its current OS version.
+  // Legacy single links and the "Nova receita" action of one OS use an exact-ID lookup.
   useEffect(() => {
     if (!modalOpen || form.entry_type !== "income" || !form.work_order_id || billingOrders.some(row => row.order.id === Number(form.work_order_id))) return;
+    if (selected?.work_orders !== undefined || selected?.obligation_work_orders !== undefined) return;
     let active = true;
     setBillingResolving(true);
     void apiClient.get<FinanceWorkOrderOption[]>(`/finance/work-orders?ids=${form.work_order_id}`).then(rows => {
       if (!active) return;
       const order = rows.find(row => row.id === Number(form.work_order_id));
       if (!order) throw new Error("A OS vinculada não está disponível para faturamento. Confira o cadastro no Laboratório.");
-      const stored = (selected?.billing_compliance?.confirmation ?? billingConfirmation) as Partial<BillingConfirmation>;
-      setBillingOrders([{ ...billingDraft(order), amount: form.amount, confirmation: { ...emptyBillingConfirmation(), ...stored } }]);
+      const stored = (selected?.billing_compliance?.confirmation ?? {}) as Partial<BillingConfirmation>;
+      setBillingOrders([{ ...billingDraft(order), amount: form.amount, confirmation: normalizeBillingConfirmation(stored) }]);
     }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Não foi possível consultar a OS vinculada."); })
       .finally(() => { if (active) setBillingResolving(false); });
     return () => { active = false; };
   }, [modalOpen, form.work_order_id, form.entry_type, selected?.id]);
 
+  // Financial GET already contains the saved links and versions. This secondary read
+  // only enriches the cards; a failure cannot erase existing links or typed allocations.
   useEffect(() => {
-    const raw = new URLSearchParams(route.search).get("faturar_os");
-    if (!raw || openedDeepLink.current === route.search) return;
-    const ids = [...new Set(raw.split(",").map(Number))];
-    if (!ids.length || ids.length > 50 || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) { setError("Seleção de OS inválida."); return; }
+    if (!modalOpen || !selected || selected.entry_type !== "income") return;
+    const ids = savedBillingLinks(selected).map(link => link.work_order_id);
+    if (!ids.length) return;
     let active = true;
-    setBillingResolving(true);
-    void apiClient.get<FinanceWorkOrderOption[]>(`/finance/work-orders?ids=${ids.join(",")}`).then(orders => {
+    setBillingMetadataError("");
+    void apiClient.get<FinanceWorkOrderOption[]>(`/finance/work-orders?ids=${ids.join(",")}`).then(options => {
       if (!active) return;
-      if (orders.length !== ids.length) throw new Error("Uma das OS selecionadas não está disponível. Atualize a seleção no Laboratório.");
-      const rows = ids.map(id => billingDraft(orders.find(order => order.id === id)!));
-      if (rows.some(row => row.order.company_code !== rows[0].order.company_code) || (rows.length > 1 && (!rows[0].order.customer_id || rows.some(row => row.order.customer_id !== rows[0].order.customer_id)))) throw new Error("Selecione OS da mesma empresa e do mesmo cadastro de cliente.");
-      openedDeepLink.current = route.search;
-      openNew("income");
-      setCompany(rows[0].order.company_code); setView("income");
-      setBillingOrders(rows);
-      setForm({ ...initialForm(rows[0].order.company_code, "income"), work_order_id: rows.length === 1 ? String(rows[0].order.id) : "", counterparty_name: rows[0].order.customer_name,
-        description: `Serviços de laboratório — ${rows.map(row => row.order.number).join(", ")}`, amount: billingTotal(rows).toFixed(2).replace(".", ",") });
-    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Não foi possível abrir as OS selecionadas."); })
-      .finally(() => { if (active) setBillingResolving(false); });
+      setBillingOrders(current => current.map(row => {
+        const fresh = options.find(order => order.id === row.order.id);
+        return fresh ? { ...row, order: { ...fresh, version: row.order.version, billing_metadata_loaded: true } } : row;
+      }));
+    }).catch(() => { if (active) setBillingMetadataError("Não foi possível atualizar os saldos das OS. Os vínculos e valores salvos continuam disponíveis."); });
     return () => { active = false; };
-  }, [route.search]);
+  }, [modalOpen, selected?.id, selected?.version]);
 
   function changeBillingOrders(next: WorkOrderBillingDraft[]) {
-    const rows = billingOrders.length === 1 && next.length > 1
-      ? next.map(row => row.order.id === billingOrders[0].order.id ? { ...row, amount: form.amount } : row)
-      : next;
+    let total = billingTotalAmount;
+    const initializeTotal = !selected && !billingOrders.length && next.length === 1 && (!form.amount.trim() || !total);
+    if (initializeTotal) total = parseAmount(next[0].amount) || 0;
+    const rows = effectiveBillingRows(next, total);
+    const changedIds = rows.map(row => row.order.id).join(",") !== billingOrders.map(row => row.order.id).join(",");
     setBillingOrders(rows);
     setForm(current => ({ ...current, work_order_id: rows.length === 1 ? String(rows[0].order.id) : "",
-      counterparty_name: rows[0]?.order.customer_name || current.counterparty_name,
-      description: !current.description || current.description.startsWith("Serviço") ? (rows.length ? `Serviços de laboratório — ${rows.map(row => row.order.number).join(", ")}` : "") : current.description,
-      amount: rows.length > 1 ? billingTotal(rows).toFixed(2).replace(".", ",") : rows.length === 1 && (billingOrders.length !== 1 || billingOrders[0].order.id !== rows[0].order.id) ? rows[0].amount : current.amount }));
-    if (rows.length > 1) setAttachment(null);
+      counterparty_name: changedIds && rows.length ? rows[0].order.customer_name : current.counterparty_name,
+      description: !selected && changedIds && (!current.description || current.description.startsWith("Serviço"))
+        ? billingDescription(rows) : current.description,
+      amount: initializeTotal && total > 0 ? billingAmountText(total) : current.amount,
+    }));
   }
 
   function requestKey(body: string) {
@@ -455,34 +476,46 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   }
 
   function openNew(type: EntryType) {
+    entryRequestSequence.current++;
     const nextForm = initialForm(selectedCompany, type);
     setSelected(null); setScheduleEditor(null); createSignature.current = null; setForm(nextForm); setEntryMode("single");
-    setBillingOrders([]); setBillingResolving(false); setExitInvoice(""); setExitInvoiceEdited(false); setBatchResult(null);
+    setBillingOrders([]); setBillingResolving(false); setExitInvoice(""); setExitInvoiceEdited(false);
+    setBillingMetadataError(""); setSaveConflict(false); setError("");
     setInstallments(initialInstallments(nextForm.due_date));
-    setBillingConfirmation(emptyBillingConfirmation()); setAttachment(null); setModalOpen(true);
+    setAttachment(null); setModalOpen(true);
   }
-  async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
-    entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
-    series: entry.series ?? "", nfse_number: entry.nfse_number ?? "", nfe_number: entry.nfe_number ?? "", counterparty_name: entry.counterparty_name, description: entry.description,
-    amount: String(entry.amount).replace(".", ","), issue_date: entry.issue_date, posting_date: entry.posting_date,
-    due_date: entry.due_date, bank_name: entry.bank_name, expense_kind: entry.expense_kind ?? "fixed",
-    document_number: entry.document_number ?? "", payment_code: entry.payment_code ?? "", notes: entry.notes ?? "", work_order_id: entry.work_order_id ? String(entry.work_order_id) : "",
-  });
-    setBillingOrders([]); setExitInvoice(""); setExitInvoiceEdited(false);
-    const stored = (entry.billing_compliance?.confirmation ?? {}) as Partial<BillingConfirmation>;
-    setBillingConfirmation({ ...emptyBillingConfirmation(), ...stored });
-    setEntryMode("single"); setScheduleEditor(null); setInstallments(initialInstallments(entry.due_date));
-     setAttachment(null); setModalOpen(true); }
+
+  async function openEntry(id: number) {
+    const sequence = ++entryRequestSequence.current;
+    try {
+      const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`);
+      if (sequence !== entryRequestSequence.current) return;
+      setSelected(entry); setForm(formFromEntry(entry));
+      setBillingOrders(draftsFromSavedLinks(entry)); setBillingResolving(false); setBillingMetadataError("");
+      setExitInvoice(""); setExitInvoiceEdited(false); setSaveConflict(false); setError("");
+      setEntryMode("single"); setScheduleEditor(null); setInstallments(initialInstallments(entry.due_date));
+      setAttachment(null); setModalOpen(true);
+    } catch (reason) {
+      if (sequence === entryRequestSequence.current) setError(reason instanceof Error ? reason.message : "Não foi possível abrir o lançamento.");
+    }
+  }
+
+  async function reloadEntry() {
+    if (!selected || saving) return;
+    if (!window.confirm("Recarregar o lançamento salvo? As alterações ainda não salvas neste formulário serão descartadas.")) return;
+    await openEntry(selected.id);
+  }
 
   async function openScheduleEditor() {
     if (!selected?.obligation_id || selected.entry_type !== "income") return;
+    if (hasUnsavedEntryChanges()) { setError("Salve ou descarte as alterações do lançamento antes de editar o parcelamento."); return; }
     setSaving(true); setError("");
     try {
-      const group = await apiClient.get<{ id: number; installments: FinancialEntry[] }>(`/api/finance/obligations/${selected.obligation_id}`);
+      const group = await apiClient.get<{ id: number; version?: number; installments: FinancialEntry[] }>(`/api/finance/obligations/${selected.obligation_id}`);
       if (group.installments.some((item) => item.status !== "pending" || item.settlement_date)) {
         throw new Error("Há parcelas baixadas. Estorne as baixas autorizadas antes de alterar o parcelamento.");
       }
-      setScheduleEditor({ obligationId: group.id, rows: group.installments.map((item, index) => ({
+      setScheduleEditor({ obligationId: group.id, version: group.version, rows: group.installments.map((item, index) => ({
         installment_number: index + 1, entry_id: item.id, due_date: item.due_date,
         amount: String(item.amount).replace(".", ","), payment_code: item.payment_code ?? "", notes: item.notes ?? "",
       })) });
@@ -504,7 +537,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       if (!window.confirm(`Confirmar novo parcelamento de ${rows.length} parcela(s), total ${money(total)}?`)) return;
       setSaving(true); setError("");
       await apiClient.request(`/api/finance/obligations/${scheduleEditor.obligationId}/schedule`, {
-        method: "PUT", body: JSON.stringify({ total_amount: total, installments: rows }),
+        method: "PUT", body: JSON.stringify({ total_amount: total, installments: rows, version: scheduleEditor.version }),
       });
       setScheduleEditor(null); setModalOpen(false); setSelected(null); await loadData(); refreshLinkedReceivables();
     } catch (reason) {
@@ -581,161 +614,119 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   async function saveEntry(event: React.FormEvent) {
     event.preventDefault();
     if (financeSavePending.current || billingResolving) return;
-    financeSavePending.current = true; setSaving(true); setError("");
+    financeSavePending.current = true;
+    setSaving(true); setError(""); setSaveConflict(false);
     try {
       const invoiceType = form.nfse_number.trim() && !form.nfe_number.trim()
-        ? "nfse"
-        : form.nfe_number.trim() && !form.nfse_number.trim()
-          ? "nfe"
-          : null;
+        ? "nfse" : form.nfe_number.trim() && !form.nfse_number.trim() ? "nfe" : null;
       const totalAmount = parseAmount(form.amount);
-      if (!Number.isFinite(totalAmount) || totalAmount <= 0) throw new Error("Informe um valor válido maior que zero.");
-      const linkedRows = form.entry_type === "income" ? billingOrders : [];
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0 || Math.abs(totalAmount * 100 - Math.round(totalAmount * 100)) > .000001) throw new Error("Informe um valor válido maior que zero, com até duas casas decimais.");
+      const linkedRows = form.entry_type === "income" ? effectiveOrders : [];
       const invoiceForLab = exitInvoice.trim() || suggestedExitInvoice(form.nfse_number, form.nfe_number);
-      if (linkedRows.length) {
-        const selectionError = validateBillingSelection(linkedRows.length === 1 ? [{ ...linkedRows[0], amount: form.amount }] : linkedRows, !selected && entryMode === "installments" ? installments.length : 1);
+      const includeLinks = form.entry_type === "income" && !billingLinksLocked;
+      if (includeLinks) {
+        const selectionError = validateBillingAllocation(linkedRows, billingTotalAmount, !selected && entryMode === "installments" ? installments.length : 1);
         if (selectionError) throw new Error(selectionError);
-        if (form.nfse_number.trim() && form.nfe_number.trim() && !invoiceForLab) throw new Error("Informe qual número deve constar como NF de saída nas OS.");
-      } else if (form.entry_type === "income" && form.work_order_id) throw new Error("Aguarde a confirmação dos dados da OS antes de salvar.");
-
-      if (linkedRows.length > 1) {
-        if (selected) throw new Error("Para faturar várias OS, crie uma nova receita.");
-        if (!form.nfse_number.trim() && !form.nfe_number.trim()) throw new Error("Informe a NFS-e ou a NF-e deste faturamento.");
-        if (attachment) throw new Error("Salve o faturamento e anexe os documentos na parcela de cada OS.");
-        const rows = entryMode === "installments" ? installments : [{ installment_number: 1, due_date: form.due_date, amount: form.amount, payment_code: "", notes: "" }];
-        const normalized = rows.map((row, index) => {
-          const amount = parseAmount(row.amount);
-          if (!row.due_date || !Number.isFinite(amount) || amount <= 0) throw new Error(`Confira o vencimento e o valor da parcela ${index + 1}.`);
-          if (Math.round(amount * 100) < linkedRows.length) throw new Error(`A parcela ${index + 1} precisa comportar pelo menos R$ 0,01 por OS.`);
-          return { installment_number: index + 1, due_date: row.due_date, amount, payment_code: row.payment_code.trim() || null, notes: row.notes.trim() || null };
-        });
-        if (Math.abs(normalized.reduce((sum, row) => sum + row.amount, 0) - totalAmount) > .009) throw new Error("A soma das parcelas precisa ser igual ao valor total das OS.");
-        const body = JSON.stringify({
-          entry_type: "income", company_code: form.company_code, invoice_type: invoiceType, series: form.series || null,
-          nfse_number: form.nfse_number.trim() || null, nfe_number: form.nfe_number.trim() || null,
-          counterparty_name: form.counterparty_name, description: form.description, total_amount: totalAmount,
-          issue_date: form.issue_date, posting_date: form.issue_date, bank_name: form.bank_name,
-          expense_kind: null, account_id: null, category_id: null, document_number: null, notes: form.notes || null,
-          exit_invoice: invoiceForLab, installments: normalized,
-          work_orders: linkedRows.map(row => ({ work_order_id: row.order.id, amount: parseAmount(row.amount), version: row.order.version, billing_confirmation: row.confirmation })),
-        });
-        const result = await apiClient.request<BillingBatchResult>("/finance/billing-batches", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(body) }, body });
-        setBatchResult(result); setModalOpen(false); setView("income");
-        await loadData(); refreshLinkedReceivables();
-        return;
+        if (linkedRows.length && form.nfse_number.trim() && form.nfe_number.trim() && !invoiceForLab) throw new Error("Informe qual número deve constar como NF de saída nas OS.");
+        if (!linkedRows.length && form.work_order_id) throw new Error("Aguarde a confirmação dos dados da OS antes de salvar.");
       }
+
+      const shared = {
+        entry_type: form.entry_type, company_code: form.company_code,
+        invoice_type: form.entry_type === "income" ? invoiceType : null,
+        series: form.series || null,
+        nfse_number: form.entry_type === "income" ? form.nfse_number.trim() || null : null,
+        nfe_number: form.entry_type === "income" ? form.nfe_number.trim() || null : null,
+        counterparty_name: form.counterparty_name, description: form.description,
+        issue_date: form.issue_date, posting_date: form.issue_date, bank_name: form.bank_name,
+        expense_kind: form.entry_type === "expense" ? form.expense_kind : null,
+        document_number: form.entry_type === "expense" ? form.document_number || null : null,
+        notes: form.notes || null,
+        ...(includeLinks ? {
+          work_orders: linkedRows.map(row => ({ work_order_id: row.order.id, amount: parseAmount(row.amount), version: row.order.version, billing_confirmation: row.confirmation })),
+          ...(linkedRows.length ? { exit_invoice: invoiceForLab || null } : {}),
+        } : {}),
+      };
 
       if (!selected && entryMode === "installments") {
         if (installments.length < 2) throw new Error("Informe pelo menos duas parcelas.");
         const normalizedInstallments = installments.map((item, index) => {
           const amount = parseAmount(item.amount);
           if (!item.due_date) throw new Error(`Informe o vencimento da parcela ${index + 1}.`);
-          if (!Number.isFinite(amount) || amount <= 0) throw new Error(`Informe um valor válido para a parcela ${index + 1}.`);
-          return {
-            installment_number: index + 1,
-            due_date: item.due_date,
-            amount,
-            payment_code: item.payment_code.trim() || null,
-            notes: item.notes.trim() || null,
-          };
+          if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > .000001) throw new Error(`Informe um valor válido para a parcela ${index + 1}, com até duas casas decimais.`);
+          return { installment_number: index + 1, due_date: item.due_date, amount, payment_code: item.payment_code.trim() || null, notes: item.notes.trim() || null };
         });
-        const installmentTotal = normalizedInstallments.reduce((sum, item) => sum + item.amount, 0);
-        if (Math.abs(installmentTotal - totalAmount) > 0.009) {
-          throw new Error(`A soma das parcelas (${money(installmentTotal)}) deve ser igual ao valor total (${money(totalAmount)}).`);
-        }
+        const installmentTotal = normalizedInstallments.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) / 100;
+        if (Math.round(installmentTotal * 100) !== Math.round(totalAmount * 100)) throw new Error(`A soma das parcelas (${money(installmentTotal)}) deve ser igual ao valor total (${money(totalAmount)}).`);
         if (attachment) throw new Error("No lançamento parcelado, salve primeiro e anexe documentos individualmente em cada parcela quando necessário.");
-
-        const obligationBody = JSON.stringify({
-          entry_type: form.entry_type,
-          company_code: form.company_code,
-          invoice_type: form.entry_type === "income" ? invoiceType : null,
-          series: form.series || null,
-          nfse_number: form.entry_type === "income" ? form.nfse_number.trim() || null : null,
-          nfe_number: form.entry_type === "income" ? form.nfe_number.trim() || null : null,
-          counterparty_name: form.counterparty_name,
-          description: form.description,
-          total_amount: totalAmount,
-          issue_date: form.issue_date,
-          posting_date: form.issue_date,
-          bank_name: form.bank_name,
-          expense_kind: form.entry_type === "expense" ? form.expense_kind : null,
-          account_id: null,
-          category_id: null,
-          document_number: form.entry_type === "expense" ? form.document_number || null : null,
-          notes: form.notes || null,
-          work_order_id: form.entry_type === "income" && form.work_order_id ? Number(form.work_order_id) : null,
-          billing_confirmation: form.entry_type === "income" && form.work_order_id ? (billingOrders[0]?.confirmation ?? billingConfirmation) : null,
-          ...(form.entry_type === "income" && form.work_order_id ? { exit_invoice: invoiceForLab || null, work_order_version: billingOrders[0]?.order.version } : {}),
-          installments: normalizedInstallments,
-        });
-        await apiClient.request("/api/finance/obligations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(obligationBody) },
-          body: obligationBody,
-        });
+        const body = JSON.stringify({ ...shared, total_amount: totalAmount, account_id: null, category_id: null, installments: normalizedInstallments });
+        await apiClient.request("/api/finance/obligations", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(body) }, body });
         setModalOpen(false); await loadData(); refreshLinkedReceivables();
         return;
       }
 
-      const body = JSON.stringify({
-        ...form,
-        // O Financeiro usa a emissão como competência operacional.
-        // posting_date permanece no contrato da API por compatibilidade histórica,
-        // mas não é mais um campo manual na interface.
-        posting_date: form.issue_date,
-        amount: totalAmount,
-        invoice_type: form.entry_type === "income" ? invoiceType : null,
-        nfse_number: form.entry_type === "income" ? form.nfse_number.trim() || null : null,
-        nfe_number: form.entry_type === "income" ? form.nfe_number.trim() || null : null,
-        series: form.series || null,
-        expense_kind: form.entry_type === "expense" ? form.expense_kind : null,
-        document_number: form.entry_type === "expense" ? form.document_number || null : null,
-        payment_code: form.payment_code || null,
-        notes: form.notes || null,
-        work_order_id: form.entry_type === "income" && form.work_order_id ? Number(form.work_order_id) : null,
-        billing_confirmation: form.entry_type === "income" && form.work_order_id ? (billingOrders[0]?.confirmation ?? billingConfirmation) : null,
-        ...(form.entry_type === "income" && form.work_order_id ? { exit_invoice: invoiceForLab || null, work_order_version: billingOrders[0]?.order.version } : {}),
-      });
-      const entry = await apiClient.request<FinancialEntry>(selected ? `/api/finance/entries/${selected.id}` : "/api/finance/entries", {
-        method: selected ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(!selected ? { "Idempotency-Key": requestKey(body) } : {}),
-        },
-        body,
-      });
+      const payload = {
+        ...shared, amount: totalAmount, due_date: form.due_date, payment_code: form.payment_code || null,
+        ...(selected ? { version: selected.version, ...(selected.obligation_id ? {
+          obligation_version: selected.obligation_version,
+          ...(includeLinks ? { obligation_total_amount: billingTotalAmount } : {}),
+        } : {}) } : {}),
+      };
+      const body = JSON.stringify(payload);
+      const entry = selected
+        ? await persistFinancialUpdate(payload,
+          () => apiClient.request<FinancialEntry>(`/api/finance/entries/${selected.id}`, { method: "PUT", body }),
+          () => apiClient.get<FinancialEntry>(`/api/finance/entries/${selected.id}`))
+        : await apiClient.request<FinancialEntry>("/api/finance/entries", {
+          method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(body) }, body,
+        });
       if (attachment) {
-        const upload = new FormData();
-        upload.append("file", attachment);
+        const upload = new FormData(); upload.append("file", attachment);
         try {
           await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}/attachment`, { method: "POST", body: upload });
         } catch (uploadReason) {
-          // O lançamento já foi persistido antes do envio do arquivo. Mantemos o
-          // usuário fora do risco de clicar em Salvar novamente e duplicar a receita/despesa.
-          setSelected(await apiClient.request<FinancialEntry>(`/api/finance/entries/${entry.id}`));
-          setAttachment(null);
-          setError(uploadReason instanceof Error
-            ? `Lançamento salvo, mas o anexo não foi enviado: ${uploadReason.message}`
-            : "Lançamento salvo, mas o anexo não foi enviado.");
-          await loadData();
+          // A confirmed financial write becomes an edit before any optional refresh,
+          // so retrying an attachment cannot create another invoice.
+          let saved = entry;
+          try { saved = await apiClient.get<FinancialEntry>(`/api/finance/entries/${entry.id}`); } catch { /* The confirmed entry remains available. */ }
+          setSelected(saved); setForm(formFromEntry(saved)); setBillingOrders(draftsFromSavedLinks(saved));
+          setAttachment(null); setExitInvoiceEdited(false);
+          await loadData(); refreshLinkedReceivables();
+          setError(uploadReason instanceof Error ? `Lançamento salvo, mas o anexo não foi enviado: ${uploadReason.message}` : "Lançamento salvo, mas o anexo não foi enviado.");
           return;
         }
       }
       setModalOpen(false); await loadData(); refreshLinkedReceivables();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao salvar."); }
-    finally { financeSavePending.current = false; setSaving(false); }
+    } catch (reason) {
+      setSaveConflict(Boolean(selected && reason instanceof ApiError && reason.status === 409));
+      setError(reason instanceof Error ? reason.message : "Falha ao salvar.");
+    } finally { financeSavePending.current = false; setSaving(false); }
   }
   async function removeEntry() {
-    if (!selected || !confirm("Excluir este lançamento? A ação ficará registrada na auditoria.")) return;
-    await apiClient.request(`/api/finance/entries/${selected.id}`, { method: "DELETE" }); setModalOpen(false); await loadData(); refreshLinkedReceivables();
+    if (!selected || saving || !confirm("Excluir este lançamento? A ação ficará registrada na auditoria.")) return;
+    setSaving(true); setError("");
+    try {
+      await apiClient.request(`/api/finance/entries/${selected.id}`, { method: "DELETE" });
+      setModalOpen(false); await loadData(); refreshLinkedReceivables();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível excluir o lançamento."); }
+    finally { setSaving(false); }
   }
   async function toggleSettlement() {
-    if (!selected) return;
-    if (selected.status === "pending") {
-      const settlementDate = prompt("Data da baixa (AAAA-MM-DD):", currentDate()); if (!settlementDate) return;
-      await apiClient.request(`/api/finance/entries/${selected.id}/settle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settlement_date: settlementDate }) });
-    } else await apiClient.request(`/api/finance/entries/${selected.id}/unsettle`, { method: "POST" });
-    const refreshed = await apiClient.request<FinancialEntry>(`/api/finance/entries/${selected.id}`); setSelected(refreshed); await loadData(); refreshLinkedReceivables();
+    if (!selected || saving) return;
+    if (hasUnsavedEntryChanges()) { setError("Salve ou descarte as alterações do lançamento antes de alterar a baixa."); return; }
+    const settlementDate = selected.status === "pending" ? prompt("Data da baixa (AAAA-MM-DD):", currentDate()) : null;
+    if (selected.status === "pending" && !settlementDate) return;
+    setSaving(true); setError("");
+    try {
+      if (selected.status === "pending") await apiClient.request(`/api/finance/entries/${selected.id}/settle`, {
+        method: "POST", body: JSON.stringify({ settlement_date: settlementDate }),
+      });
+      else await apiClient.request(`/api/finance/entries/${selected.id}/unsettle`, { method: "POST" });
+      const refreshed = await apiClient.get<FinancialEntry>(`/api/finance/entries/${selected.id}`);
+      setSelected(refreshed); setBillingOrders(draftsFromSavedLinks(refreshed));
+      await loadData(); refreshLinkedReceivables();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível alterar a baixa. Confira o lançamento antes de tentar novamente."); }
+    finally { setSaving(false); }
   }
 
   function applyShortcut(nextShortcut: string, nextYear = year) {
@@ -792,7 +783,6 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       </section>
       {error && <div className="finance-toast" role="alert"><TriangleAlert size={18}/><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar"><X size={16}/></button></div>}
       {loading && <div className="finance-filter-loading">Atualizando período…</div>}
-      {batchResult && <section className="billing-batch-success" role="status"><strong>Faturamento concluído: {batchResult.work_orders.length} OS · {money(Number(batchResult.total_amount))}</strong><p>NF de saída {batchResult.exit_invoice} registrada no Laboratório. Consulte as receitas e parcelas de cada OS.</p><div>{batchResult.work_orders.map(row => <button type="button" key={row.work_order_id} onClick={() => navigate(`/financeiro?os=${row.work_order_id}`)}>{row.work_order_number} · {money(Number(row.amount))}</button>)}<button type="button" onClick={() => setBatchResult(null)}>Fechar aviso</button></div></section>}
 
       {summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
       {linkedWorkOrderId > 0 && <section className="finance-linked-order">
@@ -809,7 +799,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <div className="finance-linked-list">
             {linkedReceivables.installments.map((item) => <button type="button" key={item.id} onClick={() => void openEntry(item.id)}>
               <span><b>{item.obligation_id ? `Parcela ${item.installment_number}` : "Receita avulsa"}</b><small>Vence {dateBR(item.due_date)} · {item.bank_name}</small></span>
-              <strong>{money(item.amount)}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? `Recebido ${dateBR(item.settlement_date)}` : "Pendente"}</em><Eye size={16}/>
+              <strong>{money(Number(item.work_order_amount ?? item.amount))}{item.work_order_amount != null && Number(item.work_order_amount) !== Number(item.amount) && <small>Total do título: {money(Number(item.amount))}</small>}</strong><em className={item.status === "received" ? "received" : "pending"}>{item.status === "received" ? `Recebido ${dateBR(item.settlement_date)}` : "Pendente"}</em><Eye size={16}/>
             </button>)}
             {!linkedReceivables.installments.length && <p>Nenhuma receita vinculada a esta OS. Cadastre a primeira receita abaixo.</p>}
           </div>
@@ -858,7 +848,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       </>}
 
       {(view === "income" || view === "expense") && <section className="ledger-panel"><header><div><span>{view === "income" ? "CONTAS A RECEBER" : "CONTAS A PAGAR"}</span><h2>{view === "income" ? "Receitas" : "Saídas"} do período</h2></div><div className="ledger-tools"><label><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente, OS, série, NFS-e ou NF-e"/></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as EntryStatus | "overdue" | "all")}><option value="all">Todos os status</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option><option value={view === "income" ? "received" : "paid"}>Baixado</option></select></div></header>
-        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>Série</span><span>NFS-e</span><span>NF-e</span><span>Emissão</span><span>Vencimento</span><span>Valor</span><span>Status</span><span>Ações</span></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <div className="ledger-row ledger-row--detailed" key={entry.id} onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a")) void openEntry(entry.id); }}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}{entry.obligation_id ? ` · Parcela ${entry.installment_number ?? "—"}` : ""}</small></span><span>{entry.series || "—"}</span><span>{entry.nfse_number || "—"}</span><span>{entry.nfe_number || "—"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><span className="finance-ledger-actions"><button type="button" className="finance-ledger-detail" onClick={() => void openEntry(entry.id)} title="Abrir detalhes da receita" aria-label={`Abrir detalhes do lançamento ${entry.id}`}><ChevronRight size={17}/></button>{entry.entry_type === "income" && entry.work_order_id ? <button type="button" className="finance-ledger-os" onClick={() => openLinkedWorkOrder(entry.work_order_id!, "financial")} title="Ver orçamento e valor aprovado na OS correspondente"><FileSearch size={15}/> Ver OS</button> : null}</span></div>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lançamento encontrado.</p>}</div><footer className="finance-pagination"><span>{entryPagination.total ? `${(entryPage - 1) * entryPagination.pageSize + 1}–${Math.min(entryPage * entryPagination.pageSize, entryPagination.total)} de ${entryPagination.total} lançamentos` : "0 lançamentos"}</span><div><button type="button" disabled={entryPage <= 1 || loading} onClick={() => setEntryPage((current) => Math.max(1, current - 1))}><ChevronLeft size={16}/>Anterior</button><strong>Página {entryPagination.pages ? entryPage : 0} de {entryPagination.pages}</strong><button type="button" disabled={entryPagination.pages === 0 || entryPage >= entryPagination.pages || loading} onClick={() => setEntryPage((current) => current + 1)}>Próxima<ChevronRight size={16}/></button></div></footer></section>}
+        <div className="ledger-list ledger-list--detailed"><div className="ledger-row ledger-row--detailed ledger-head"><span>Banco</span><span>Cliente / favorecido</span><span>Série</span><span>NFS-e</span><span>NF-e</span><span>Emissão</span><span>Vencimento</span><span>Valor</span><span>Status</span><span>Ações</span></div>{visibleEntries.map((entry) => { const overdue = entry.status === "pending" && new Date(`${entry.due_date}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)); return <div className="ledger-row ledger-row--detailed" key={entry.id} onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a")) void openEntry(entry.id); }}><span><strong>{entry.bank_name}</strong><small>{companyName(entry.company_code)}</small></span><span><strong>{entry.counterparty_name}</strong><small>{entry.description}{entry.obligation_id ? ` · Parcela ${entry.installment_number ?? "—"}` : ""}</small></span><span>{entry.series || "—"}</span><span>{entry.nfse_number || "—"}</span><span>{entry.nfe_number || "—"}</span><span>{dateBR(entry.issue_date)}</span><span className={overdue ? "date-overdue" : ""}>{dateBR(entry.due_date)}</span><span className={entry.entry_type === "income" ? "amount-positive" : "amount-negative"}>{money(entry.amount)}</span><span><i className={`status-pill ${overdue ? "overdue" : entry.status}`}>{overdue ? "Atrasado" : entry.status === "pending" ? "Pendente" : "Baixado"}</i></span><span className="finance-ledger-actions"><button type="button" className="finance-ledger-detail" onClick={() => void openEntry(entry.id)} title="Abrir detalhes da receita" aria-label={`Abrir detalhes do lançamento ${entry.id}`}><ChevronRight size={17}/></button>{entry.entry_type === "income" && (entry.work_orders?.length || entry.work_order_id) ? <button type="button" className="finance-ledger-os" onClick={() => void openEntry(entry.id)} title="Consultar as OS e os valores vinculados a este faturamento"><FileSearch size={15}/> Ver OS{entry.work_orders && entry.work_orders.length > 1 ? ` (${entry.work_orders.length})` : ""}</button> : null}</span></div>})}{!visibleEntries.length && <p className="finance-empty">Nenhum lançamento encontrado.</p>}</div><footer className="finance-pagination"><span>{entryPagination.total ? `${(entryPage - 1) * entryPagination.pageSize + 1}–${Math.min(entryPage * entryPagination.pageSize, entryPagination.total)} de ${entryPagination.total} lançamentos` : "0 lançamentos"}</span><div><button type="button" disabled={entryPage <= 1 || loading} onClick={() => setEntryPage((current) => Math.max(1, current - 1))}><ChevronLeft size={16}/>Anterior</button><strong>Página {entryPagination.pages ? entryPage : 0} de {entryPagination.pages}</strong><button type="button" disabled={entryPagination.pages === 0 || entryPage >= entryPagination.pages || loading} onClick={() => setEntryPage((current) => current + 1)}>Próxima<ChevronRight size={16}/></button></div></footer></section>}
 
       {view === "forecast" && summary && <>
         <section className="finance-executive-grid">
@@ -950,16 +940,16 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     </main>
 
     {modalOpen && <div className="finance-modal-backdrop" onMouseDown={(e) => !saving && e.target === e.currentTarget && setModalOpen(false)}><section className="finance-modal"><header><div><span>{selected ? "DETALHES DO LANÇAMENTO" : "NOVO REGISTRO"}</span><h2>{form.entry_type === "income" ? "Receita financeira" : "Saída financeira"}</h2></div><button disabled={saving} onClick={() => setModalOpen(false)}><X/></button></header>
-      {selected && <div className="entry-actions"><button className={selected.status === "pending" ? "settle" : "reverse"} onClick={toggleSettlement}>{selected.status === "pending" ? <><CheckCircle2 size={17}/>Dar baixa</> : <><RotateCcw size={17}/>Desfazer baixa</>}</button>{selected.attachment_name && <button type="button" onClick={() => setPreviewOpen(true)}><Eye size={17}/>Visualizar anexo</button>}{selected.entry_type === "income" && selected.work_order_id && <><button type="button" className="finance-entry-os-link" onClick={() => openLinkedWorkOrder(selected.work_order_id!, "quote")} title="Abrir orçamento técnico do equipamento desta OS"><FileSearch size={17}/> Ver orçamento da OS</button><button type="button" className="finance-entry-os-link" onClick={() => openLinkedWorkOrder(selected.work_order_id!, "financial")} title="Ver valor orçado e valor aprovado da OS"><CircleDollarSign size={17}/> Ver valor aprovado</button></>}{!selected.obligation_id && <button className="delete" onClick={removeEntry}><Trash2 size={17}/>Excluir</button>}</div>}
-      {error && <p role="alert" className="billing-orders-error finance-modal-error">{error}</p>}
+      {selected && <div className="entry-actions"><button disabled={saving || Boolean(scheduleEditor)} className={selected.status === "pending" ? "settle" : "reverse"} onClick={toggleSettlement}>{selected.status === "pending" ? <><CheckCircle2 size={17}/>Dar baixa</> : <><RotateCcw size={17}/>Desfazer baixa</>}</button>{selected.attachment_name && <button type="button" onClick={() => setPreviewOpen(true)}><Eye size={17}/>Visualizar anexo</button>}{!selected.obligation_id && <button disabled={saving} className="delete" onClick={removeEntry}><Trash2 size={17}/>Excluir</button>}</div>}
+      {error && <div role="alert" className="billing-orders-error finance-modal-error"><p>{error}</p>{saveConflict && <><p>Suas alterações foram mantidas. Confira a versão salva antes de reenviar.</p><button type="button" disabled={saving} onClick={() => void reloadEntry()}>Recarregar lançamento</button></>}</div>}
       <form onSubmit={saveEntry}><div className="entry-type-toggle"><button type="button" className={form.entry_type === "income" ? "income active" : "income"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "income"); setForm(next); setBillingOrders([]); setInstallments(initialInstallments(next.due_date)); } }}>Entrada · Receita</button><button type="button" className={form.entry_type === "expense" ? "expense active" : "expense"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "expense"); setForm(next); setBillingOrders([]); setInstallments(initialInstallments(next.due_date)); } }}>Saída · Despesa</button></div>
         {!selected && <div className="finance-entry-mode" role="group" aria-label="Forma de lançamento"><button type="button" className={entryMode === "single" ? "active" : ""} onClick={() => { setEntryMode("single"); setAttachment(null); }}>Lançamento único</button><button type="button" className={entryMode === "installments" ? "active" : ""} onClick={() => { setEntryMode("installments"); setAttachment(null); setInstallments((current) => current.length >= 2 ? current : initialInstallments(form.due_date)); }}>Parcelado</button></div>}
-        {selected?.obligation_id && <div className="finance-installment-lock"><ShieldCheck size={18}/><span><strong>Parcela vinculada a uma obrigação financeira</strong><small>Parcela {selected.installment_number ?? "—"}. Você pode corrigir os dados financeiros e também cliente/fornecedor, descrição, emissão/competência e documento fiscal. Dados compartilhados são atualizados em todas as parcelas da obrigação. Empresa, tipo, vínculo da O.S., número da parcela e exclusão permanecem protegidos.</small></span></div>}
+        {selected?.obligation_id && <div className="finance-installment-lock"><ShieldCheck size={18}/><span><strong>Parcela vinculada a uma obrigação financeira</strong><small>Parcela {selected.installment_number ?? "—"}. Você pode corrigir os dados financeiros e também cliente/fornecedor, descrição, emissão/competência e documento fiscal. Dados compartilhados são atualizados em todas as parcelas da obrigação. As OS podem ser adicionadas ou removidas neste formulário enquanto não houver baixa nem competência fechada. O rateio vale para o total da obrigação. Empresa, tipo, número da parcela e exclusão individual permanecem protegidos.</small></span></div>}
         {selected?.obligation_id && selected.entry_type === "income" && <div className="finance-schedule-actions">
           <button type="button" disabled={saving} onClick={() => scheduleEditor ? setScheduleEditor(null) : void openScheduleEditor()}><Pencil size={16}/> {scheduleEditor ? "Fechar editor de parcelas" : "Editar / remover parcelamento"}</button>
         </div>}
         {scheduleEditor && <section className="finance-schedule-editor">
-          <header><div><strong>Reorganizar parcelas da receita</strong><small>Modifique vencimentos e valores. Remova ou acrescente parcelas pendentes; a exclusão preserva auditoria.</small></div><strong>{money(scheduleEditor.rows.reduce((sum,row) => { const v=parseAmount(row.amount); return sum+(Number.isFinite(v)?v:0); },0))}</strong></header>
+          <header><div><strong>Reorganizar parcelas da receita</strong><small>Modifique vencimentos e valores. Com o mesmo total, o valor de cada OS é preservado. Se o total mudar, o rateio entre as OS será ajustado proporcionalmente. Parcelas baixadas ou em competência fechada são protegidas.</small></div><strong>{money(scheduleEditor.rows.reduce((sum,row) => { const v=parseAmount(row.amount); return sum+(Number.isFinite(v)?v:0); },0))}</strong></header>
           <div className="finance-schedule-rows">{scheduleEditor.rows.map((row,index) => <div key={index} className="finance-schedule-row">
             <strong>{index+1}ª</strong><label>Vencimento<input type="date" value={row.due_date} onChange={(e) => setScheduleEditor((prev) => prev && ({...prev,rows:prev.rows.map((item,i) => i===index?{...item,due_date:e.target.value}:item)}))}/></label>
             <label>Valor (R$)<input inputMode="decimal" value={row.amount} onChange={(e) => setScheduleEditor((prev) => prev && ({...prev,rows:prev.rows.map((item,i) => i===index?{...item,amount:e.target.value}:item)}))}/></label>
@@ -969,14 +959,14 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <button type="button" disabled={saving} className="finance-primary" onClick={() => void saveScheduleEditor()}>Salvar parcelamento</button>
           <button type="button" disabled={saving} className="finance-schedule-delete" onClick={() => void deleteScheduleEditor()}><Trash2 size={15}/> Excluir parcelamento inteiro</button></div>
         </section>}
-        <fieldset className="finance-entry-fields" disabled={saving}>
-        <div className="form-row"><label>Empresa<select disabled={Boolean(selected?.obligation_id)} value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, work_order_id: "", bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); setBillingOrders([]); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
-        {form.entry_type === "income" && <WorkOrderBillingSelector companyCode={form.company_code} value={billingOrders} onChange={changeBillingOrders} disabled={saving || billingResolving} linksLocked={Boolean(selected?.obligation_id)} allowMultiple={!selected} />}
-        {billingResolving && <p role="status">Consultando as OS selecionadas…</p>}
+        <fieldset className="finance-entry-fields" disabled={saving || Boolean(scheduleEditor)}>
+        <div className="form-row"><label>Empresa<select disabled={Boolean(selected?.obligation_id) || billingLinksLocked} value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, work_order_id: "", bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); setBillingOrders([]); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
+        {form.entry_type === "income" && <WorkOrderBillingSelector companyCode={form.company_code} value={effectiveOrders} onChange={changeBillingOrders} disabled={saving || billingResolving} linksLocked={billingLinksLocked} linksLockReason={selected?.work_order_links_lock_reason} totalAmount={billingTotalAmount} obligation={Boolean(selected?.obligation_id)} />}
+        {billingResolving && <p role="status">Consultando as OS selecionadas…</p>}{billingMetadataError && <p className="billing-metadata-warning" role="status">{billingMetadataError}</p>}
         <div className="form-row"><label>{form.entry_type === "income" ? "Cliente" : "Cliente / fornecedor"}<input required value={form.counterparty_name} onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}/></label>{form.entry_type === "expense" && <label>Classificação<select value={form.expense_kind} onChange={(e) => setForm({ ...form, expense_kind: e.target.value as ExpenseKind })}>{Object.entries(expenseLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>}</div>
-        <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>{!selected && entryMode === "installments" ? "Valor total" : "Valor"}<input required inputMode="decimal" readOnly={billingOrders.length > 1 && form.entry_type === "income"} placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
+        <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>{selected?.obligation_id ? "Valor da parcela" : !selected && entryMode === "installments" ? "Valor total" : "Valor"}<input required inputMode="decimal" disabled={form.entry_type === "income" && billingLinksLocked} placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
         {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="Número da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="Número da NF-e"/></label></div><label>Série<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">{selected && !form.nfse_number && !form.nfe_number ? "Registro histórico sem NF: pode ser editado e salvo normalmente." : "Preencha pelo menos uma das caixas: NFS-e ou NF-e."}</small></>}
-        {form.entry_type === "income" && billingOrders.length > 0 && <label>NF de saída nas OS<input aria-label="NF de saída nas OS" value={exitInvoice} maxLength={80} onChange={event => { setExitInvoiceEdited(true); setExitInvoice(event.target.value); }} placeholder="Número que será registrado no Laboratório" /><small>Aplicada às {billingOrders.length} OS selecionadas. Notas existentes são preservadas; uma nova nota ocupa a próxima saída livre (até três).</small></label>}
+        {form.entry_type === "income" && billingOrders.length > 0 && <label>NF de saída nas OS<input aria-label="NF de saída nas OS" disabled={billingLinksLocked} value={exitInvoice} maxLength={80} onChange={event => { setExitInvoiceEdited(true); setExitInvoice(event.target.value); }} placeholder="Número que será registrado no Laboratório" /><small>{billingLinksLocked ? "A sincronização de notas nas OS está protegida junto com os vínculos deste faturamento." : `Aplicada às ${billingOrders.length} OS selecionadas. Notas existentes são preservadas; uma nova nota ocupa a próxima saída livre (até três).`}</small></label>}
         {form.entry_type === "expense" && <label>Documento / referência<input value={form.document_number} onChange={(e) => setForm({ ...form, document_number: e.target.value })}/></label>}
         <div className="form-row"><label>Data de emissão<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label>{(selected || entryMode === "single") && <label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label>}</div>
         {!selected && entryMode === "installments" && <section className="finance-installments-card">
@@ -993,11 +983,11 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         </section>}
         {form.entry_type === "expense" && (selected || entryMode === "single") && <label>Chave PIX ou código do boleto<textarea rows={2} value={form.payment_code} onChange={(e) => setForm({ ...form, payment_code: e.target.value })}/></label>}
         <label>Observações<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/></label>
-        {(selected || entryMode === "single") && billingOrders.length < 2 && <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>}
-        {!selected && (entryMode === "installments" || billingOrders.length > 1) && <div className="finance-installment-attachment-note"><Paperclip size={17}/><span>O parcelamento cria lançamentos independentes para baixa. Anexos devem ser incluídos depois na parcela correspondente.</span></div>}
+        {(selected || entryMode === "single") && <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>}
+        {!selected && entryMode === "installments" && <div className="finance-installment-attachment-note"><Paperclip size={17}/><span>O parcelamento cria lançamentos independentes para baixa. Anexos devem ser incluídos depois na parcela correspondente.</span></div>}
         {selected && <div className="entry-meta"><span>Status: <b>{selected.status === "pending" ? "Pendente" : "Baixado"}</b></span>{selected.obligation_id && <span>Parcela: <b>{selected.installment_number ?? "—"}</b></span>}<span>Baixa: <b>{dateBR(selected.settlement_date)}</b></span><span>Atualizado: <b>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(selected.updated_at))}</b></span></div>}
         </fieldset>
-        <footer><button type="button" disabled={saving} onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving || billingResolving}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alterações" : billingOrders.length > 1 ? `Faturar ${billingOrders.length} OS` : entryMode === "installments" ? `Salvar ${installments.length} parcelas` : "Salvar lançamento"}</button></footer>
+        <footer><button type="button" disabled={saving} onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving || billingResolving || Boolean(scheduleEditor)}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alterações" : entryMode === "installments" ? `Salvar ${installments.length} parcelas` : "Salvar lançamento"}</button></footer>
       </form></section></div>}
     {previewOpen && selected?.attachment_name && <div className="attachment-preview-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPreviewOpen(false)}><section className="attachment-preview attachment-preview--fullscreen"><header><div><span>ANEXO DO LANÇAMENTO</span><strong>{selected.attachment_name}</strong></div><div className="attachment-preview-actions"><a href={`/api/finance/entries/${selected.id}/attachment/preview`} target="_blank" rel="noreferrer">Abrir em nova aba</a><button type="button" onClick={() => setPreviewOpen(false)} aria-label="Fechar visualização"><X/></button></div></header><div className="attachment-preview-body">{selected.attachment_mime?.startsWith("image/") ? <img src={`/api/finance/entries/${selected.id}/attachment/preview`} alt={selected.attachment_name}/> : <iframe src={`/api/finance/entries/${selected.id}/attachment/preview`} title={selected.attachment_name}/>}</div></section></div>}
   </div>;

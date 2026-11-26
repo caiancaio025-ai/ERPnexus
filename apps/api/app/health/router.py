@@ -9,7 +9,8 @@ router = APIRouter()
 @router.get("/version")
 def version(response: Response) -> dict[str, str]:
     response.headers["Cache-Control"] = "no-store"
-    return {"version": "48", "release_date": "2026-11-25", "name": "SENTICO"}
+    return {"version": "48", "release_date": "2026-11-26", "name": "SENTICO",
+            "revision": "v48-20261126-faturamento-estoque", "schema_revision": "20261126_04"}
 
 
 class Health(BaseModel):

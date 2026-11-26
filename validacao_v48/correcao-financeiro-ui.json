@@ -1,0 +1,17 @@
+{
+  "passed": 10,
+  "checks": [
+    "existing links survive secondary metadata failure and remain editable",
+    "same existing invoice gains two OS without changing total or creating entries; lost PUT response reconciles by GET",
+    "different concurrent contents preserve typed changes until explicit reload",
+    "removing some or all links keeps the invoice amount; mobile dialog fits",
+    "new multi-OS invoice uses normal POST and one stable idempotency key after lost acknowledgement",
+    "new multi-OS installment plan creates one obligation with three installments, not three per OS",
+    "editing an existing installment updates whole-invoice links while preserving every installment ID and amount",
+    "explicit installment amount correction computes the new invoice total and preserves sibling installments",
+    "sibling settlement lock explains restriction and omits protected links on documentary edits",
+    "OS receivables show the allocated share while retaining the full invoice amount for editing"
+  ],
+  "page_errors": [],
+  "unknown_routes": []
+}

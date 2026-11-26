@@ -10,12 +10,12 @@ def test_frontend_allows_shared_and_individual_fields_but_protects_company() -> 
         WEB_ROOT / "src" / "features" / "finance" / "FinanceDashboard.tsx"
     ).read_text(encoding="utf-8")
 
-    assert 'disabled={Boolean(selected?.obligation_id)} value={form.company_code}' in source
+    assert 'disabled={Boolean(selected?.obligation_id) || billingLinksLocked} value={form.company_code}' in source
     assert 'disabled={Boolean(selected?.obligation_id)} required value={form.counterparty_name}' not in source
     assert 'disabled={Boolean(selected?.obligation_id)} required value={form.description}' not in source
     assert '<label>NFS-e<input disabled={Boolean(selected?.obligation_id)}' not in source
     assert '<label>Data de emissão<input disabled={Boolean(selected?.obligation_id)}' not in source
-    assert '{!selected.obligation_id && <button className="delete"' in source
+    assert '{!selected.obligation_id && <button disabled={saving} className="delete"' in source
     assert "Salvar alterações" in source
 
 

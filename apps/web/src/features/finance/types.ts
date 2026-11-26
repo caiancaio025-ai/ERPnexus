@@ -48,6 +48,14 @@ export type FinancialEntry = {
   account_id?: number | null; category_id?: number | null; document_number?: string | null;
   payment_code?: string | null; notes?: string | null; work_order_id?: number | null; billing_compliance?: Record<string, unknown> | null; attachment_name?: string | null;
   attachment_mime?: string | null; created_at: string; updated_at: string;
+  version?: number;
+  work_orders?: FinancialWorkOrderLink[];
+  obligation_version?: number | null;
+  obligation_total_amount?: number | string | null;
+  obligation_work_orders?: FinancialWorkOrderLink[];
+  work_order_links_editable?: boolean;
+  work_order_links_lock_reason?: string | null;
+  work_order_amount?: number | string | null;
 };
 export type FinancialEntryPage = {
   items: FinancialEntry[];
@@ -91,12 +99,30 @@ export type FinanceWorkOrderOption = {
   exit_invoice?: string | null;
   exit_invoice_2?: string | null;
   exit_invoice_3?: string | null;
+  billing_metadata_loaded?: boolean;
 };
 
 export type WorkOrderBillingDraft = {
   order: FinanceWorkOrderOption;
   amount: string;
   confirmation: BillingConfirmation;
+};
+export type FinancialWorkOrderLink = {
+  work_order_id: number;
+  work_order_number: string;
+  company_code: CompanyCode;
+  customer_id: number | null;
+  customer_name: string;
+  equipment_label?: string;
+  amount: number | string;
+  version: number;
+  billing_confirmation?: Partial<BillingConfirmation> | null;
+  approved_value?: number | string | null;
+  total_registered?: number | string;
+  remaining_to_issue?: number | string | null;
+  exit_invoice?: string | null;
+  exit_invoice_2?: string | null;
+  exit_invoice_3?: string | null;
 };
 export type BillingBatchResult = {
   batch_id: string;

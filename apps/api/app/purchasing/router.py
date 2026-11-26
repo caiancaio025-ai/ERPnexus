@@ -22,7 +22,11 @@ from app.notifications.events import purchase_order_activity, material_request_a
 from app.purchasing.models import PurchaseAuditEvent, PurchaseOrder, Supplier
 from app.inventory.stock_codes import stock_id_from_query
 from app.inventory.purchase_cycle import lock_purchase_receipts, purchase_unit_cost, receive_purchase
-from app.inventory.models import InventoryComponentFormat, InventoryItem, InventoryMovement
+from app.inventory.item_details import canonical_inventory_details, merge_inventory_details
+from app.inventory.models import (
+    InventoryArea, InventoryComponentCategory, InventoryComponentFormat, InventoryComponentSubtype,
+    InventoryContainer, InventoryItem, InventoryLocationType, InventoryMovement, InventorySlot,
+)
 from app.purchasing.schemas import (
     CompanyCode,
     PurchaseAuditOutput,
@@ -95,6 +99,7 @@ def _purchase_output(purchase: PurchaseOrder, *, include_sensitive_values: bool)
         inventory_serial=purchase.inventory_serial,
         inventory_category=purchase.inventory_category,
         inventory_format_id=purchase.inventory_format_id,
+        inventory_details=purchase.inventory_details,
         quantity=purchase.quantity,
         total_amount=purchase.total_amount if include_sensitive_values else None,
         origin=purchase.origin,
@@ -339,6 +344,15 @@ async def purchase_stock_options(
     formats = (await db.scalars(select(InventoryComponentFormat).where(
         InventoryComponentFormat.is_active.is_(True),
     ).order_by(InventoryComponentFormat.category, InventoryComponentFormat.name))).all()
+    categories = (await db.scalars(select(InventoryComponentCategory).order_by(InventoryComponentCategory.name))).all()
+    subtypes = (await db.scalars(select(InventoryComponentSubtype).order_by(InventoryComponentSubtype.category, InventoryComponentSubtype.name))).all()
+    areas = (await db.scalars(select(InventoryArea).order_by(InventoryArea.code))).all()
+    types = (await db.scalars(select(InventoryLocationType).order_by(InventoryLocationType.name))).all()
+    containers = (await db.scalars(select(InventoryContainer).order_by(InventoryContainer.code))).all()
+    slots = (await db.scalars(select(InventorySlot).order_by(InventorySlot.code))).all()
+    occupied = set((await db.scalars(select(InventoryItem.slot_id).where(
+        InventoryItem.is_active.is_(True), InventoryItem.quantity > 0, InventoryItem.slot_id.is_not(None),
+    ).distinct())).all())
     return {
         "items": [
             {"id": item.id, "stock_code": item.stock_code, "name": item.name,
@@ -347,9 +361,17 @@ async def purchase_stock_options(
             for item in rows
         ],
         "formats": [
-            {"id": fmt.id, "category": fmt.category, "name": fmt.name, "code": fmt.code}
+            {"id": fmt.id, "category": fmt.category, "name": fmt.name, "code": fmt.code, "is_active": fmt.is_active}
             for fmt in formats
         ],
+        "categories": [{"id": row.id, "code": row.code, "name": row.name, "is_active": row.is_active} for row in categories],
+        "subtypes": [{"id": row.id, "category": row.category, "code": row.code, "name": row.name, "is_active": row.is_active} for row in subtypes],
+        "areas": [{"id": row.id, "code": row.code, "name": row.name, "is_active": row.is_active} for row in areas],
+        "types": [{"id": row.id, "code": row.code, "name": row.name, "is_active": row.is_active} for row in types],
+        "containers": [{"id": row.id, "area_id": row.area_id, "type_id": row.type_id, "parent_id": row.parent_id,
+                        "code": row.code, "name": row.name, "is_active": row.is_active} for row in containers],
+        "slots": [{"id": row.id, "container_id": row.container_id, "code": row.code, "name": row.name,
+                   "row": row.row, "column": row.column, "is_active": row.is_active, "occupied": row.id in occupied} for row in slots],
     }
 
 
@@ -395,7 +417,8 @@ async def create_order(
             stock_mode=purchase.inventory_mode,
             stock_serial=purchase.inventory_serial,
             stock_category=purchase.inventory_category,
-            stock_format_id=purchase.inventory_format_id)
+            stock_format_id=purchase.inventory_format_id,
+            stock_details=purchase.inventory_details)
     db.add(_audit(purchase, "created", f"Compra criada: {purchase.code}", user.id))
     await purchase_order_activity(db, actor=user, purchase=purchase,
         action="purchase_received" if purchase.status == "delivered" else "purchase_created",
@@ -437,6 +460,10 @@ async def update_order(
         if field not in payload.model_fields_set
     })
     prior_receipt = await db.scalar(select(InventoryMovement).where(InventoryMovement.purchase_order_id == purchase_id))
+    planned_details = merge_inventory_details(
+        purchase.inventory_details, payload.inventory_details,
+        supplied="inventory_details" in payload.model_fields_set,
+    )
     if prior_receipt is not None and (
         payload.status != "delivered" or payload.quantity != purchase.quantity
         or payload.product_name != purchase.product_name
@@ -449,6 +476,7 @@ async def update_order(
         or payload.inventory_serial != purchase.inventory_serial
         or payload.inventory_category != purchase.inventory_category
         or payload.inventory_format_id != purchase.inventory_format_id
+        or canonical_inventory_details(planned_details) != canonical_inventory_details(purchase.inventory_details)
     ):
         raise HTTPException(409, "Compra já recebida no estoque. Estorne mediante fluxo auditado antes de alterar dados físicos ou valores.")
     supplier = await db.get(Supplier, payload.supplier_id)
@@ -458,8 +486,10 @@ async def update_order(
     if prior_receipt is None:
         payload = await _purchase_with_canonical_inventory_name(db, payload)
     previous_status = purchase.status
-    for field, value in payload.model_dump().items():
+    for field, value in payload.model_dump(exclude={"inventory_details"}).items():
         setattr(purchase, field, value)
+    if prior_receipt is None:
+        purchase.inventory_details = planned_details
     purchase.supplier_name = supplier.name
     if (purchase.status == "delivered" and previous_status != "delivered"
             and purchase.delivered_at is None):
@@ -487,7 +517,8 @@ async def update_order(
             stock_mode=purchase.inventory_mode,
             stock_serial=purchase.inventory_serial,
             stock_category=purchase.inventory_category,
-            stock_format_id=purchase.inventory_format_id)
+            stock_format_id=purchase.inventory_format_id,
+            stock_details=purchase.inventory_details)
     db.add(_audit(purchase, "updated", f"Compra editada: {purchase.code}", user.id))
     await purchase_order_activity(db, actor=user, purchase=purchase,
         action="purchase_received" if previous_status != "delivered" and purchase.status == "delivered" else "purchase_updated",
@@ -681,6 +712,16 @@ async def list_material_requests(
     )
 
 
+@router.get("/material-requests/{request_id}", response_model=MaterialRequestOutput)
+async def get_material_request(request_id: int, user: CurrentUser, db: DbSession):
+    request = await db.get(MaterialRequest, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Solicitação de material não encontrada.")
+    return (await output_rows(
+        db, [request], include_sensitive_values=user_can_view_sensitive_values(user.role),
+    ))[0]
+
+
 @router.post("/material-requests", response_model=MaterialRequestOutput, status_code=status.HTTP_201_CREATED)
 async def create_standalone_material_request(
     payload: StandaloneMaterialRequestCreate,
@@ -699,6 +740,7 @@ async def create_standalone_material_request(
         **payload.model_dump(include={
             "inventory_destination", "inventory_item_id", "inventory_name", "inventory_mode",
             "inventory_serial", "inventory_category", "inventory_format_id",
+            "inventory_details",
         }),
         priority=payload.priority,
         technical_note=payload.technical_note,
@@ -746,6 +788,10 @@ async def update_material_request(
 
     previous = request.status
     previous_receipt = await db.scalar(select(InventoryMovement).where(InventoryMovement.material_request_id == request.id))
+    planned_details = merge_inventory_details(
+        request.inventory_details, payload.inventory_details,
+        supplied="inventory_details" in payload.model_fields_set,
+    )
     if (previous_receipt is not None and previous_receipt.purchase_order_id is not None
             and "purchase_reference" in payload.model_fields_set):
         physical_purchase = await db.get(PurchaseOrder, previous_receipt.purchase_order_id)
@@ -760,15 +806,16 @@ async def update_material_request(
         "inventory_destination", "inventory_item_id", "inventory_name", "inventory_mode",
         "inventory_serial", "inventory_category", "inventory_format_id",
     )
-    if previous_receipt is not None and any(
+    if previous_receipt is not None and (any(
         field in payload.model_fields_set and getattr(payload, field) != getattr(request, field)
         for field in stock_fields
-    ):
+    ) or canonical_inventory_details(planned_details) != canonical_inventory_details(request.inventory_details)):
         raise HTTPException(409, "O recebimento já foi registrado; dados de estoque não podem mais mudar.")
     if previous_receipt is None:
         for field in stock_fields:
             if field in payload.model_fields_set:
                 setattr(request, field, getattr(payload, field))
+        request.inventory_details = planned_details
     validate_transition(previous, payload.status)
     can_view_values = user_can_view_sensitive_values(user.role)
     if "unit_cost" in payload.model_fields_set and not can_view_values:
@@ -778,7 +825,9 @@ async def update_material_request(
     effective_cost = (
         payload.unit_cost if "unit_cost" in payload.model_fields_set else request.unit_cost
     )
-    if payload.status == "purchased" and (effective_cost is None or effective_cost <= 0):
+    cost_changed = "unit_cost" in payload.model_fields_set and payload.unit_cost != request.unit_cost
+    if (payload.status == "purchased" and (previous != "purchased" or cost_changed)
+            and (effective_cost is None or effective_cost <= 0)):
         raise HTTPException(
             status_code=422,
             detail="Informe o valor unitário antes de marcar a solicitação como Comprado.",
@@ -815,7 +864,8 @@ async def update_material_request(
             stock_mode=request.inventory_mode,
             stock_serial=request.inventory_serial,
             stock_category=request.inventory_category,
-            stock_format_id=request.inventory_format_id)
+            stock_format_id=request.inventory_format_id,
+            stock_details=request.inventory_details)
     db.add(material_event(
         request,
         user_id=user.id,

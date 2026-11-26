@@ -31,7 +31,7 @@ NEW_WEB = "sha256:" + "d" * 64
 PG_IMAGE = "sha256:" + "e" * 64
 OLD_TAG = "v47-fixture"
 BASE_REVISION = "20261123_02"
-TARGET_REVISION = "20261126_02"
+TARGET_REVISION = "20261126_04"
 
 
 class UpdaterSandbox:
@@ -436,9 +436,10 @@ def test_already_migrated_database_is_verified_without_reapplying_migration(upda
     updater.assert_data_untouched(revision=TARGET_REVISION)
 
 
-def test_receipt_release_upgrades_to_grouped_quotes_preserving_existing_volumes(updater: UpdaterSandbox):
+@pytest.mark.parametrize("previous_revision", ["20261126_01", "20261126_02", "20261126_03"])
+def test_previous_v48_releases_upgrade_preserving_existing_volumes(updater: UpdaterSandbox, previous_revision):
     state = updater.state
-    state["revision"] = "20261126_01"
+    state["revision"] = previous_revision
     updater.write_state(state)
     result = updater.run()
     assert result.returncode == 0, updater.details(result)
@@ -447,7 +448,7 @@ def test_receipt_release_upgrades_to_grouped_quotes_preserving_existing_volumes(
     updater.assert_data_untouched(revision=TARGET_REVISION)
     backup = next(updater.backups.iterdir())
     assert (backup / "revisao-final.txt").read_text() == (
-        f"REVISAO_ANTERIOR=20261126_01\nREVISAO_FINAL={TARGET_REVISION}\n"
+        f"REVISAO_ANTERIOR={previous_revision}\nREVISAO_FINAL={TARGET_REVISION}\n"
     )
 
 
@@ -460,3 +461,10 @@ def test_unknown_database_revision_is_rejected_before_build_or_stop(updater: Upd
     assert "nenhuma migracao foi executada" in result.stderr
     assert not updater.compose_events("build") and not updater.compose_events("stop")
     updater.assert_old_application(revision="unexpected_revision")
+
+
+def test_same_major_version_with_stale_release_marker_is_rejected_and_rolled_back(updater: UpdaterSandbox):
+    result = updater.run('gateway-stale-release')
+    assert result.returncode != 0, updater.details(result)
+    updater.assert_old_application(revision=TARGET_REVISION)
+    assert 'RETORNO_APLICACAO_ANTERIOR=OK' in result.stdout

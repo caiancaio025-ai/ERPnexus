@@ -41,6 +41,8 @@ async def context():
         supplier = Supplier(name="Fornecedor dos testes", origin="national")
         db.add_all([user, supplier])
         await db.flush()
+        from inventory_test_catalog import receipt_catalog_rows
+        db.add_all(receipt_catalog_rows(user_id=user.id))
         equipment = LaboratoryEquipment(company_code="universo_eletronica",
                                         customer_name="Cliente", created_by=user.id)
         db.add(equipment)
