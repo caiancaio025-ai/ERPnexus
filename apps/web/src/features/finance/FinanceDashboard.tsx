@@ -20,7 +20,7 @@ import { CashFlowChart, CompositionDonut } from "./components/FinanceCharts";
 import type { AuthUser } from "../auth/AuthCard";
 import type {
   AuditEvent, BillingConfirmation, CompanyCode, CompanyFilter, DateBasis, EntryStatus, EntryType, ExpenseKind,
-  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables, WorkOrderBillingDraft,
+  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, IncomeTotals, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables, WorkOrderBillingDraft,
 } from "./types";
 import "./finance.css";
 
@@ -108,18 +108,20 @@ const dateBasisLabels: Record<DateBasis, string> = {
 };
 
 
+function IncomePeriodSummary({ totals, count, periodLabel }: { totals: IncomeTotals; count: number; periodLabel: string }) {
+  return <>
+    <section className="finance-kpis finance-kpis--classic">
+      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(totals.amount)}</strong><small>{count} receitas · {periodLabel}</small></article>
+      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(totals.settled)}</strong><small>Receitas já baixadas</small></article>
+      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(totals.pending)}</strong><small>A receber no período</small></article>
+      <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(totals.overdue)}</strong><small>Receitas vencidas e pendentes</small></article>
+    </section>
+  </>;
+}
+
 function FinancePeriodSummary({ view, summary, periodLabel }: { view: FinanceView; summary: FinanceSummary; periodLabel: string }) {
   const overdueIncome = summary.overdue_income;
   const overdueExpense = summary.overdue_expense;
-
-  if (view === "income") return <>
-    <section className="finance-kpis finance-kpis--classic">
-      <article className="finance-kpi finance-kpi--neutral"><span>Total filtrado</span><strong>{money(summary.period_income)}</strong><small>{summary.period_income_count} receitas · {periodLabel}</small></article>
-      <article className="finance-kpi finance-kpi--positive"><span>Efetivado</span><strong>{money(summary.settled_income)}</strong><small>Receitas já baixadas</small></article>
-      <article className="finance-kpi finance-kpi--warning"><span>Em aberto</span><strong>{money(summary.pending_income)}</strong><small>A receber no período</small></article>
-      <article className="finance-kpi finance-kpi--negative"><span>Atrasado</span><strong>{money(overdueIncome)}</strong><small>Receitas vencidas e pendentes</small></article>
-    </section>
-  </>;
 
   if (view === "expense") return <>
     <section className="finance-kpis finance-kpis--classic">
@@ -215,6 +217,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [entries, setEntries] = useState<FinancialEntry[]>([]); const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [entryPage, setEntryPage] = useState(1);
   const [entryPagination, setEntryPagination] = useState({ total: 0, pages: 0, pageSize: 50 });
+  const [incomeTotals, setIncomeTotals] = useState<IncomeTotals | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const [search, setSearch] = useState("");
   const [serverSearch, setServerSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EntryStatus | "overdue" | "all">("all");
@@ -347,21 +352,23 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     const requestId = ++requestSequence.current;
     if (!startDate || !endDate) return;
     if (endDate < startDate) {
-      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 }); setError("A data final não pode ser anterior à data inicial.");
+      setIncomeTotals(null); setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 }); setError("A data final não pode ser anterior à data inicial.");
       return;
     }
     setLoading(true); setError("");
     const scope = queryScope(company, startDate, endDate, dateBasis);
     const isLedger = view === "income" || view === "expense";
-    const entryQuery = `${scope}&entry_type=${view === "income" ? "income" : "expense"}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${statusFilter === "overdue" ? "&overdue=true" : ""}${serverSearch ? `&search=${encodeURIComponent(serverSearch)}` : ""}&page=${entryPage}&page_size=50`;
+    const customerQuery = view === "income" && customerFilter ? `&customer_name=${encodeURIComponent(customerFilter)}` : "";
+    const entryQuery = `${scope}&entry_type=${view === "income" ? "income" : "expense"}${statusFilter !== "all" && statusFilter !== "overdue" ? `&status=${statusFilter}` : ""}${statusFilter === "overdue" ? "&overdue=true" : ""}${serverSearch ? `&search=${encodeURIComponent(serverSearch)}` : ""}${customerQuery}&page=${entryPage}&page_size=50`;
     try {
       const [nextSummary, nextEntries] = await Promise.all([
-        apiClient.request<FinanceSummary>(`/api/finance/summary?${scope}`),
+        view === "income" ? null : apiClient.request<FinanceSummary>(`/api/finance/summary?${scope}`),
         isLedger
           ? apiClient.request<FinancialEntryPage>(`/api/finance/entries?${entryQuery}`)
           : Promise.resolve<FinancialEntryPage>({ items: [], page: 1, page_size: 50, total: 0, pages: 0 }),
       ]);
       if (requestId !== requestSequence.current) return;
+      setIncomeTotals(nextEntries.income_totals ?? null);
       setSummary(nextSummary);
       setEntries(nextEntries.items);
       setEntryPagination({ total: nextEntries.total, pages: nextEntries.pages, pageSize: nextEntries.page_size });
@@ -369,14 +376,20 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       if (view === "audit") setAudit(await apiClient.request<AuditEvent[]>(`/api/finance/audit?start_date=${startDate}&end_date=${endDate}`));
     } catch (reason) {
       if (requestId !== requestSequence.current) return;
-      setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 });
+      setIncomeTotals(null); setSummary(null); setEntries([]); setEntryPagination({ total: 0, pages: 0, pageSize: 50 });
       setError(reason instanceof Error ? reason.message : "Não foi possível concluir a operação.");
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
   }
-  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter, serverSearch, entryPage]);
+  useEffect(() => { void loadData(); }, [company, startDate, endDate, dateBasis, view, statusFilter, serverSearch, customerFilter, entryPage]);
   useEffect(() => { setEntryPage(1); }, [company, startDate, endDate, dateBasis, view, statusFilter]);
+  useEffect(() => {
+    const term = customerName.trim();
+    if (!term) { setCustomerFilter(""); setEntryPage(1); return; }
+    const timer = window.setTimeout(() => { setCustomerFilter(term); setEntryPage(1); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [customerName]);
   useEffect(() => {
     const term = search.trim();
     // Ao apagar a pesquisa, remove o filtro do servidor imediatamente. Isso
@@ -775,6 +788,10 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <label className="filter-start"><small>Data inicial</small><input type="date" value={startDate} onChange={(e) => manualStart(e.target.value)} /></label>
           <label className="filter-end"><small>Data final</small><input type="date" value={endDate} min={startDate || undefined} onChange={(e) => manualEnd(e.target.value)} /></label>
           <label className="filter-basis"><small>Base da data</small><select value={dateBasis} onChange={(e) => setDateBasis(e.target.value as DateBasis)}><option value="posting">Competência / lançamento</option><option value="issue">Emissão</option><option value="due">Vencimento</option><option value="settlement">Baixa</option></select></label>
+          {view === "income" && <label style={{ gridColumn: "1 / -1" }}>
+            <small>Nome do cliente</small>
+            <input type="search" placeholder="Filtrar pelo nome do cliente" maxLength={100} value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+          </label>}
         </div>
       </section>
       <section className="finance-period-audit">
@@ -784,7 +801,8 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       {error && <div className="finance-toast" role="alert"><TriangleAlert size={18}/><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar"><X size={16}/></button></div>}
       {loading && <div className="finance-filter-loading">Atualizando período…</div>}
 
-      {summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
+      {view === "income" && incomeTotals && !loading && <IncomePeriodSummary totals={incomeTotals} count={entryPagination.total} periodLabel={periodLabel} />}
+      {view !== "income" && summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
       {linkedWorkOrderId > 0 && <section className="finance-linked-order">
         {linkedReceivablesLoading && <p>Consultando todas as receitas e parcelas desta OS…</p>}
         {linkedReceivables && <>
