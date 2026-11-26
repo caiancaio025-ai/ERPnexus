@@ -9,6 +9,8 @@ import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
 import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import { useLocation, useNavigate } from "react-router-dom";
 import { monthlyInstallmentDates, splitInstallmentAmounts } from "./installmentPlan";
+import { WorkOrderBillingSelector } from "./components/WorkOrderBillingSelector";
+import { billingDraft, billingTotal, suggestedExitInvoice, validateBillingSelection } from "./batchBilling";
 
 import { apiClient } from "../../shared/api/apiClient";
 import { moneyInput } from "../../shared/forms/moneyInput";
@@ -16,7 +18,7 @@ import { CashFlowChart, CompositionDonut } from "./components/FinanceCharts";
 import type { AuthUser } from "../auth/AuthCard";
 import type {
   AuditEvent, BillingConfirmation, BillingReadiness, CompanyCode, CompanyFilter, DateBasis, EntryStatus, EntryType, ExpenseKind,
-  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables,
+  FinanceDateBounds, FinanceEvent, FinanceStatus, FinanceSummary, FinanceWorkOrderOption, FinancialEntry, FinancialEntryPage, FinancialPeriodClosure, InvoiceType, WorkOrderReceivables, WorkOrderBillingDraft, BillingBatchResult,
 } from "./types";
 import "./finance.css";
 
@@ -216,12 +218,15 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   const [installments, setInstallments] = useState<InstallmentDraft[]>(() => initialInstallments(currentDate()));
   const [scheduleEditor, setScheduleEditor] = useState<ScheduleEditor | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null); const [saving, setSaving] = useState(false);
-  const [createRequestKey, setCreateRequestKey] = useState(() => crypto.randomUUID());
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [workOrders, setWorkOrders] = useState<FinanceWorkOrderOption[]>([]);
-  const [workOrderSearch, setWorkOrderSearch] = useState("");
-  const [billingReadiness, setBillingReadiness] = useState<BillingReadiness | null>(null);
   const [billingConfirmation, setBillingConfirmation] = useState<BillingConfirmation>(emptyBillingConfirmation());
+  const [billingOrders, setBillingOrders] = useState<WorkOrderBillingDraft[]>([]);
+  const [billingResolving, setBillingResolving] = useState(false);
+  const [exitInvoice, setExitInvoice] = useState("");
+  const [exitInvoiceEdited, setExitInvoiceEdited] = useState(false);
+  const [batchResult, setBatchResult] = useState<BillingBatchResult | null>(null);
+  const financeSavePending = useRef(false);
+  const createSignature = useRef<{ body: string; key: string } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const requestSequence = useRef(0);
@@ -290,7 +295,6 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       amount: group.remaining_to_issue != null && Number(group.remaining_to_issue) > 0
         ? Number(group.remaining_to_issue).toFixed(2).replace(".", ",") : "",
     });
-    setWorkOrderSearch(`${group.work_order_number} · ${group.customer_name}`);
   }
 
   function distributeInstallments() {
@@ -377,32 +381,64 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   }, [company, dateBasis]);
 
   useEffect(() => {
-    if (!modalOpen || form.entry_type !== "income") return;
-    const term = workOrderSearch.trim();
-    if (term.length < 2) { setWorkOrders([]); return; }
-    const timer = window.setTimeout(() => {
-      apiClient.request<FinanceWorkOrderOption[]>(`/api/finance/work-orders?company_code=${form.company_code}&search=${encodeURIComponent(term)}`)
-        .then(setWorkOrders)
-        .catch((reason: Error) => setError(reason.message));
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [modalOpen, form.entry_type, form.company_code, workOrderSearch]);
+    if (!exitInvoiceEdited) setExitInvoice(suggestedExitInvoice(form.nfse_number, form.nfe_number));
+  }, [form.nfse_number, form.nfe_number, exitInvoiceEdited]);
+
+  // Reopen the saved link using exact IDs, with its current OS version.
+  useEffect(() => {
+    if (!modalOpen || form.entry_type !== "income" || !form.work_order_id || billingOrders.some(row => row.order.id === Number(form.work_order_id))) return;
+    let active = true;
+    setBillingResolving(true);
+    void apiClient.get<FinanceWorkOrderOption[]>(`/finance/work-orders?ids=${form.work_order_id}`).then(rows => {
+      if (!active) return;
+      const order = rows.find(row => row.id === Number(form.work_order_id));
+      if (!order) throw new Error("A OS vinculada não está disponível para faturamento. Confira o cadastro no Laboratório.");
+      const stored = (selected?.billing_compliance?.confirmation ?? billingConfirmation) as Partial<BillingConfirmation>;
+      setBillingOrders([{ ...billingDraft(order), amount: form.amount, confirmation: { ...emptyBillingConfirmation(), ...stored } }]);
+    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Não foi possível consultar a OS vinculada."); })
+      .finally(() => { if (active) setBillingResolving(false); });
+    return () => { active = false; };
+  }, [modalOpen, form.work_order_id, form.entry_type, selected?.id]);
 
   useEffect(() => {
-    if (!modalOpen || form.entry_type !== "income" || !form.work_order_id) { setBillingReadiness(null); return; }
-    apiClient.request<BillingReadiness>(`/api/finance/work-orders/${form.work_order_id}/billing-readiness`)
-      .then((readiness) => {
-        setBillingReadiness(readiness);
-        const order = workOrders.find((item) => item.id === Number(form.work_order_id));
-        if (order) setForm((current) => ({
-          ...current,
-          counterparty_name: current.counterparty_name || order.customer_name,
-          description: current.description || `Serviço de laboratório — ${order.number}`,
-          amount: current.amount || (order.approved_value ? String(order.approved_value).replace(".", ",") : ""),
-        }));
-      })
-      .catch((reason: Error) => setError(reason.message));
-  }, [modalOpen, form.entry_type, form.work_order_id, workOrders]);
+    const raw = new URLSearchParams(route.search).get("faturar_os");
+    if (!raw || openedDeepLink.current === route.search) return;
+    const ids = [...new Set(raw.split(",").map(Number))];
+    if (!ids.length || ids.length > 50 || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) { setError("Seleção de OS inválida."); return; }
+    let active = true;
+    setBillingResolving(true);
+    void apiClient.get<FinanceWorkOrderOption[]>(`/finance/work-orders?ids=${ids.join(",")}`).then(orders => {
+      if (!active) return;
+      if (orders.length !== ids.length) throw new Error("Uma das OS selecionadas não está disponível. Atualize a seleção no Laboratório.");
+      const rows = ids.map(id => billingDraft(orders.find(order => order.id === id)!));
+      if (rows.some(row => row.order.company_code !== rows[0].order.company_code) || (rows.length > 1 && (!rows[0].order.customer_id || rows.some(row => row.order.customer_id !== rows[0].order.customer_id)))) throw new Error("Selecione OS da mesma empresa e do mesmo cadastro de cliente.");
+      openedDeepLink.current = route.search;
+      openNew("income");
+      setCompany(rows[0].order.company_code); setView("income");
+      setBillingOrders(rows);
+      setForm({ ...initialForm(rows[0].order.company_code, "income"), work_order_id: rows.length === 1 ? String(rows[0].order.id) : "", counterparty_name: rows[0].order.customer_name,
+        description: `Serviços de laboratório — ${rows.map(row => row.order.number).join(", ")}`, amount: billingTotal(rows).toFixed(2).replace(".", ",") });
+    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Não foi possível abrir as OS selecionadas."); })
+      .finally(() => { if (active) setBillingResolving(false); });
+    return () => { active = false; };
+  }, [route.search]);
+
+  function changeBillingOrders(next: WorkOrderBillingDraft[]) {
+    const rows = billingOrders.length === 1 && next.length > 1
+      ? next.map(row => row.order.id === billingOrders[0].order.id ? { ...row, amount: form.amount } : row)
+      : next;
+    setBillingOrders(rows);
+    setForm(current => ({ ...current, work_order_id: rows.length === 1 ? String(rows[0].order.id) : "",
+      counterparty_name: rows[0]?.order.customer_name || current.counterparty_name,
+      description: !current.description || current.description.startsWith("Serviço") ? (rows.length ? `Serviços de laboratório — ${rows.map(row => row.order.number).join(", ")}` : "") : current.description,
+      amount: rows.length > 1 ? billingTotal(rows).toFixed(2).replace(".", ",") : rows.length === 1 && (billingOrders.length !== 1 || billingOrders[0].order.id !== rows[0].order.id) ? rows[0].amount : current.amount }));
+    if (rows.length > 1) setAttachment(null);
+  }
+
+  function requestKey(body: string) {
+    if (!createSignature.current || createSignature.current.body !== body) createSignature.current = { body, key: crypto.randomUUID() };
+    return createSignature.current.key;
+  }
 
   const filteredEvents = (events: FinanceEvent[]) => eventFilter === "all" ? events : events.filter((item) => item.status === eventFilter);
   const visibleEntries = entries;
@@ -420,9 +456,10 @@ export function FinanceDashboard({ user, onLogout }: Props) {
 
   function openNew(type: EntryType) {
     const nextForm = initialForm(selectedCompany, type);
-    setSelected(null); setScheduleEditor(null); setCreateRequestKey(crypto.randomUUID()); setForm(nextForm); setEntryMode("single");
-    setInstallments(initialInstallments(nextForm.due_date)); setWorkOrderSearch(""); setWorkOrders([]);
-    setBillingConfirmation(emptyBillingConfirmation()); setBillingReadiness(null); setAttachment(null); setModalOpen(true);
+    setSelected(null); setScheduleEditor(null); createSignature.current = null; setForm(nextForm); setEntryMode("single");
+    setBillingOrders([]); setBillingResolving(false); setExitInvoice(""); setExitInvoiceEdited(false); setBatchResult(null);
+    setInstallments(initialInstallments(nextForm.due_date));
+    setBillingConfirmation(emptyBillingConfirmation()); setAttachment(null); setModalOpen(true);
   }
   async function openEntry(id: number) { const entry = await apiClient.request<FinancialEntry>(`/api/finance/entries/${id}`); setSelected(entry); setForm({
     entry_type: entry.entry_type, company_code: entry.company_code, invoice_type: entry.invoice_type ?? "",
@@ -431,10 +468,11 @@ export function FinanceDashboard({ user, onLogout }: Props) {
     due_date: entry.due_date, bank_name: entry.bank_name, expense_kind: entry.expense_kind ?? "fixed",
     document_number: entry.document_number ?? "", payment_code: entry.payment_code ?? "", notes: entry.notes ?? "", work_order_id: entry.work_order_id ? String(entry.work_order_id) : "",
   });
+    setBillingOrders([]); setExitInvoice(""); setExitInvoiceEdited(false);
     const stored = (entry.billing_compliance?.confirmation ?? {}) as Partial<BillingConfirmation>;
     setBillingConfirmation({ ...emptyBillingConfirmation(), ...stored });
     setEntryMode("single"); setScheduleEditor(null); setInstallments(initialInstallments(entry.due_date));
-    setWorkOrderSearch(""); setWorkOrders([]); setAttachment(null); setModalOpen(true); }
+     setAttachment(null); setModalOpen(true); }
 
   async function openScheduleEditor() {
     if (!selected?.obligation_id || selected.entry_type !== "income") return;
@@ -541,7 +579,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
   }
 
   async function saveEntry(event: React.FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault();
+    if (financeSavePending.current || billingResolving) return;
+    financeSavePending.current = true; setSaving(true); setError("");
     try {
       const invoiceType = form.nfse_number.trim() && !form.nfe_number.trim()
         ? "nfse"
@@ -550,6 +590,40 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           : null;
       const totalAmount = parseAmount(form.amount);
       if (!Number.isFinite(totalAmount) || totalAmount <= 0) throw new Error("Informe um valor válido maior que zero.");
+      const linkedRows = form.entry_type === "income" ? billingOrders : [];
+      const invoiceForLab = exitInvoice.trim() || suggestedExitInvoice(form.nfse_number, form.nfe_number);
+      if (linkedRows.length) {
+        const selectionError = validateBillingSelection(linkedRows.length === 1 ? [{ ...linkedRows[0], amount: form.amount }] : linkedRows, !selected && entryMode === "installments" ? installments.length : 1);
+        if (selectionError) throw new Error(selectionError);
+        if (form.nfse_number.trim() && form.nfe_number.trim() && !invoiceForLab) throw new Error("Informe qual número deve constar como NF de saída nas OS.");
+      } else if (form.entry_type === "income" && form.work_order_id) throw new Error("Aguarde a confirmação dos dados da OS antes de salvar.");
+
+      if (linkedRows.length > 1) {
+        if (selected) throw new Error("Para faturar várias OS, crie uma nova receita.");
+        if (!form.nfse_number.trim() && !form.nfe_number.trim()) throw new Error("Informe a NFS-e ou a NF-e deste faturamento.");
+        if (attachment) throw new Error("Salve o faturamento e anexe os documentos na parcela de cada OS.");
+        const rows = entryMode === "installments" ? installments : [{ installment_number: 1, due_date: form.due_date, amount: form.amount, payment_code: "", notes: "" }];
+        const normalized = rows.map((row, index) => {
+          const amount = parseAmount(row.amount);
+          if (!row.due_date || !Number.isFinite(amount) || amount <= 0) throw new Error(`Confira o vencimento e o valor da parcela ${index + 1}.`);
+          if (Math.round(amount * 100) < linkedRows.length) throw new Error(`A parcela ${index + 1} precisa comportar pelo menos R$ 0,01 por OS.`);
+          return { installment_number: index + 1, due_date: row.due_date, amount, payment_code: row.payment_code.trim() || null, notes: row.notes.trim() || null };
+        });
+        if (Math.abs(normalized.reduce((sum, row) => sum + row.amount, 0) - totalAmount) > .009) throw new Error("A soma das parcelas precisa ser igual ao valor total das OS.");
+        const body = JSON.stringify({
+          entry_type: "income", company_code: form.company_code, invoice_type: invoiceType, series: form.series || null,
+          nfse_number: form.nfse_number.trim() || null, nfe_number: form.nfe_number.trim() || null,
+          counterparty_name: form.counterparty_name, description: form.description, total_amount: totalAmount,
+          issue_date: form.issue_date, posting_date: form.issue_date, bank_name: form.bank_name,
+          expense_kind: null, account_id: null, category_id: null, document_number: null, notes: form.notes || null,
+          exit_invoice: invoiceForLab, installments: normalized,
+          work_orders: linkedRows.map(row => ({ work_order_id: row.order.id, amount: parseAmount(row.amount), version: row.order.version, billing_confirmation: row.confirmation })),
+        });
+        const result = await apiClient.request<BillingBatchResult>("/finance/billing-batches", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(body) }, body });
+        setBatchResult(result); setModalOpen(false); setView("income");
+        await loadData(); refreshLinkedReceivables();
+        return;
+      }
 
       if (!selected && entryMode === "installments") {
         if (installments.length < 2) throw new Error("Informe pelo menos duas parcelas.");
@@ -590,12 +664,13 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           document_number: form.entry_type === "expense" ? form.document_number || null : null,
           notes: form.notes || null,
           work_order_id: form.entry_type === "income" && form.work_order_id ? Number(form.work_order_id) : null,
-          billing_confirmation: form.entry_type === "income" && form.work_order_id ? billingConfirmation : null,
+          billing_confirmation: form.entry_type === "income" && form.work_order_id ? (billingOrders[0]?.confirmation ?? billingConfirmation) : null,
+          ...(form.entry_type === "income" && form.work_order_id ? { exit_invoice: invoiceForLab || null, work_order_version: billingOrders[0]?.order.version } : {}),
           installments: normalizedInstallments,
         });
         await apiClient.request("/api/finance/obligations", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Idempotency-Key": createRequestKey },
+          headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey(obligationBody) },
           body: obligationBody,
         });
         setModalOpen(false); await loadData(); refreshLinkedReceivables();
@@ -618,13 +693,14 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         payment_code: form.payment_code || null,
         notes: form.notes || null,
         work_order_id: form.entry_type === "income" && form.work_order_id ? Number(form.work_order_id) : null,
-        billing_confirmation: form.entry_type === "income" && form.work_order_id ? billingConfirmation : null,
+        billing_confirmation: form.entry_type === "income" && form.work_order_id ? (billingOrders[0]?.confirmation ?? billingConfirmation) : null,
+        ...(form.entry_type === "income" && form.work_order_id ? { exit_invoice: invoiceForLab || null, work_order_version: billingOrders[0]?.order.version } : {}),
       });
       const entry = await apiClient.request<FinancialEntry>(selected ? `/api/finance/entries/${selected.id}` : "/api/finance/entries", {
         method: selected ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(!selected ? { "Idempotency-Key": createRequestKey } : {}),
+          ...(!selected ? { "Idempotency-Key": requestKey(body) } : {}),
         },
         body,
       });
@@ -647,7 +723,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       }
       setModalOpen(false); await loadData(); refreshLinkedReceivables();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao salvar."); }
-    finally { setSaving(false); }
+    finally { financeSavePending.current = false; setSaving(false); }
   }
   async function removeEntry() {
     if (!selected || !confirm("Excluir este lançamento? A ação ficará registrada na auditoria.")) return;
@@ -716,6 +792,7 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       </section>
       {error && <div className="finance-toast" role="alert"><TriangleAlert size={18}/><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar"><X size={16}/></button></div>}
       {loading && <div className="finance-filter-loading">Atualizando período…</div>}
+      {batchResult && <section className="billing-batch-success" role="status"><strong>Faturamento concluído: {batchResult.work_orders.length} OS · {money(Number(batchResult.total_amount))}</strong><p>NF de saída {batchResult.exit_invoice} registrada no Laboratório. Consulte as receitas e parcelas de cada OS.</p><div>{batchResult.work_orders.map(row => <button type="button" key={row.work_order_id} onClick={() => navigate(`/financeiro?os=${row.work_order_id}`)}>{row.work_order_number} · {money(Number(row.amount))}</button>)}<button type="button" onClick={() => setBatchResult(null)}>Fechar aviso</button></div></section>}
 
       {summary && !loading && <FinancePeriodSummary view={view} summary={summary} periodLabel={periodLabel} />}
       {linkedWorkOrderId > 0 && <section className="finance-linked-order">
@@ -872,9 +949,10 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       {view === "audit" && <section className="ledger-panel"><header><div><span>RASTREABILIDADE</span><h2>Auditoria financeira</h2><p>Usuário, data, hora e alteração executada.</p></div></header><div className="audit-list">{audit.map((item) => <article key={item.id}><span className={`audit-action ${item.action}`}>{actionLabels[item.action] ?? item.action}</span><div><strong>{item.description}</strong><small>{item.user_name} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(item.created_at))}</small></div><span>#{item.entity_id}</span></article>)}{!audit.length && <p className="finance-empty">Nenhum evento de auditoria no período.</p>}</div></section>}
     </main>
 
-    {modalOpen && <div className="finance-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setModalOpen(false)}><section className="finance-modal"><header><div><span>{selected ? "DETALHES DO LANÇAMENTO" : "NOVO REGISTRO"}</span><h2>{form.entry_type === "income" ? "Receita financeira" : "Saída financeira"}</h2></div><button onClick={() => setModalOpen(false)}><X/></button></header>
+    {modalOpen && <div className="finance-modal-backdrop" onMouseDown={(e) => !saving && e.target === e.currentTarget && setModalOpen(false)}><section className="finance-modal"><header><div><span>{selected ? "DETALHES DO LANÇAMENTO" : "NOVO REGISTRO"}</span><h2>{form.entry_type === "income" ? "Receita financeira" : "Saída financeira"}</h2></div><button disabled={saving} onClick={() => setModalOpen(false)}><X/></button></header>
       {selected && <div className="entry-actions"><button className={selected.status === "pending" ? "settle" : "reverse"} onClick={toggleSettlement}>{selected.status === "pending" ? <><CheckCircle2 size={17}/>Dar baixa</> : <><RotateCcw size={17}/>Desfazer baixa</>}</button>{selected.attachment_name && <button type="button" onClick={() => setPreviewOpen(true)}><Eye size={17}/>Visualizar anexo</button>}{selected.entry_type === "income" && selected.work_order_id && <><button type="button" className="finance-entry-os-link" onClick={() => openLinkedWorkOrder(selected.work_order_id!, "quote")} title="Abrir orçamento técnico do equipamento desta OS"><FileSearch size={17}/> Ver orçamento da OS</button><button type="button" className="finance-entry-os-link" onClick={() => openLinkedWorkOrder(selected.work_order_id!, "financial")} title="Ver valor orçado e valor aprovado da OS"><CircleDollarSign size={17}/> Ver valor aprovado</button></>}{!selected.obligation_id && <button className="delete" onClick={removeEntry}><Trash2 size={17}/>Excluir</button>}</div>}
-      <form onSubmit={saveEntry}><div className="entry-type-toggle"><button type="button" className={form.entry_type === "income" ? "income active" : "income"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "income"); setForm(next); setInstallments(initialInstallments(next.due_date)); } }}>Entrada · Receita</button><button type="button" className={form.entry_type === "expense" ? "expense active" : "expense"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "expense"); setForm(next); setInstallments(initialInstallments(next.due_date)); } }}>Saída · Despesa</button></div>
+      {error && <p role="alert" className="billing-orders-error finance-modal-error">{error}</p>}
+      <form onSubmit={saveEntry}><div className="entry-type-toggle"><button type="button" className={form.entry_type === "income" ? "income active" : "income"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "income"); setForm(next); setBillingOrders([]); setInstallments(initialInstallments(next.due_date)); } }}>Entrada · Receita</button><button type="button" className={form.entry_type === "expense" ? "expense active" : "expense"} onClick={() => { if (!selected) { const next = initialForm(form.company_code, "expense"); setForm(next); setBillingOrders([]); setInstallments(initialInstallments(next.due_date)); } }}>Saída · Despesa</button></div>
         {!selected && <div className="finance-entry-mode" role="group" aria-label="Forma de lançamento"><button type="button" className={entryMode === "single" ? "active" : ""} onClick={() => { setEntryMode("single"); setAttachment(null); }}>Lançamento único</button><button type="button" className={entryMode === "installments" ? "active" : ""} onClick={() => { setEntryMode("installments"); setAttachment(null); setInstallments((current) => current.length >= 2 ? current : initialInstallments(form.due_date)); }}>Parcelado</button></div>}
         {selected?.obligation_id && <div className="finance-installment-lock"><ShieldCheck size={18}/><span><strong>Parcela vinculada a uma obrigação financeira</strong><small>Parcela {selected.installment_number ?? "—"}. Você pode corrigir os dados financeiros e também cliente/fornecedor, descrição, emissão/competência e documento fiscal. Dados compartilhados são atualizados em todas as parcelas da obrigação. Empresa, tipo, vínculo da O.S., número da parcela e exclusão permanecem protegidos.</small></span></div>}
         {selected?.obligation_id && selected.entry_type === "income" && <div className="finance-schedule-actions">
@@ -891,31 +969,14 @@ export function FinanceDashboard({ user, onLogout }: Props) {
           <button type="button" disabled={saving} className="finance-primary" onClick={() => void saveScheduleEditor()}>Salvar parcelamento</button>
           <button type="button" disabled={saving} className="finance-schedule-delete" onClick={() => void deleteScheduleEditor()}><Trash2 size={15}/> Excluir parcelamento inteiro</button></div>
         </section>}
-        <fieldset className="finance-entry-fields">
-        <div className="form-row"><label>Empresa<select disabled={Boolean(selected?.obligation_id)} value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
-        {form.entry_type === "income" && <section className="billing-workflow-card">
-          <header><div><span>INTEGRAÇÃO COM A OS</span><strong>Conformidade de faturamento</strong></div><ShieldCheck size={22}/></header>
-          <div className="finance-os-search"><label>Buscar Ordem de Serviço<div className="finance-os-searchbox"><Search size={17}/><input disabled={Boolean(selected?.obligation_id)} value={workOrderSearch} onChange={(e) => setWorkOrderSearch(e.target.value)} placeholder="Digite OS, cliente ou série..." /></div></label>
-            {form.work_order_id && billingReadiness && <div className="finance-os-selected"><div><small>OS SELECIONADA</small><strong>{billingReadiness.work_order_number} · {billingReadiness.customer_name}</strong></div><button type="button" disabled={Boolean(selected?.obligation_id)} onClick={() => { setForm({ ...form, work_order_id: "" }); setBillingReadiness(null); setBillingConfirmation(emptyBillingConfirmation()); setWorkOrderSearch(""); setWorkOrders([]); }}>Trocar OS</button></div>}
-            {!form.work_order_id && workOrderSearch.trim().length >= 2 && <div className="finance-os-results">{workOrders.map((order) => <button type="button" key={order.id} onClick={() => { setForm({ ...form, work_order_id: String(order.id) }); setWorkOrderSearch(`${order.number} · ${order.customer_name}`); setBillingConfirmation(emptyBillingConfirmation()); }}><strong>{order.number}</strong><span>{order.customer_name} · {order.equipment_label}</span>{order.approved_value != null && <small>{money(Number(order.approved_value))}</small>}</button>)}{!workOrders.length && <div>Nenhuma OS encontrada.</div>}</div>}
-            {!form.work_order_id && workOrderSearch.trim().length < 2 && <small className="finance-os-hint">Digite pelo menos 2 caracteres para localizar a OS. Deixe em branco para receita sem vínculo.</small>}
-          </div>
-          {billingReadiness && <div className="billing-readiness">
-            <div className="billing-readiness__summary"><span><b>{billingReadiness.work_order_number}</b><small>{billingReadiness.customer_name}</small></span>{billingReadiness.approved_value != null && <strong>{money(Number(billingReadiness.approved_value))}</strong>}</div>
-            {(billingReadiness.billing_instructions || billingReadiness.financial_notes) && <div className="billing-guidance"><TriangleAlert size={16}/><span>{billingReadiness.billing_instructions || billingReadiness.financial_notes}</span></div>}
-            <div className="billing-checklist">
-              {billingReadiness.items.some((item) => item.key === "purchase_order") && <label><span>PO / pedido de compra {billingReadiness.items.find((item) => item.key === "purchase_order")?.required ? "*" : ""}</span><input value={billingConfirmation.purchase_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, purchase_order_number: e.target.value })} placeholder="Número da PO"/></label>}
-              {billingReadiness.items.some((item) => item.key === "customer_order") && <label><span>OS / pedido do cliente {billingReadiness.items.find((item) => item.key === "customer_order")?.required ? "*" : ""}</span><input value={billingConfirmation.customer_order_number} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, customer_order_number: e.target.value })} placeholder="Referência do cliente"/></label>}
-              {billingReadiness.items.some((item) => item.key === "measurement") && <label><span>Medição {billingReadiness.items.find((item) => item.key === "measurement")?.required ? "*" : ""}</span><input value={billingConfirmation.measurement_reference} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, measurement_reference: e.target.value })} placeholder="Número / referência"/></label>}
-              {billingReadiness.items.filter((item) => ["service_report","portal","invoice_email","xml_email"].includes(item.key)).map((item) => { const field = item.key === "service_report" ? "service_report_confirmed" : item.key === "portal" ? "portal_submitted" : item.key === "invoice_email" ? "invoice_email_confirmed" : "xml_email_confirmed"; return <label className="billing-check" key={item.key}><input type="checkbox" checked={Boolean(billingConfirmation[field as keyof BillingConfirmation])} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, [field]: e.target.checked })}/><span><strong>{item.label}{item.required ? " *" : ""}</strong>{item.configured_value && <small>{item.configured_value}</small>}</span></label>; })}
-            </div>
-            {billingReadiness.portal_url && <label>Protocolo / comprovante do portal<input value={billingConfirmation.portal_protocol} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, portal_protocol: e.target.value })} placeholder="Opcional: protocolo, chamado ou referência"/></label>}
-            <label>Observação do checklist<textarea rows={2} value={billingConfirmation.notes} onChange={(e) => setBillingConfirmation({ ...billingConfirmation, notes: e.target.value })} placeholder="Exceções, observações e evidências do faturamento"/></label>
-          </div>}
-        </section>}
+        <fieldset className="finance-entry-fields" disabled={saving}>
+        <div className="form-row"><label>Empresa<select disabled={Boolean(selected?.obligation_id)} value={form.company_code} onChange={(e) => { const code = e.target.value as CompanyCode; setForm((old) => ({ ...old, company_code: code, work_order_id: "", bank_name: companies.find((item) => item.code === code)?.banks[0] ?? "" })); setBillingOrders([]); }}>{companies.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>Banco<select value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })}>{availableBanks.map((bank) => <option key={bank}>{bank}</option>)}</select></label></div>
+        {form.entry_type === "income" && <WorkOrderBillingSelector companyCode={form.company_code} value={billingOrders} onChange={changeBillingOrders} disabled={saving || billingResolving} linksLocked={Boolean(selected?.obligation_id)} allowMultiple={!selected} />}
+        {billingResolving && <p role="status">Consultando as OS selecionadas…</p>}
         <div className="form-row"><label>{form.entry_type === "income" ? "Cliente" : "Cliente / fornecedor"}<input required value={form.counterparty_name} onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}/></label>{form.entry_type === "expense" && <label>Classificação<select value={form.expense_kind} onChange={(e) => setForm({ ...form, expense_kind: e.target.value as ExpenseKind })}>{Object.entries(expenseLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>}</div>
-        <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>{!selected && entryMode === "installments" ? "Valor total" : "Valor"}<input required inputMode="decimal" placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
+        <div className="form-row"><label>Descrição<input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}/></label><label>{!selected && entryMode === "installments" ? "Valor total" : "Valor"}<input required inputMode="decimal" readOnly={billingOrders.length > 1 && form.entry_type === "income"} placeholder="0,00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}/></label></div>
         {form.entry_type === "income" && <><div className="form-row"><label>NFS-e<input value={form.nfse_number} onChange={(e) => setForm({ ...form, nfse_number: e.target.value })} placeholder="Número da NFS-e"/></label><label>NF-e<input value={form.nfe_number} onChange={(e) => setForm({ ...form, nfe_number: e.target.value })} placeholder="Número da NF-e"/></label></div><label>Série<input value={form.series} onChange={(e) => setForm({ ...form, series: e.target.value })} placeholder="Ex.: 1"/></label><small className="invoice-hint">{selected && !form.nfse_number && !form.nfe_number ? "Registro histórico sem NF: pode ser editado e salvo normalmente." : "Preencha pelo menos uma das caixas: NFS-e ou NF-e."}</small></>}
+        {form.entry_type === "income" && billingOrders.length > 0 && <label>NF de saída nas OS<input aria-label="NF de saída nas OS" value={exitInvoice} maxLength={80} onChange={event => { setExitInvoiceEdited(true); setExitInvoice(event.target.value); }} placeholder="Número que será registrado no Laboratório" /><small>Aplicada às {billingOrders.length} OS selecionadas. Notas existentes são preservadas; uma nova nota ocupa a próxima saída livre (até três).</small></label>}
         {form.entry_type === "expense" && <label>Documento / referência<input value={form.document_number} onChange={(e) => setForm({ ...form, document_number: e.target.value })}/></label>}
         <div className="form-row"><label>Data de emissão<input type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value, posting_date: e.target.value })}/></label>{(selected || entryMode === "single") && <label>Vencimento<input type="date" required value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })}/></label>}</div>
         {!selected && entryMode === "installments" && <section className="finance-installments-card">
@@ -932,11 +993,11 @@ export function FinanceDashboard({ user, onLogout }: Props) {
         </section>}
         {form.entry_type === "expense" && (selected || entryMode === "single") && <label>Chave PIX ou código do boleto<textarea rows={2} value={form.payment_code} onChange={(e) => setForm({ ...form, payment_code: e.target.value })}/></label>}
         <label>Observações<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/></label>
-        {(selected || entryMode === "single") && <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>}
-        {!selected && entryMode === "installments" && <div className="finance-installment-attachment-note"><Paperclip size={17}/><span>O parcelamento cria lançamentos independentes para baixa. Anexos devem ser incluídos depois na parcela correspondente.</span></div>}
+        {(selected || entryMode === "single") && billingOrders.length < 2 && <label className="attachment-field"><UploadCloud/><span><strong>{attachment?.name || selected?.attachment_name || "Anexar comprovante, boleto ou PDF"}</strong><small>PDF, JPG, PNG ou WEBP · até 10 MB</small></span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}/></label>}
+        {!selected && (entryMode === "installments" || billingOrders.length > 1) && <div className="finance-installment-attachment-note"><Paperclip size={17}/><span>O parcelamento cria lançamentos independentes para baixa. Anexos devem ser incluídos depois na parcela correspondente.</span></div>}
         {selected && <div className="entry-meta"><span>Status: <b>{selected.status === "pending" ? "Pendente" : "Baixado"}</b></span>{selected.obligation_id && <span>Parcela: <b>{selected.installment_number ?? "—"}</b></span>}<span>Baixa: <b>{dateBR(selected.settlement_date)}</b></span><span>Atualizado: <b>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(selected.updated_at))}</b></span></div>}
         </fieldset>
-        <footer><button type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alterações" : entryMode === "installments" ? `Salvar ${installments.length} parcelas` : "Salvar lançamento"}</button></footer>
+        <footer><button type="button" disabled={saving} onClick={() => setModalOpen(false)}>Cancelar</button><button className="finance-primary" disabled={saving || billingResolving}>{selected ? <Pencil size={17}/> : <Plus size={17}/>} {saving ? "Salvando..." : selected ? "Salvar alterações" : billingOrders.length > 1 ? `Faturar ${billingOrders.length} OS` : entryMode === "installments" ? `Salvar ${installments.length} parcelas` : "Salvar lançamento"}</button></footer>
       </form></section></div>}
     {previewOpen && selected?.attachment_name && <div className="attachment-preview-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPreviewOpen(false)}><section className="attachment-preview attachment-preview--fullscreen"><header><div><span>ANEXO DO LANÇAMENTO</span><strong>{selected.attachment_name}</strong></div><div className="attachment-preview-actions"><a href={`/api/finance/entries/${selected.id}/attachment/preview`} target="_blank" rel="noreferrer">Abrir em nova aba</a><button type="button" onClick={() => setPreviewOpen(false)} aria-label="Fechar visualização"><X/></button></div></header><div className="attachment-preview-body">{selected.attachment_mime?.startsWith("image/") ? <img src={`/api/finance/entries/${selected.id}/attachment/preview`} alt={selected.attachment_name}/> : <iframe src={`/api/finance/entries/${selected.id}/attachment/preview`} title={selected.attachment_name}/>}</div></section></div>}
   </div>;

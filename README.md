@@ -1,10 +1,10 @@
 # SÊNTICO / ERPnexus — V48
 
-V48 com correções de gravação em Compras e ordens de serviço. A atualização de **26/11/2026** acrescenta Aparência no cabeçalho e recebimento individual com quantidade da compra e códigos EST automáticos. Veja [as alterações e a validação](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md).
+V48 com correções de gravação em Compras e ordens de serviço. A atualização atual acrescenta **faturamento de várias OS, NF de saída na aba Valores e orçamento conjunto para vários equipamentos**. Veja [o funcionamento e a validação](ATUALIZACAO_V48_MULTIPLAS_OS.md). As mudanças anteriores de [aparência e recebimento individual](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md) estão mantidas.
 
 ## Experimentar esta atualização no Windows
 
-Esta versão inclui a atualização de **26/11/2026**, com as correções de aparência e recebimento e um ambiente separado para avaliação local.
+Esta versão inclui a atualização de **26/11/2026**, com faturamento de várias OS, orçamento conjunto, as correções anteriores e um ambiente separado para avaliação local.
 
 Extraia todo o ZIP em uma pasta própria, abra o Docker Desktop com containers Linux e execute **`INICIAR_TESTE_V48.cmd`**. Ele prepara um banco separado, cria um usuário de teste e abre o sistema, por padrão em **http://127.0.0.1:5185/**. O endereço final e as credenciais aparecem ao terminar. Para encerrar, use **`PARAR_TESTE_V48.cmd`**; os dados de teste ficam disponíveis na próxima abertura.
 
@@ -19,12 +19,15 @@ O projeto do teste manual é `sentico-v48-teste-local`, com volumes próprios. O
 5. Acesse **http://127.0.0.1:5184/** e pressione Ctrl+F5.
 6. Confira **http://127.0.0.1:5184/api/health/version**: deve informar `"version":"48"`.
 
-O instalador preserva o projeto operacional `sentico-v14-recuperado` e reutiliza os volumes existentes de PostgreSQL e uploads. Não remova volumes para atualizar. Esta atualização aplica a migração incremental `20261126_01`, para vincular várias unidades individuais à mesma compra, preservando os registros anteriores.
+O instalador preserva o projeto operacional `sentico-v14-recuperado` e reutiliza os volumes existentes de PostgreSQL e uploads. Não remova volumes para atualizar. Esta atualização aplica a migração incremental `20261126_02`, que acrescenta as tabelas dos orçamentos conjuntos. Se necessário, aplica antes `20261126_01`, relativa ao recebimento individual. Os registros existentes são preservados.
 
 Leia o procedimento completo em [LEIA_PRIMEIRO_SENTICO.md](LEIA_PRIMEIRO_SENTICO.md).
 
 ## Correções principais
 
+- Seleção de várias OS do mesmo cliente para faturamento, com valores e parcelas por OS.
+- NF de saída sincronizada no faturamento e três campos editáveis no Laboratório → Valores.
+- Orçamento conjunto com vários equipamentos, PDF único e histórico de revisões.
 - Aparência, nome do usuário e Sair ficam no cabeçalho; as opções de tema abrem em um painel compacto.
 - Recebimento individual usa a quantidade da compra, gera uma etiqueta EST por unidade e torna a série do fabricante opcional.
 - Compras e solicitações preservam informações não editadas e retornam corretamente o destino de estoque.
@@ -44,7 +47,7 @@ Execute **`TESTAR_SENTICO.cmd`** para repetir os testes automatizados em um banc
 
 Após adaptar os caminhos para este repositório, a suíte foi executada novamente no checkout: **665 aprovados, sete ignorados e nenhuma falha**. O build da interface e os testes JavaScript também passaram. Os resultados desta conferência têm prefixo `github-` na pasta de evidências.
 
-Os resultados da atualização de 26/11 estão no [relatório de aparência e recebimento](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md). As evidências, incluindo as da entrega inicial, estão em [validacao_v48](validacao_v48/). Os testes de navegador ficam em `apps/web/tests/browser-reliability.py` e exigem Playwright/Chromium. O ambiente Windows/Docker operacional não foi acessado durante a validação registrada.
+Os resultados atuais estão no [relatório de múltiplas OS](ATUALIZACAO_V48_MULTIPLAS_OS.md). A validação anterior está no [relatório de aparência e recebimento](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md). As evidências, incluindo as da entrega inicial, estão em [validacao_v48](validacao_v48/). Os testes de navegador ficam em `apps/web/tests/browser-reliability.py` e exigem Playwright/Chromium. O ambiente Windows/Docker operacional não foi acessado durante a validação registrada.
 
 ## Organização
 
@@ -72,7 +75,7 @@ git pull --ff-only origin main &&
 bash infra/vps/atualizar.sh
 ```
 
-Ele verifica a instalação, constrói as imagens V48, ativa manutenção temporária e faz backup. Ensaia a migração em uma cópia isolada antes de aplicá-la no banco existente; depois troca API/interface e confere os arquivos servidos. A revisão final é `20261126_01`. Em caso de falha, tenta recuperar as imagens anteriores sem restaurar ou rebaixar o banco.
+Ele verifica a instalação, constrói as imagens V48, ativa manutenção temporária e faz backup. Ensaia a migração em uma cópia isolada antes de aplicá-la no banco existente; depois troca API/interface e confere os arquivos servidos. A revisão final é `20261126_02`. Em caso de falha, tenta recuperar as imagens anteriores sem restaurar ou rebaixar o banco.
 
 Aguarde **`SENTICO_V48_ATUALIZADO=OK`**. Publicar ou baixar o código pelo Git ainda não executa essa implantação; é necessário rodar o atualizador no servidor. Veja [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md) para resultados, limitações e registros de recuperação.
 

@@ -1,0 +1,164 @@
+{
+  "atualizacao": "V48 — faturamento de várias OS, NF de saída no Laboratório e orçamento conjunto",
+  "gerado_em": "2026-11-26T10:39:03.252426-03:00",
+  "repositorio": "https://github.com/caiancaio025-ai/ERPnexus",
+  "commit_base": "ccd7a348f20d72e37536f3668abbb2165fdf3b41",
+  "versao_aplicacao": 48,
+  "revisao_banco": "20261126_02",
+  "resultado": "aprovado_nos_cenarios_executados",
+  "ambiente": {
+    "dados": "sintéticos; bancos descartáveis e isolados",
+    "postgresql": "17.12",
+    "frontend": "React StrictMode, TypeScript, Vite e Chromium/Playwright"
+  },
+  "validacao": {
+    "api_e_instalador": {
+      "tests": 754,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 7,
+      "passed": 747,
+      "seconds": 40.922,
+      "evidencia": "multiplas-os-api-instalador.xml",
+      "nao_executados": "7 testes dependem de manifestos privados da conciliação histórica, ausentes do repositório."
+    },
+    "atualizador_vps": {
+      "tests": 117,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 117,
+      "seconds": 69.457,
+      "evidencia": "multiplas-os-vps.xml",
+      "escopo": "PostgreSQL real e cenários Bash/Git com comandos Docker/HTTP controlados; nenhuma VPS acessada."
+    },
+    "bootstrap_local": {
+      "tests": 17,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 17,
+      "seconds": 4.954,
+      "evidencia": "multiplas-os-bootstrap-local.xml",
+      "escopo": "Banco novo, repetição segura, upgrade incremental de instalação pronta e recusa de banco alheio."
+    },
+    "frontend_node": {
+      "passed": 28,
+      "failed": 0,
+      "evidencia": "multiplas-os-frontend-testes.log"
+    },
+    "verificacoes_v41": {
+      "passed": 20,
+      "failed": 0,
+      "evidencia": "multiplas-os-frontend-testes.log"
+    },
+    "navegador_api_postgresql_reais": {
+      "passed": 10,
+      "page_errors": 0,
+      "server_errors": 0,
+      "evidencia": "multiplas-os-navegador-real.json"
+    },
+    "navegador_api_controlada": {
+      "passed": 8,
+      "page_errors": 0,
+      "evidencia": "multiplas-os-navegador-controlado.json"
+    },
+    "build_producao": {
+      "resultado": "aprovado",
+      "comando": "npm run build (tsc -b && vite build)",
+      "evidencia": "multiplas-os-frontend-build.log"
+    },
+    "pdf": {
+      "resultado": "revisado visualmente",
+      "amostra": "multiplas-os-exemplo-4-os.pdf",
+      "os": 4,
+      "paginas": 2,
+      "dados": "fictícios",
+      "total": "4750.00"
+    },
+    "migracao_preserva_dados": {
+      "resultado": "aprovado",
+      "teste": "apps/api/tests/test_grouped_quote_migration.py",
+      "incluido_na_suite": "api_e_instalador",
+      "metodo": "Hash e contagem de todas as tabelas anteriores, com OS, orçamento individual e receita preenchidos; exatamente quatro tabelas novas vazias; repetição de upgrade sem mudança."
+    }
+  },
+  "cenarios_principais": [
+    "Seleção de várias OS do mesmo cadastro de cliente e empresa; rejeição de mistura de clientes.",
+    "Três OS em três parcelas, centavos exatos por OS e vencimento, NF sincronizada e repetição sem duplicidade.",
+    "Preservação de NF anterior, uso do próximo campo livre e gravação manual dos três campos no Laboratório.",
+    "Criação direta de orçamento conjunto sem exigir orçamentos individuais, itens por equipamento e condições comuns.",
+    "Prévia sem alterar a OS; emissão com PDF e dados congelados; revisão posterior preservando o original.",
+    "Perda de resposta após gravação real: reconciliação por leitura, sem segunda mutação.",
+    "Conflito de edição mantém o texto local e impede sobrescrita silenciosa.",
+    "Validação de concorrência, idempotência, permissões, descontos fracionários e falha de geração de PDF.",
+    "Migração aditiva conserva os dados antigos e o bootstrap de avaliação preserva usuário, senha e cadastros."
+  ],
+  "limites_e_escopo": [
+    "Faturamento de até 50 OS; interface mantém o limite de 60 parcelas; até 1.000 lançamentos resultantes e pelo menos R$ 0,01 por parcela de cada OS.",
+    "Orçamentos conjuntos de duas a 50 OS do mesmo cliente e empresa emitente.",
+    "A VPS Hostinger não foi acessada nem atualizada nesta validação.",
+    "Docker e PowerShell não foram executados operacionalmente; os testes de instalador e atualização verificam o código e usam substitutos controlados quando necessário.",
+    "Os resultados se referem aos cenários testados; não representam execução de todas as combinações possíveis ou de dados de produção."
+  ],
+  "fontes_modificadas_sha256": {
+    "INSTALAR_SENTICO.ps1": "91776376decf14c75e54ced432590d78c0e5206d0c02f93e4959399ae53df101",
+    "apps/api/app/finance/billing_batches.py": "592a6a5886a8a457b228034fc4ae8617f169e3836b92c5be4cbfd3c8edfbfd3b",
+    "apps/api/app/finance/idempotency.py": "e12b6213752fe80e5da16d1e632a6c9fccc435fd7e33b59f56216d4f69f18141",
+    "apps/api/app/finance/router.py": "4c8c4ac5fafc4c7c24e1ce67db7896ca9196c1bdf433443396f35aaf239567c8",
+    "apps/api/app/finance/schemas.py": "5f9b496daa7ad279ac92f20aa3e8c56ce1e3773ff66e462e2a6d5c01fdf137bb",
+    "apps/api/app/laboratory/grouped_quote_pdf.py": "3c8acf9295b789e453afc525ad8058cd173a2d728f017ce782e78322c4b348b7",
+    "apps/api/app/laboratory/grouped_quote_router.py": "589025d6a121856e27a77820170f2c6401131a1096730db291859e4c1e4348d1",
+    "apps/api/app/laboratory/grouped_quote_schemas.py": "1e4e5c643706502279de25a21d8aea613750a40d685a246fbfa1baceea497b61",
+    "apps/api/app/laboratory/grouped_quote_totals.py": "e50cda09c40eab8a95fd952f9fff6fd59cfad1a62c62e80da095d4547d5e2457",
+    "apps/api/app/laboratory/models.py": "ccb2b1251eeb2386ae3069326ca50c0779fcfe6c4be8a7e6de4a66bfb0cdf877",
+    "apps/api/app/main.py": "99c4a9fb6104dfb3c1dc09ff99409f52b8d0732555be4222d34d48b7400c0ea2",
+    "apps/api/migrations/versions/20261126_02_grouped_laboratory_quotes.py": "a476b350e27d46ae7ef25105735e7fb46ffec10658651012635a099571c511ae",
+    "apps/api/scripts/verificar_escrita_recuperacao.py": "62d7c9d62ad88532021c48d83d509d7d8a0d5793d5dadbbfed3942daf8e28ce2",
+    "apps/api/tests/test_finance_billing_batches.py": "1cee881f5f44a7706a0a65af889ad384d76670a5a37cc4209fe57a0fbca08953",
+    "apps/api/tests/test_finance_billing_postgres.py": "dc705b0ba94048831a999404963c2d20d2058af8feabbf3e49f192c53b0ca6d2",
+    "apps/api/tests/test_grouped_quote_migration.py": "a2355936fb7c5dcbf45b4f3ffad50556bec411e6d55972073544d45d77e90ef5",
+    "apps/api/tests/test_laboratory_grouped_quotes.py": "81e68a84b01d7c7dea3f3bb97e233e27719a5b38df62726d1f1f2135f2e8580a",
+    "apps/api/tests/test_laboratory_grouped_quotes_postgres.py": "b0f3ebb1abee905ef7c31785e9ed7caacc928c877c139429f738bf3c68f5ed24",
+    "apps/web/src/features/finance/FinanceDashboard.tsx": "eb3fd26a91ff748003084a6700060bc0860567b46c670251aa8c2b3ec2c60ebe",
+    "apps/web/src/features/finance/batchBilling.ts": "01e3fd7276ffd872685b0ae97bab0222b49de6353bf416d21e2f3e4cd0c41d10",
+    "apps/web/src/features/finance/components/WorkOrderBillingSelector.tsx": "9728cf80d15f9b5f6c8575cd8e60bf544666846633cafeca81df11bab0d7d59d",
+    "apps/web/src/features/finance/components/workOrderBilling.css": "4924eaebab38bb9e87b8266ea3a61a22584578ca7e580ae141d0b4bd20ada5ad",
+    "apps/web/src/features/finance/types.ts": "5dc0d5990d4ad625903657c30c2e9e10a38f6a67fba936ac2629370b0ecbf8b7",
+    "apps/web/src/features/laboratory/LaboratoryDashboard.tsx": "c9a60eb8a173af50279f17808ed4f5d7c7d878b83d8b934fcee0e468f96d1670",
+    "apps/web/src/features/laboratory/components/GroupedQuotesPanel.tsx": "273e990fa556afcd2f43807b3b4a8956d61fa35651267f371db420b7ced5663c",
+    "apps/web/src/features/laboratory/components/groupedQuoteMoney.ts": "4b0c3c8f06565e9f0d73234e8f15ab1474998840b266fd450dc7c403e087e839",
+    "apps/web/src/features/laboratory/components/groupedQuoteSave.ts": "76d4fb35a4848725487a926b395d7bff718857968b2906c0dd47d0d14bc556dc",
+    "apps/web/src/features/laboratory/components/groupedQuotes.css": "96f91a358205e219fb335792c38e033cfd91e8c807d1d5601e07ecd0e9a55a10",
+    "apps/web/src/features/laboratory/types.ts": "6cd35ff41e447fb3c7b39b59824351a85ad6b0ab1f245d9bf972e2ca04e7d397",
+    "apps/web/tests/batch-billing.test.mjs": "9705ecaa580aaee5bdd0d4726123b85600ce587becc89dc51ca189bb5f25642a",
+    "apps/web/tests/batch-ui-browser.py": "3b71c3fa049c6efcdec1c9dacd377090141c819d6cd489489955e4cf4522d601",
+    "apps/web/tests/grouped-quote-money.test.mjs": "9d8367d3122839fd2e80ecf39b002e09de3cf3560527ad8682dd114f26ee9cb8",
+    "apps/web/tests/grouped-quote-save.test.mjs": "e44a13d450e1d0342f8c59a122155f1b17e1a86f7cb1336624e934901b9bf008",
+    "apps/web/tests/grouped-quotes-billing-browser.py": "779573c6faedb4f148c7db6039333a91627ad460a1986aa06ea58b923335405b",
+    "infra/teste-local/bootstrap_v48.py": "c83ef33649f09385095f5742e1895a9ea2468a1615d9c52d73a956e0cdd00e74",
+    "infra/teste-local/tests/test_local_v48_bootstrap.py": "61c0f5498f6de25844b3f0a905f4c336f3710bc428a4e97f198ec2991e97a6c6",
+    "infra/vps/atualizar.sh": "cbf8df7cf75c2451f203b3397899a9b2895a3ab5c022ee19f832582ee00d0110",
+    "infra/vps/deploy_v48.py": "0ee4ff77a4120b5eac0b7e2a5347798af88ee5c7e1c5735c6c375afb77c2f850",
+    "infra/vps/tests/fakes/vps_commands.py": "1d76d1310a63cc64b1a0a80ef4a27e2d4eeb1e5e7aedce44b462bda951eb4ec4",
+    "infra/vps/tests/test_deploy_v48_inventory_snapshot.py": "39595f2ae7d63397ab0d6fe763c621b3b9f36822a97fa964ffdbd9c1add0b54c",
+    "infra/vps/tests/test_v48_vps_update.py": "77c2ffeac68dfde0015f6aac868171269267f0b5187bfe04d7de35bcd49d9a06",
+    "scripts_recuperacao/catalogar_bancos_existentes.sh": "f340bdd2320b3466c06f84ff516743d81123b0c7fbb5bc2922cca10e3f203738",
+    "scripts_recuperacao/inspecionar_arquivo_pgdata.sh": "0d4c1fecd1cb4848bed3bff1f7fe355d970d74db4c0752b77b0e8557f581c1e2",
+    "testes_instalador/test_catalogo_instalador_unico.py": "c593b804ffdae4cce327c7946c51a89e8aed26bba12eb1acb79c6f741f13222a",
+    "testes_instalador/test_push_desktop_v16.py": "c8736fa40f0609e883af59ec6dfbd8c28a1c70d894ae53a262c59f2349592292"
+  },
+  "evidencias_sha256": {
+    "multiplas-os-api-instalador.log": "df9180e9a24fa05cf3583bfbc14beeece1ab29638daaa6f73b4b6267b600abee",
+    "multiplas-os-api-instalador.xml": "68b651d8a2452825f2418e0f1dab51ca6dd8404a795ce44723aef2c81dfe1214",
+    "multiplas-os-vps.log": "a4890361fc9ccffcdc552ea72faa50ff2aa7a8792ed5012d53aeebf1f0a2911e",
+    "multiplas-os-vps.xml": "919f2db9fc85653c59b457d7886888ec5ed1d6527800a43352cbd208e4a34892",
+    "multiplas-os-bootstrap-local.log": "c5b129604a153955fcc6e0da41d7e2dc66e6ba486a7da2302364267b8d589951",
+    "multiplas-os-bootstrap-local.xml": "e5a7f376d03c43afaa14f5569d52f8ad1b06e7e5a65ad831094846ac1e7c42ca",
+    "multiplas-os-frontend-build.log": "d1f97652fd7ff4b166e279a80b7280bea2854e20c14253ee64d07e4ccfc87f3f",
+    "multiplas-os-frontend-testes.log": "508f3ebfb9607c66bda610364519e8d52faf6abc5388710c6f32146990fe53b1",
+    "multiplas-os-navegador-real.json": "8df5dbb88049468e751a268a7ede0d921df70f30ab3d82516c6f4c015e32fbf2",
+    "multiplas-os-navegador-controlado.json": "ce59c679cf78aec172ba732be22716b2519798db8e42eede58dc1201871c5592",
+    "multiplas-os-exemplo-4-os.pdf": "1f60e39c82197cc7dab6a88f1d52fe2a0c5363486400090a9cfee15ae0f642b0"
+  }
+}

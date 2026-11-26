@@ -193,6 +193,8 @@ class BillingConfirmation(BaseModel):
 class FinancialEntryInput(FinancialEntryBase):
     work_order_id: int | None = None
     billing_confirmation: BillingConfirmation | None = None
+    exit_invoice: str | None = Field(default=None, max_length=80)
+    work_order_version: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def require_invoice_for_new_income(self):
@@ -206,6 +208,8 @@ class FinancialEntryInput(FinancialEntryBase):
 class FinancialEntryUpdate(FinancialEntryBase):
     work_order_id: int | None = None
     billing_confirmation: BillingConfirmation | None = None
+    exit_invoice: str | None = Field(default=None, max_length=80)
+    work_order_version: int | None = Field(default=None, ge=1)
 
 
 class FinancialEntryOutput(BaseModel):
@@ -301,6 +305,8 @@ class FinancialObligationInput(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
     work_order_id: int | None = None
     billing_confirmation: BillingConfirmation | None = None
+    exit_invoice: str | None = Field(default=None, max_length=80)
+    work_order_version: int | None = Field(default=None, ge=1)
     installments: list[FinancialInstallmentInput] = Field(min_length=1, max_length=120)
 
     @model_validator(mode="after")
@@ -359,6 +365,34 @@ class FinancialObligationInput(BaseModel):
         return self
 
 
+class BillingBatchWorkOrderInput(BaseModel):
+    work_order_id: int = Field(ge=1)
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    version: int = Field(ge=1)
+    billing_confirmation: BillingConfirmation | None = None
+
+
+class FinancialBillingBatchInput(FinancialObligationInput):
+    entry_type: Literal["income"] = "income"
+    work_orders: list[BillingBatchWorkOrderInput] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_batch(self):
+        from app.finance.billing_batches import allocate_installments
+
+        if self.work_order_id is not None or self.billing_confirmation is not None or self.work_order_version is not None:
+            raise ValueError("Informe os vínculos, versões e confirmações na lista work_orders.")
+        ids = [row.work_order_id for row in self.work_orders]
+        if len(ids) != len(set(ids)):
+            raise ValueError("A mesma OS não pode aparecer duas vezes no faturamento.")
+        if sum((row.amount for row in self.work_orders), Decimal("0.00")) != self.total_amount:
+            raise ValueError("A soma dos valores por OS deve ser igual ao valor total do faturamento.")
+        if len(self.work_orders) * len(self.installments) > 1000:
+            raise ValueError("O faturamento pode gerar no máximo 1.000 parcelas. Divida a seleção em lotes menores.")
+        allocate_installments([row.amount for row in self.work_orders], [row.amount for row in self.installments])
+        return self
+
+
 class FinancialScheduleInstallmentInput(FinancialInstallmentInput):
     # Mantém a identidade da parcela ao reorganizar ou excluir uma linha.
     entry_id: int | None = Field(default=None, ge=1)
@@ -396,6 +430,20 @@ class FinancialObligationOutput(BaseModel):
     installments: list[FinancialEntryOutput]
 
 
+class BillingBatchWorkOrderOutput(BaseModel):
+    work_order_id: int
+    work_order_number: str
+    amount: Decimal
+    obligation: FinancialObligationOutput
+
+
+class FinancialBillingBatchOutput(BaseModel):
+    batch_id: str
+    total_amount: Decimal
+    exit_invoice: str | None
+    work_orders: list[BillingBatchWorkOrderOutput]
+
+
 class SettlementInput(BaseModel):
     settlement_date: date
 
@@ -408,6 +456,13 @@ class FinanceWorkOrderOption(BaseModel):
     equipment_label: str
     status: str
     approved_value: Decimal | None = None
+    customer_id: int | None = None
+    version: int = 1
+    total_registered: Decimal = Decimal("0.00")
+    remaining_to_issue: Decimal | None = None
+    exit_invoice: str | None = None
+    exit_invoice_2: str | None = None
+    exit_invoice_3: str | None = None
 
 
 class BillingChecklistItem(BaseModel):

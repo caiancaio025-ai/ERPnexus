@@ -207,3 +207,29 @@ def test_inventory_snapshot_with_real_disposable_postgresql(monkeypatch):
         assert all(len(row["sha256"]) == 64 for row in snapshot.values())
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("damage,expected_message", [
+    ("ALTER TABLE laboratory_grouped_quotes RENAME COLUMN pdf_content TO missing_pdf_content", "tabelas"),
+    ("ALTER TABLE laboratory_grouped_quote_items DROP CONSTRAINT fk_lab_grouped_quote_item_os", "restrições"),
+    ("ALTER TABLE laboratory_grouped_quotes DROP CONSTRAINT ck_lab_grouped_quote_totals", "restrições"),
+])
+def test_grouped_quote_revision_requires_documents_and_integrity_constraints(damage, expected_message):
+    url = os.environ.get("SENTICO_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires an explicitly configured disposable PostgreSQL database")
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
+    assert os.environ.get("DATABASE_URL") == url and make_url(url).database.endswith("_test")
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            helper._validate_grouped_quote_schema(connection)
+            connection.execute(text("SET LOCAL lock_timeout='3s'"))
+            connection.execute(text(damage))
+            with pytest.raises(helper.CheckError, match=expected_message):
+                helper._validate_grouped_quote_schema(connection)
+            connection.rollback()
+            helper._validate_grouped_quote_schema(connection)
+    finally:
+        engine.dispose()

@@ -1,0 +1,42 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> nexus-web@0.1.0 test
+> node --test tests/*.test.mjs && node tests/test_quote_save_guard_v41.cjs
+
+✔ billing starts from remaining amount and sums Brazilian values in cents (1.239463ms)
+✔ joint billing checks customer IDs, company and duplicate IDs rather than displayed names (0.274563ms)
+✔ billing keeps historical single-OS customerless records but refuses to group them (0.263987ms)
+✔ parcel limits cannot create zero-cent entries or exceed 1000 resulting installments (0.405379ms)
+✔ missing, malformed, negative and overprecision amounts are refused (0.294863ms)
+✔ exit invoice suggestion is explicit when invoice kinds have different numbers (0.187101ms)
+✔ grouped quote rounds each fractional line HALF_UP before adding rows (1.289778ms)
+✔ grouped quote percent and amount discounts use rounded cents (0.348845ms)
+✔ lost PUT acknowledgement recognizes matching persisted content despite server IDs and decimals (1.787487ms)
+✔ reconciliation refuses to replace local changes with different concurrent content (0.437959ms)
+✔ converte números digitados em pt-BR e valores monetários da API (1.783331ms)
+✔ salva R02 de R$ 22.000 e mantém quantidades e total da revisão (0.83168ms)
+✔ detecta retorno antigo com valores concretos para diagnóstico (19.501252ms)
+✔ quantidade 2 × R$ 1.500 = R$ 3.000 (0.47947ms)
+✔ arredondamento de quantidade em 3 casas coincide com NUMERIC em centavos (0.367813ms)
+✔ API URL uses a single API prefix with relative and absolute installations (1.522058ms)
+✔ GET retries a temporary proxy failure and returns the recovered JSON (14.193633ms)
+✔ GET retries a disconnected read once, with bounded attempts (1.257089ms)
+✔ POST never automatically repeats an acknowledged or ambiguous write (1.219984ms)
+✔ DELETE is not replayed after a timeout and the timer aborts the request (4.99031ms)
+✔ caller cancellation is propagated without retrying or masquerading as a network fault (1.085883ms)
+✔ successful HTML or malformed JSON is rejected instead of reported as saved (1.640506ms)
+✔ 204 deletion and JSON validation errors retain their exact semantics (0.972652ms)
+✔ purchase and OS monetary fields accept Brazilian and API decimal values (0.542606ms)
+✔ OS sends only changed fields and preserves an explicit clearing (0.442535ms)
+✔ version conflict from quote/stock can safely rebase an unrelated OS edit once (0.779922ms)
+✔ concurrent modification of the same field blocks overwrite and keeps the local draft (0.530067ms)
+✔ ambiguous write failures never trigger version rebase or a second mutation (0.361904ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 344.918141
+20 verificações V41 passaram: moeda brasileira, salvamento confirmado, falha preservada e botão geral integrado.

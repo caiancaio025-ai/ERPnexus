@@ -30,6 +30,7 @@ case "$*" in
     case "${SCENARIO:-}" in
       badrevision) echo 20991231_01 ;;
       latestrevision) echo 20261126_01 ;;
+      groupedquotes) echo 20261126_02 ;;
       *) echo 20261028_01 ;;
     esac
     ;;
@@ -90,6 +91,11 @@ class CatalogoTests(unittest.TestCase):
         r = self.run_scenario('connfail')
         self.assertEqual(r.returncode, 34)
         self.assertIn('ERRO_CATALOGO_CONEXAO_TCP', r.stdout)
+
+    def test_grouped_quote_revision_remains_compatible_on_repeat_install(self):
+        r = self.run_scenario('groupedquotes')
+        self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
+        self.assertIn('CANDIDATO|sentico_green|20261126_02|12|292|1045|8', r.stdout)
 
     def test_only_one_launcher_and_one_engine(self):
         self.assertEqual(sorted(p.name for p in ROOT.glob('INICIAR_*.cmd')), ['INICIAR_SENTICO.cmd', 'INICIAR_TESTE_V48.cmd'])

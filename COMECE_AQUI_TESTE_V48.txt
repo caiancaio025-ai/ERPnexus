@@ -1,7 +1,8 @@
 SENTICO / ERPnexus V48 — TESTE LOCAL
 Pacote de avaliação de 26/11/2026
 
-Esta é a V48 com Aparência no cabeçalho e recebimento individual corrigido.
+Esta é a V48 com faturamento de várias OS, NF de saída no Laboratório e
+orçamento conjunto. Mantém Aparência no cabeçalho e recebimento individual.
 Este guia permite avaliar as alterações em um ambiente local separado.
 
 1. COMO ABRIR NO WINDOWS
@@ -131,3 +132,20 @@ TESTAR_SENTICO.cmd executa a suíte automatizada em outro banco descartável;
 
 Para aplicar a atualização no servidor, siga o procedimento próprio em
 infra/vps/LEIA-ME-DEPLOY.md. O inicializador local atende apenas esta avaliação.
+
+7. NOVA ATUALIZAÇÃO: VÁRIAS OS
+
+Cadastre três OS com o mesmo cadastro de cliente e a mesma empresa.
+Na lista do Laboratório, marque as caixas e use Criar orçamento conjunto.
+Preencha serviços e valores; confira Visualizar PDF e Salvar e emitir PDF.
+Use Nova revisão para alterar uma proposta já emitida. O histórico aparece
+na seção Orçamentos conjuntos e dentro da aba Orçamento de cada OS.
+
+Para faturar, selecione novamente as OS e use Faturar selecionadas.
+Confira os valores individuais, as notas fiscais e os vencimentos.
+Ao concluir, abra Laboratório → Valores e confira as NF de saída.
+O fluxo completo está em ATUALIZACAO_V48_MULTIPLAS_OS.md.
+
+Se esse teste local já estava preparado na revisão 20261126_01, o
+inicializador aplica a revisão 20261126_02 preservando seu usuário, senha
+e dados; não é necessário criar outro ambiente de avaliação.

@@ -1,0 +1,16 @@
+{
+  "backend": "synthetic API",
+  "react_mode": "development StrictMode",
+  "passed": 8,
+  "checks": [
+    "row checkboxes preserve list; a different customer cannot join the selection",
+    "ambiguous grouped-quote creation reuses its idempotency key",
+    "lost PUT acknowledgement is reconciled by GET; OS items/common fields/Brazilian money stay saved without write replay",
+    "different concurrent content preserves local draft until explicit reload",
+    "mobile dialog fits; emitted revision locks; new revision retains content",
+    "group history reopens the latest editable revision",
+    "billing deep-link loads exact IDs, syncs invoice field and preserves retry key/body",
+    "three exit invoice fields are visible; existing OS PATCH sends only changed field/version"
+  ],
+  "page_errors": []
+}

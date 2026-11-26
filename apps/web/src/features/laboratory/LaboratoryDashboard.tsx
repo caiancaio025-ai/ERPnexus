@@ -16,6 +16,7 @@ import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type { AuthUser } from "../auth/AuthCard";
 import { ActionButton } from "./components/ActionButton";
 import { QuoteEditor, type QuoteEditorHandle } from "./components/QuoteEditor";
+import { GroupedQuoteDialog, GroupedQuotesPanel } from "./components/GroupedQuotesPanel";
 import { CustomerSearchSelect } from "./components/CustomerSearchSelect";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { EquipmentDocumentsPanel } from "./components/EquipmentDocumentsPanel";
@@ -31,7 +32,7 @@ import type {
 import "./laboratory.css";
 
 type Props = { user: AuthUser; onLogout: () => void };
-type View = "orders" | "locations" | "technician_report" | "invoiced" | "no_repair" | "warranty";
+type View = "orders" | "locations" | "technician_report" | "invoiced" | "no_repair" | "warranty" | "grouped_quotes";
 type SettingsTab = "customers" | "technicians" | "workflow" | "companies" | "locations";
 type DetailTab = "general" | "technical" | "financial" | "materials" | "status" | "documents" | "quote" | "mechanics" | "history";
 
@@ -166,6 +167,8 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const [showInactive, setShowInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("orders");
+  const [selectedOrders, setSelectedOrders] = useState<WorkOrder[]>([]);
+  const [groupedQuoteOrders, setGroupedQuoteOrders] = useState<number[] | null>(null);
   const [locationMap, setLocationMap] = useState<LaboratoryLocationMap | null>(null);
   const [locationMapUpdatedAt, setLocationMapUpdatedAt] = useState<Date | null>(null);
   const [locationFilter, setLocationFilter] = useState<"all" | "occupied" | "free" | "urgent" | "attention" | "critical">("all");
@@ -198,6 +201,20 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
   const transitionPendingRef = useRef(false);
   const locationSuggestionPendingRef = useRef(false);
   const [suggestingLocation, setSuggestingLocation] = useState(false);
+
+  useEffect(() => { setSelectedOrders([]); }, [company, statusFilter, monthFilter, yearFilter, search, showInactive, view]);
+  function selectionReason(order: WorkOrder): string | null {
+    if (order.is_inactive) return "OS inativa não pode ser selecionada";
+    if (selectedOrders.some(row => row.id === order.id)) return null;
+    if (selectedOrders.length >= 50) return "Selecione no máximo 50 OS";
+    if (selectedOrders.length && order.company_code !== selectedOrders[0].company_code) return "Selecione OS da mesma empresa emissora";
+    if (selectedOrders.length && (!order.customer_id || order.customer_id !== selectedOrders[0].customer_id)) return "Selecione OS do mesmo cadastro de cliente";
+    return null;
+  }
+  function toggleOrderSelection(order: WorkOrder) {
+    if (selectionReason(order)) return;
+    setSelectedOrders(current => current.some(row => row.id === order.id) ? current.filter(row => row.id !== order.id) : [...current, order]);
+  }
 
   const query = useMemo(() => {
     const normalizedSearch = search.trim();
@@ -638,6 +655,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         sectionLabel="Laboratório"
         sectionItems={[
           { id: "orders", label: "Ordens de serviço", icon: Wrench, active: view === "orders", onClick: () => setView("orders") },
+          ...(canManageQuote ? [{ id: "grouped_quotes", label: "Orçamentos conjuntos", icon: FileText, active: view === "grouped_quotes", onClick: () => setView("grouped_quotes") }] : []),
           { id: "locations", label: "Mapa de localizações", icon: Layers3, active: view === "locations", onClick: () => setView("locations") },
           { id: "technician_report", label: "Produção por técnico", icon: BarChart3, active: view === "technician_report", onClick: () => setView("technician_report") },
           { id: "invoiced", label: "Faturados", icon: BadgeDollarSign, active: view === "invoiced", onClick: () => setView("invoiced") },
@@ -654,7 +672,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         </header>
         {error && <div className="lab-alert error">{error}</div>}{message && <div className="lab-alert success">{message}</div>}
 
-        {view !== "locations" && view !== "technician_report" && <>
+        {view !== "locations" && view !== "technician_report" && view !== "grouped_quotes" && <>
         <section className="lab-priority-kpis" aria-label="Prioridades comerciais do laboratório">
           <button className={statusFilter === "in_analysis" ? "active" : ""} onClick={() => filterByPriorityStatus("in_analysis")}>
             <span>ANALISADO</span><strong>{summary?.analyzed ?? 0}</strong><small>Etapa de análise</small>
@@ -699,9 +717,18 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
           <ActionButton icon={<Plus size={18} />} onClick={() => setShowForm(true)}>Nova O.S.</ActionButton>
         </section>
 
+        {canManageQuote && selectedOrders.length > 0 && <section className="lab-batch-selection" aria-label="OS selecionadas">
+          <header><strong>{selectedOrders.length} OS selecionada(s) · {selectedOrders[0].customer_name}</strong><button type="button" onClick={() => setSelectedOrders([])}>Limpar seleção</button></header>
+          <div>{selectedOrders.map(order => <button type="button" className="lab-batch-chip" key={order.id} onClick={() => toggleOrderSelection(order)} aria-label={`Remover ${order.number} da seleção`}>{order.number}<X size={14} /></button>)}</div>
+          <p>A seleção permanece entre páginas e é limpa ao mudar os filtros. Confira as OS acima antes de continuar.</p>
+          <div>{canViewValues && <button type="button" onClick={() => navigate(`/financeiro?faturar_os=${selectedOrders.map(order => order.id).join(",")}`)}><BadgeDollarSign size={17} /> Faturar selecionadas</button>}<button type="button" disabled={selectedOrders.length < 2 || !selectedOrders[0].customer_id} onClick={() => setGroupedQuoteOrders(selectedOrders.map(order => order.id))}><FileText size={17} /> Criar orçamento conjunto</button></div>
+          {!selectedOrders[0].customer_id && <p>Vincule esta OS a um cadastro de cliente para agrupá-la com outras OS.</p>}
+        </section>}
+
         <section className="lab-table-card lab-work-orders-table">
-          <table><thead><tr><th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>Localização</th><th>NF entrada</th><th>NF saída</th><th>Garantia (1–3)</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
-            <tbody>{filteredItems.map((order) => <tr key={order.id} className={`lab-order-row priority-${order.priority}${order.is_inactive ? " lab-order-inactive" : ""}`} onClick={() => void openOrder(order.id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") void openOrder(order.id); }}>
+          <table><thead><tr>{canManageQuote && <th>Selecionar</th>}<th>O.S.</th><th>Cliente</th><th>Equipamento/série</th><th>Localização</th><th>NF entrada</th><th>NF saída</th><th>Garantia (1–3)</th><th>Status</th><th>Prioridade</th><th>Entrada</th>{canViewValues && <th>Valor cobrado</th>}</tr></thead>
+            <tbody>{filteredItems.map((order) => <tr key={order.id} className={`lab-order-row priority-${order.priority}${order.is_inactive ? " lab-order-inactive" : ""}`} onClick={() => void openOrder(order.id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) void openOrder(order.id); }}>
+              {canManageQuote && <td className="lab-cell-select" data-label="Selecionar" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedOrders.some(row => row.id === order.id)} disabled={Boolean(selectionReason(order))} title={selectionReason(order) || `Selecionar ${order.number}`} aria-label={`Selecionar ${order.number}`} onChange={() => toggleOrderSelection(order)} /></td>}
               <td className="lab-cell-order" data-label="O.S."><button className="lab-order-link">{order.number}</button></td>
               <td className="lab-cell-customer" data-label="Cliente">{order.customer_name}</td>
               <td className="lab-cell-equipment" data-label="Equipamento / série">{order.equipment_type || order.model || order.equipment_serial || "Sem identificação"}</td>
@@ -718,6 +745,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
         </section>
         </>}
 
+        {view === "grouped_quotes" && canManageQuote && <GroupedQuotesPanel companyCode={company} onChanged={load} />}
         {view === "locations" && <LaboratoryLocationMapView
           data={locationMap}
           updatedAt={locationMapUpdatedAt}
@@ -745,6 +773,7 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       />}
 
       {showForm && <OrderForm form={form} setForm={setForm} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} loading={loading} onSubmit={createWorkOrder} onClose={() => setShowForm(false)} />}
+      {groupedQuoteOrders && <GroupedQuoteDialog workOrderIds={groupedQuoteOrders} onClose={() => { setGroupedQuoteOrders(null); setSelectedOrders([]); }} onChanged={load} />}
       {detail && <OrderDetail detail={detail} setDetail={setDetail} tab={detailTab} onTab={(nextTab) => void switchDetailTab(nextTab)} companies={companies} locations={locationConfig.locations.filter((item) => item.is_active)} customers={customers} technicians={technicians} history={history} locationHistory={locationHistory} workflowOptions={workflowOptions} loading={detailLoading || detailSaving} saved={saved} canManageQuote={canManageQuote} canViewValues={canViewValues} onOpenReceivables={() => void openFinanceFromDetail()} onOpenReceivableEntry={(entryId) => void openFinanceFromDetail(entryId)} onLocationPreview={(location) => void openLocationPreview(location)} onSave={() => void saveDetail()} onInactivate={() => void inactivateSelected()} canInactivate={canManageQuote} onStatus={(status, note) => void changeStatus(status, false, note ?? "")} onSubstatus={(code, active) => void toggleSubstatus(code, active)} onClose={() => void closeDetail()} onInventoryChange={refreshOpenDetail} onSuggestLocation={() => void suggestDetailLocation()} suggestingLocation={suggestingLocation} error={error} onReload={() => void reloadDetail()} />}
       {showSettings && <SettingsModal company={company === "all" ? (companies[0]?.company_code || "universo_eletronica") : company} companies={companies} locationConfig={locationConfig} customers={customers} technicians={technicians} workflowOptions={workflowOptions} tab={settingsTab} setTab={setSettingsTab} onClose={() => setShowSettings(false)} onSaved={async () => { await Promise.all([load(), loadMasterData()]); }} canManageTechnicians={canManageTechnicians} />}
     </main>
@@ -1143,18 +1172,18 @@ function OrderDetail({ error, onReload, onSuggestLocation, suggestingLocation, d
     <div className="lab-detail-content">
       {tab === "general" && <><SectionTitle title="Cliente e documentos" /><div className="lab-grid"><CustomerSearchSelect customers={customers} companyCode={detail.company_code} value={detail.customer_id} customerName={detail.customer_name} onChange={(customer) => setDetail({ ...detail, customer_id: String(customer.id), customer_name: customer.legal_name })} /><SelectCompany companies={companies} value={detail.company_code} onChange={(value) => setDetail({ ...detail, company_code: value, customer_id: "", customer_name: "" })} /></div><StandardInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><WarrantyInvoices values={detail} onChange={(field, value) => setDetail({ ...detail, [field]: value })} /><HistoricalInvoiceNotes values={detail} /><div className="lab-location-editor"><div className="lab-location-field"><SelectLocation locations={locations} value={detail.storage_location} onChange={(value) => setDetail({ ...detail, storage_location: value })} />{detail.storage_location && <button type="button" className="lab-location-current lab-location-current-button" onClick={() => onLocationPreview(detail.storage_location)} title="Mostrar esta posição no mapa"><MapPin size={15} /> Posição atual: <strong>{detail.storage_location}</strong><span>Ver no mapa</span></button>}</div><div className="lab-location-actions"><button type="button" className="lab-location-suggest" disabled={suggestingLocation} onClick={onSuggestLocation}>Sugerir melhor posição</button><button type="button" className="lab-location-release" disabled={!detail.storage_location} onClick={()=>setDetail({...detail,storage_location:""})}>Liberar posição</button></div><small className="lab-location-help">A localização é física e independente do status. Mais de uma O.S. pode compartilhar a mesma posição; a sugestão prioriza os espaços menos carregados.</small></div><label>Defeito informado<textarea rows={4} value={detail.reported_defect} onChange={(e) => setDetail({ ...detail, reported_defect: e.target.value })} /></label><div className="lab-grid"><label>Condição de entrada<textarea rows={4} value={detail.entry_condition} onChange={(e) => setDetail({ ...detail, entry_condition: e.target.value })} /></label><label>Acessórios recebidos<textarea rows={4} value={detail.accessories_received} onChange={(e) => setDetail({ ...detail, accessories_received: e.target.value })} /></label></div></>}
       {tab === "technical" && <><SectionTitle title="Informações do equipamento" /><div className="lab-grid three"><Input label="Equipamento" value={detail.equipment_type} onChange={(value) => setDetail({ ...detail, equipment_type: value })} /><Input label="Fabricante" value={detail.manufacturer} onChange={(value) => setDetail({ ...detail, manufacturer: value })} /><Input label="Modelo" value={detail.model} onChange={(value) => setDetail({ ...detail, model: value })} /><Input label="Número de série" value={detail.serial_number} onChange={(value) => setDetail({ ...detail, serial_number: value })} /><Input label="Potência" value={detail.power} onChange={(value) => setDetail({ ...detail, power: value })} /><Input label="Tensão" value={detail.voltage} onChange={(value) => setDetail({ ...detail, voltage: value })} /></div><label>Observações internas<textarea rows={6} value={detail.internal_notes} onChange={(e) => setDetail({ ...detail, internal_notes: e.target.value })} /></label></>}
-      {canViewValues && tab === "financial" && <><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div><OrderReceivablesPanel workOrderId={detail.id} onOpenReceivables={onOpenReceivables} onOpenEntry={onOpenReceivableEntry} /></>}
+      {canViewValues && tab === "financial" && <><section className="lab-exit-invoices"><SectionTitle title="Notas fiscais de saída" /><div className="lab-grid three"><Input label="NF de saída" value={detail.exit_invoice} onChange={value => setDetail({ ...detail, exit_invoice: value })} /><Input label="NF de saída 2" value={detail.exit_invoice_2} onChange={value => setDetail({ ...detail, exit_invoice_2: value })} /><Input label="NF de saída 3" value={detail.exit_invoice_3} onChange={value => setDetail({ ...detail, exit_invoice_3: value })} /></div><p>As notas vinculadas ao faturamento são registradas aqui. Alterar estes campos salva os documentos da OS; receitas e parcelas continuam no Financeiro.</p></section><SectionTitle title="Custos e valores" /><div className="lab-grid three"><Input label="Valor de peças (R$)" value={detail.parts_cost} onChange={(value) => setDetail({ ...detail, parts_cost: value })} /><Input label="Valor orçado (R$)" value={detail.quoted_value} onChange={(value) => setDetail({ ...detail, quoted_value: value })} /><Input label="Valor aprovado (R$)" value={detail.approved_value} onChange={(value) => setDetail({ ...detail, approved_value: value })} /></div><div className="lab-financial-summary"><span>Custo de peças<strong>{currency(detail.parts_cost)}</strong></span><span>Orçamento<strong>{currency(detail.quoted_value)}</strong></span><span>Valor aprovado<strong>{currency(detail.approved_value)}</strong></span></div><OrderReceivablesPanel workOrderId={detail.id} onOpenReceivables={onOpenReceivables} onOpenEntry={onOpenReceivableEntry} /></>}
       {tab === "materials" && <MaterialsPanel workOrderId={detail.id} onInventoryChange={onInventoryChange} />}
       {tab === "status" && <><SectionTitle title="Execução e responsabilidade" /><div className="lab-grid"><label>Técnico responsável<select value={detail.assigned_technician_id} onChange={(e) => setDetail({ ...detail, assigned_technician_id: e.target.value })}><option value="">Não atribuído</option>{technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Prioridade<select value={detail.priority} onChange={(e) => setDetail({ ...detail, priority: e.target.value as Priority })}>{Object.entries(priorityLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="lab-status-panel lab-status-workflow"><div className="lab-status-current"><span>Status atual</span><strong>{statusLabel(detail.status, workflowOptions)}</strong></div><label>Novo status<select value={targetStatus} disabled={loading} onChange={(e) => setTargetStatus(e.target.value as WorkOrderStatus | "")}><option value="">Selecione o status...</option>{visibleBusinessStatuses.length > 0 && <optgroup label="Status principais">{visibleBusinessStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}{visibleOperationalStatuses.length > 0 && <optgroup label="Etapas operacionais">{visibleOperationalStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>}</select><small>Status livre para a operação: qualquer usuário do Laboratório pode alterar para qualquer status ativo. Toda mudança continua registrada no histórico.</small></label><ActionButton loading={loading} disabled={!targetStatus} icon={<RefreshCw size={17} />} onClick={() => { if (targetStatus) onStatus(targetStatus, `Status alterado manualmente de ${statusLabel(detail.status, workflowOptions)} para ${statusLabel(targetStatus, workflowOptions)}.`); }}>Aplicar status</ActionButton></div>{substatusOptions.length > 0 && <div className="lab-substatus-box"><div><strong>Sinalizadores / substatus</strong><span>Marque informações complementares sem criar novos status principais.</span></div><div className="lab-substatus-grid">{substatusOptions.map((item) => { const checked = detail.substatuses.includes(item.code); return <label key={item.id} className={checked ? "active" : ""}><input type="checkbox" checked={checked} disabled={loading} onChange={(event) => onSubstatus(item.code, event.target.checked)} /><span>{item.label}</span></label>; })}</div></div>}</>}
       {tab === "documents" && <EquipmentDocumentsPanel workOrderId={detail.id} />}
-      {tab === "quote" && <QuoteEditor
+      {tab === "quote" && <>{canManageQuote && <GroupedQuotesPanel workOrderId={detail.id} onChanged={onInventoryChange} />}<QuoteEditor
         saveRef={quoteSaveRef}
         onWorkOrderChanged={onInventoryChange}
         workOrderId={detail.id} workOrderNumber={detail.number} customerName={detail.customer_name}
         equipmentType={detail.equipment_type} manufacturer={detail.manufacturer} model={detail.model}
         serialNumber={detail.serial_number} power={detail.power} voltage={detail.voltage}
         defect={detail.reported_defect} quotedValue={canViewValues ? detail.quoted_value : ""} readOnly={!canManageQuote}
-      />}
+      /></>}
       {tab === "mechanics" && <MechanicsPanel workOrderId={detail.id} />}
       {tab === "history" && <div className="lab-history-grid">
         <section className="lab-history-card">

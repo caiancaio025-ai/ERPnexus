@@ -148,6 +148,20 @@ export type Quote = {
   emitted_at: string | null; created_at: string; updated_at: string; items: QuoteItem[]; photos: QuotePhoto[];
 };
 
+export type GroupedQuoteItem = QuoteItem & { work_order_id: number };
+export type GroupedQuoteWorkOrder = {
+  id: number; number: string; equipment_id: number; equipment_type: string | null;
+  manufacturer: string | null; model: string | null; equipment_serial: string | null;
+  reported_defect: string; opened_at: string; entry_invoice: string | null; version: number;
+  subtotal: string; discount_amount: string; total: string;
+};
+export type GroupedQuote = Omit<Quote, "work_order_id" | "items" | "photos"> & {
+  group_id: number; code: string; version: number; title: string;
+  company_code: string; customer_id: number; customer_name: string;
+  work_order_ids: number[]; work_orders: GroupedQuoteWorkOrder[];
+  items: GroupedQuoteItem[]; discount_amount: string;
+};
+
 export type MaterialRequestStatus =
   | "awaiting_approval" | "approved" | "rejected" | "purchasing" | "purchased"
   | "in_transit" | "received" | "delivered_to_lab" | "cancelled";

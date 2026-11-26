@@ -35,7 +35,7 @@ for db in $bancos; do
   numbers=$(su-exec postgres psql -h /tmp -w -X -qAt -U sentico_green -d "$db" -v ON_ERROR_STOP=1 -c 'SELECT (SELECT count(*) FROM public.users), (SELECT count(*) FROM public.laboratory_customers), (SELECT count(*) FROM public.laboratory_work_orders), (SELECT count(*) FROM public.purchase_orders);' 2>/dev/null) || continue
   revision=$(su-exec postgres psql -h /tmp -w -X -qAt -U sentico_green -d "$db" -v ON_ERROR_STOP=1 -c 'SELECT version_num FROM public.alembic_version;' 2>/dev/null) || continue
   case "$revision" in
-    20261013_02|20261022_01|20261022_02|20261026_01|20261026_02|20261026_03|20261027_01|20261027_02|20261027_03|20261027_04|20261027_05|20261028_01|20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01) ;;
+    20261013_02|20261022_01|20261022_02|20261026_01|20261026_02|20261026_03|20261027_01|20261027_02|20261027_03|20261027_04|20261027_05|20261028_01|20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01|20261126_02) ;;
     *) continue ;;
   esac
   IFS='|' read -r users customers orders purchases <<EOC

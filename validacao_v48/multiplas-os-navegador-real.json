@@ -1,0 +1,41 @@
+{
+  "backend": "Real FastAPI, disposable migrated PostgreSQL and Chromium; no API mocks",
+  "status": "passed",
+  "checks": [
+    {
+      "check": "Laboratory selection keeps distinct equipment and rejects a different customer"
+    },
+    {
+      "check": "One draft for three same-model equipment units, exact discount and totals by OS",
+      "total": "300.01"
+    },
+    {
+      "check": "Lost PUT response after real commit is reconciled without a duplicate save"
+    },
+    {
+      "check": "Stale grouped quote edit returns conflict and preserves unsaved typing"
+    },
+    {
+      "check": "PDF preview leaves every OS and draft unchanged"
+    },
+    {
+      "check": "Emitted PDF stores one immutable document and each OS keeps its approved amount",
+      "sha256": "4a307bda0d610886e72e97694518b0465f8a30e474733780be44c65422521dd3"
+    },
+    {
+      "check": "New revision is editable while the original issued document stays available"
+    },
+    {
+      "check": "Three OS billed with three installments; exact receivables, NF synchronization and safe retry",
+      "batch_id": "b44c1c181c72d7c0cf9aaa903065db12afca927d0e84287423682e13890f7013"
+    },
+    {
+      "check": "Laboratory exposes all three exit invoices, saves edits and keeps issued quote bytes unchanged"
+    },
+    {
+      "check": "Grouped history reopens from a linked OS and its editor fits a mobile viewport"
+    }
+  ],
+  "page_errors": [],
+  "server_errors": []
+}

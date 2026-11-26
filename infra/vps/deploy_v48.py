@@ -350,6 +350,59 @@ def _validate_receipt_schema(connection) -> None:
         raise CheckError("As restrições de recebimento individual não correspondem à migração esperada.")
 
 
+def _validate_grouped_quote_schema(connection) -> None:
+    """The revision marker alone must not accept a partial document migration."""
+    from sqlalchemy import bindparam, text
+
+    required_columns = {
+        ("laboratory_quote_groups", "code"): ("varchar", True),
+        ("laboratory_quote_groups", "customer_id"): ("int4", True),
+        ("laboratory_quote_groups", "creation_fingerprint"): ("varchar", True),
+        ("laboratory_grouped_quotes", "version"): ("int4", True),
+        ("laboratory_grouped_quotes", "content"): ("json", True),
+        ("laboratory_grouped_quotes", "document_snapshot"): ("json", False),
+        ("laboratory_grouped_quotes", "pdf_content"): ("bytea", False),
+        ("laboratory_grouped_quotes", "pdf_sha256"): ("varchar", False),
+        ("laboratory_grouped_quote_work_orders", "work_order_id"): ("int4", True),
+        ("laboratory_grouped_quote_work_orders", "total"): ("numeric", True),
+        ("laboratory_grouped_quote_items", "work_order_id"): ("int4", True),
+        ("laboratory_grouped_quote_items", "quantity"): ("numeric", True),
+    }
+    tables = tuple(sorted({table for table, _ in required_columns}))
+    rows = connection.execute(text(
+        "SELECT table_name, column_name, udt_name, is_nullable "
+        "FROM information_schema.columns WHERE table_schema='public' "
+        "AND table_name IN :tables"
+    ).bindparams(bindparam("tables", expanding=True)), {"tables": tables}).mappings().all()
+    actual = {
+        (row["table_name"], row["column_name"]): (row["udt_name"], row["is_nullable"] == "NO")
+        for row in rows
+    }
+    if any(actual.get(column) != expected for column, expected in required_columns.items()):
+        raise CheckError("As tabelas de orçamentos conjuntos estão incompletas ou incompatíveis.")
+    required_constraints = {
+        ("laboratory_quote_groups", "uq_lab_quote_group_creation_key", "u"),
+        ("laboratory_grouped_quotes", "uq_lab_grouped_quote_revision", "u"),
+        ("laboratory_grouped_quotes", "ck_lab_grouped_quote_version", "c"),
+        ("laboratory_grouped_quotes", "ck_lab_grouped_quote_status", "c"),
+        ("laboratory_grouped_quotes", "ck_lab_grouped_quote_totals", "c"),
+        ("laboratory_grouped_quote_work_orders", "uq_lab_grouped_quote_os", "u"),
+        ("laboratory_grouped_quote_work_orders", "uq_lab_grouped_quote_os_position", "u"),
+        ("laboratory_grouped_quote_work_orders", "ck_lab_grouped_quote_os_totals", "c"),
+        ("laboratory_grouped_quote_items", "fk_lab_grouped_quote_item_os", "f"),
+        ("laboratory_grouped_quote_items", "uq_lab_grouped_quote_item_position", "u"),
+        ("laboratory_grouped_quote_items", "ck_lab_grouped_quote_item_values", "c"),
+    }
+    rows = connection.execute(text(
+        "SELECT t.relname AS table_name, c.conname, c.contype FROM pg_constraint c "
+        "JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace "
+        "WHERE n.nspname='public' AND t.relname IN :tables AND c.convalidated"
+    ).bindparams(bindparam("tables", expanding=True)), {"tables": tables}).mappings().all()
+    actual_constraints = {(row["table_name"], row["conname"], row["contype"]) for row in rows}
+    if not required_constraints.issubset(actual_constraints):
+        raise CheckError("As restrições dos orçamentos conjuntos não correspondem à migração esperada.")
+
+
 def inventory_snapshot(revision: str) -> dict:
     """Read-only fingerprints prove that the receipt migration kept every row.
 
@@ -357,7 +410,7 @@ def inventory_snapshot(revision: str) -> dict:
     before hashing, so a legacy snapshot equals the upgraded snapshot only when
     all existing fields and the new default value were preserved.
     """
-    if revision not in {"20261123_02", "20261126_01"}:
+    if revision not in {"20261123_02", "20261126_01", "20261126_02"}:
         raise CheckError("Revisão não suportada para a conferência do estoque.")
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
@@ -379,8 +432,10 @@ def inventory_snapshot(revision: str) -> dict:
                 raise CheckError("A conferência do estoque não está em modo somente leitura.")
             if connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all() != [revision]:
                 raise CheckError("A revisão do estoque mudou durante a conferência.")
-            if revision == "20261126_01":
+            if revision in {"20261126_01", "20261126_02"}:
                 _validate_receipt_schema(connection)
+            if revision == "20261126_02":
+                _validate_grouped_quote_schema(connection)
             snapshot = {}
             for table in ("inventory_items", "inventory_movements"):
                 projection = "to_jsonb(t)"

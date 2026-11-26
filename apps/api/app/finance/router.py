@@ -18,6 +18,16 @@ from app.core.file_validation import InvalidUpload
 from app.core.upload_stream import UploadTooLarge, persist_streamed_upload
 from app.customers.models import CustomerBillingProfile
 from app.finance.alerts import finance_alert_fingerprint
+from app.finance.billing_batches import (
+    allocate_installments,
+    assert_work_order_version,
+    batch_identity,
+    billing_batch_fingerprint,
+    lock_billing_batch,
+    obligation_batch_key,
+    outgoing_invoice_number,
+    outgoing_invoice_slot,
+)
 from app.finance.idempotency import finance_request_fingerprint
 from app.finance.installment_edit import (
     INDIVIDUAL_FIELDS as GROUPED_INSTALLMENT_INDIVIDUAL_FIELDS,
@@ -37,7 +47,7 @@ from app.finance.models import (
     FinancialPeriodClosure,
     FinancialTransfer,
 )
-from app.laboratory.models import LaboratoryStatusHistory, LaboratoryWorkOrder
+from app.laboratory.models import LaboratoryAuditEvent, LaboratoryStatusHistory, LaboratoryWorkOrder
 from app.notifications.service import notify_modules, notify_activity
 from app.finance.schemas import (
     AuditOutput,
@@ -48,6 +58,9 @@ from app.finance.schemas import (
     FinanceSummary,
     BillingChecklistItem,
     BillingReadiness,
+    BillingBatchWorkOrderOutput,
+    FinancialBillingBatchInput,
+    FinancialBillingBatchOutput,
     FinanceWorkOrderOption,
     WorkOrderReceivablesOutput,
     FinancialEntryInput,
@@ -294,6 +307,13 @@ async def _update_grouped_installment(
     if not any(item.id == entry.id for item in siblings):
         siblings.append(entry)
 
+    work_order = None
+    exit_invoice = _updated_exit_invoice(entry, payload)
+    if payload.entry_type == "income" and payload.work_order_id and (exit_invoice or payload.work_order_version is not None):
+        work_order = await _work_order_or_404(db, payload.work_order_id, for_update=True)
+        assert_work_order_version(work_order, payload.work_order_version)
+        outgoing_invoice_slot(work_order, exit_invoice)
+
     shared_values = grouped_values_for(
         payload,
         GROUPED_INSTALLMENT_SHARED_FIELDS,
@@ -331,6 +351,21 @@ async def _update_grouped_installment(
 
     obligation.total_amount = total_from_installments(siblings)
     db.add(obligation)
+    if work_order is not None:
+        await _mark_work_order_invoiced(db, work_order, user.id, entry, exit_invoice=exit_invoice)
+
+
+def _updated_exit_invoice(entry: FinancialEntry, payload: FinancialEntryUpdate) -> str | None:
+    if payload.entry_type != "income" or not payload.work_order_id:
+        return None
+    # An old edit form that omits the new field must not rewrite documentary
+    # data just because a value, bank, or due date is being corrected.
+    if (payload.exit_invoice or "").strip() or any(
+        getattr(entry, field) != getattr(payload, field)
+        for field in ("nfse_number", "nfe_number", "work_order_id")
+    ):
+        return outgoing_invoice_number(payload)
+    return None
 
 
 async def _work_order_or_404(
@@ -417,13 +452,22 @@ async def _validate_billing_confirmation(db: AsyncSession, work_order: Laborator
 
 
 async def _mark_work_order_invoiced(
-    db: AsyncSession, work_order: LaboratoryWorkOrder, user_id: int, entry: FinancialEntry
+    db: AsyncSession, work_order: LaboratoryWorkOrder, user_id: int, entry: FinancialEntry,
+    *, exit_invoice: str | None = None, increment_version: bool = False,
 ) -> None:
     previous = work_order.status
+    slot = outgoing_invoice_slot(work_order, exit_invoice)
+    if slot:
+        setattr(work_order, slot, exit_invoice)
+        db.add(LaboratoryAuditEvent(
+            work_order_id=work_order.id, action="finance_exit_invoice_registered", user_id=user_id,
+            description=f"NF de saída {exit_invoice} registrada pelo Financeiro em {slot} (lançamento #{entry.id}).",
+        ))
+    if previous != "invoiced" or slot or increment_version:
+        work_order.version += 1
     if previous != "invoiced":
         work_order.status = "invoiced"
         work_order.invoiced_at = datetime.now(UTC)
-        work_order.version += 1
         db.add(LaboratoryStatusHistory(
             work_order_id=work_order.id,
             previous_status=previous,
@@ -579,6 +623,7 @@ async def acknowledge_finance_alert(
 async def finance_work_orders(
     company_code: CompanyCode | None = QUERY_COMPANY_CODE,
     search: str | None = QUERY_SEARCH,
+    ids: str | None = Query(default=None, max_length=600),
     _: User = CURRENT_USER_DEP,
     db: AsyncSession = DB_DEP,
 ):
@@ -588,6 +633,14 @@ async def finance_work_orders(
     )
     if company_code:
         query = query.where(LaboratoryWorkOrder.company_code == company_code)
+    if ids is not None:
+        try:
+            selected_ids = [int(value.strip()) for value in ids.split(",")]
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Informe IDs de OS separados por vírgula.") from exc
+        if not 1 <= len(selected_ids) <= 50 or any(value < 1 for value in selected_ids):
+            raise HTTPException(status_code=422, detail="Selecione entre 1 e 50 IDs de OS válidos.")
+        query = query.where(LaboratoryWorkOrder.id.in_(selected_ids))
     if search:
         term = f"%{search.strip()}%"
         query = query.where(or_(
@@ -596,6 +649,7 @@ async def finance_work_orders(
             LaboratoryWorkOrder.equipment_serial.ilike(term),
         ))
     rows = list((await db.scalars(query.order_by(LaboratoryWorkOrder.id.desc()).limit(150))).all())
+    totals = await _registered_work_order_totals(db, [item.id for item in rows])
     return [FinanceWorkOrderOption(
         id=item.id,
         number=item.number,
@@ -604,7 +658,28 @@ async def finance_work_orders(
         equipment_label=item.equipment.model or item.equipment.equipment_type or item.equipment_serial or "Equipamento",
         status=item.status,
         approved_value=item.approved_value,
+        customer_id=item.customer_id,
+        version=item.version,
+        total_registered=totals.get(item.id, Decimal("0.00")),
+        remaining_to_issue=(item.approved_value - totals.get(item.id, Decimal("0.00"))) if item.approved_value is not None else None,
+        exit_invoice=item.exit_invoice,
+        exit_invoice_2=item.exit_invoice_2,
+        exit_invoice_3=item.exit_invoice_3,
     ) for item in rows]
+
+
+async def _registered_work_order_totals(db: AsyncSession, work_order_ids: list[int]) -> dict[int, Decimal]:
+    if not work_order_ids:
+        return {}
+    rows = await db.execute(select(
+        FinancialEntry.work_order_id, func.sum(FinancialEntry.amount),
+    ).where(
+        FinancialEntry.work_order_id.in_(work_order_ids),
+        FinancialEntry.entry_type == "income",
+        FinancialEntry.is_deleted.is_(False),
+        FinancialEntry.status.in_(("pending", "received")),
+    ).group_by(FinancialEntry.work_order_id))
+    return {work_order_id: amount for work_order_id, amount in rows}
 
 
 @router.get("/work-orders/{work_order_id}/receivables", response_model=WorkOrderReceivablesOutput)
@@ -944,6 +1019,176 @@ async def get_entry(entry_id: int, _: User = CURRENT_USER_DEP, db: AsyncSession 
     return await _entry_or_404(db, entry_id)
 
 
+async def _billing_batch_output(
+    db: AsyncSession, batch_id: str, obligations: list[FinancialObligation],
+) -> FinancialBillingBatchOutput:
+    entries = list((await db.scalars(select(FinancialEntry).where(
+        FinancialEntry.obligation_id.in_([item.id for item in obligations]),
+    ).order_by(FinancialEntry.installment_number, FinancialEntry.id))).all())
+    grouped: dict[int, list[FinancialEntry]] = {}
+    for entry in entries:
+        grouped.setdefault(entry.obligation_id, []).append(entry)
+    outputs = []
+    exit_invoice = None
+    for obligation in obligations:
+        siblings = grouped.get(obligation.id, [])
+        metadata = next((
+            (entry.billing_compliance or {}).get("batch") for entry in siblings
+            if (entry.billing_compliance or {}).get("batch", {}).get("batch_id") == batch_id
+        ), None)
+        if metadata is None:
+            raise HTTPException(status_code=409, detail="O faturamento já existe, mas seu vínculo de lote precisa ser revisado.")
+        original = next((row for row in metadata["work_orders"] if row["work_order_id"] == obligation.work_order_id), None)
+        if original is None:
+            raise HTTPException(status_code=409, detail="A OS de um faturamento existente foi removida. Revise o vínculo no Financeiro.")
+        exit_invoice = metadata["exit_invoice"]
+        output = FinancialObligationOutput(
+            id=obligation.id,
+            entry_type=obligation.entry_type,
+            company_code=obligation.company_code,
+            nfse_number=obligation.nfse_number,
+            nfe_number=obligation.nfe_number,
+            document_number=obligation.document_number,
+            counterparty_name=obligation.counterparty_name,
+            description=obligation.description,
+            total_amount=obligation.total_amount,
+            installment_count=obligation.installment_count,
+            work_order_id=obligation.work_order_id,
+            created_at=obligation.created_at,
+            installments=[FinancialEntryOutput.model_validate(entry) for entry in siblings if not entry.is_deleted],
+        )
+        outputs.append(BillingBatchWorkOrderOutput(
+            work_order_id=obligation.work_order_id,
+            work_order_number=original["work_order_number"],
+            amount=obligation.total_amount,
+            obligation=output,
+        ))
+    return FinancialBillingBatchOutput(
+        batch_id=batch_id,
+        total_amount=sum((row.amount for row in outputs), Decimal("0.00")),
+        exit_invoice=exit_invoice,
+        work_orders=outputs,
+    )
+
+
+@router.post("/billing-batches", response_model=FinancialBillingBatchOutput, status_code=status.HTTP_201_CREATED)
+async def create_billing_batch(
+    payload: FinancialBillingBatchInput,
+    user: User = CURRENT_USER_DEP,
+    db: AsyncSession = DB_DEP,
+    idempotency_key: str | None = IDEMPOTENCY_KEY_HEADER,
+):
+    normalized_key = (idempotency_key or "").strip()
+    if not normalized_key:
+        raise HTTPException(status_code=422, detail="Informe Idempotency-Key para enviar o faturamento em lote com segurança.")
+    batch_id = batch_identity(normalized_key)
+    fingerprint = billing_batch_fingerprint(payload)
+    await lock_billing_batch(db, batch_id)
+    existing = list((await db.scalars(select(FinancialObligation).where(
+        FinancialObligation.idempotency_key.startswith(f"billing-batch:{batch_id}:"),
+    ).order_by(FinancialObligation.work_order_id))).all())
+    if existing:
+        if any(item.idempotency_fingerprint != fingerprint for item in existing):
+            raise HTTPException(status_code=409, detail="A mesma chave de envio foi reutilizada com dados diferentes.")
+        if len(existing) != len(payload.work_orders):
+            raise HTTPException(status_code=409, detail="O faturamento já existe com uma seleção diferente de OS. Revise o lote.")
+        return await _billing_batch_output(db, batch_id, existing)
+
+    await _validate_obligation_account_company(db, payload)
+    await _assert_period_open(db, payload.company_code, payload.posting_date)
+    allocations = sorted(payload.work_orders, key=lambda row: row.work_order_id)
+    orders = list((await db.scalars(select(LaboratoryWorkOrder).where(
+        LaboratoryWorkOrder.id.in_([row.work_order_id for row in allocations]),
+    ).order_by(LaboratoryWorkOrder.id).with_for_update(of=LaboratoryWorkOrder).execution_options(populate_existing=True))).all())
+    if len(orders) != len(allocations) or any(order.is_cancelled or order.is_inactive for order in orders):
+        raise HTTPException(status_code=422, detail="Uma das OS selecionadas não existe, está inativa ou foi cancelada.")
+    if any(order.company_code != payload.company_code for order in orders):
+        raise HTTPException(status_code=422, detail="Todas as OS do faturamento devem pertencer à empresa selecionada.")
+    customers = {order.customer_id for order in orders}
+    if None in customers or len(customers) != 1:
+        raise HTTPException(status_code=422, detail="Selecione OS do mesmo cliente cadastrado. Vincule o cliente no Laboratório quando necessário.")
+
+    exit_invoice = outgoing_invoice_number(payload)
+    totals = await _registered_work_order_totals(db, [order.id for order in orders])
+    confirmations = {}
+    for order, allocation in zip(orders, allocations, strict=True):
+        assert_work_order_version(order, allocation.version)
+        outgoing_invoice_slot(order, exit_invoice)
+        if order.approved_value is not None:
+            remaining = order.approved_value - totals.get(order.id, Decimal("0.00"))
+            if allocation.amount > remaining:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"O valor da OS {order.number} excede seu saldo faturável de R$ {remaining:.2f}. Atualize os valores selecionados.",
+                )
+        confirmations[order.id] = await _validate_billing_confirmation(db, order, allocation.billing_confirmation)
+
+    installments = sorted(payload.installments, key=lambda row: row.installment_number)
+    amounts = allocate_installments([row.amount for row in allocations], [row.amount for row in installments])
+    metadata = {
+        "batch_id": batch_id,
+        "total_amount": str(payload.total_amount),
+        "exit_invoice": exit_invoice,
+        "work_orders": [
+            {"work_order_id": order.id, "work_order_number": order.number, "amount": str(allocation.amount)}
+            for order, allocation in zip(orders, allocations, strict=True)
+        ],
+        "installments": [row.model_dump(mode="json") for row in installments],
+    }
+    common = payload.model_dump(exclude={
+        "work_order_id", "work_order_version", "billing_confirmation", "work_orders", "exit_invoice",
+        "installments", "total_amount",
+    })
+    obligations = [FinancialObligation(
+        **common,
+        work_order_id=order.id,
+        total_amount=allocation.amount,
+        installment_count=len(installments),
+        idempotency_key=obligation_batch_key(batch_id, order.id),
+        idempotency_fingerprint=fingerprint,
+        created_by=user.id,
+    ) for order, allocation in zip(orders, allocations, strict=True)]
+    db.add_all(obligations)
+    await db.flush()
+    entries_by_order: dict[int, list[FinancialEntry]] = {}
+    for row_index, (order, obligation) in enumerate(zip(orders, obligations, strict=True)):
+        compliance = {**confirmations[order.id], "batch": metadata}
+        entries_by_order[order.id] = [FinancialEntry(
+            **{**common, "notes": installment.notes or payload.notes},
+            obligation_id=obligation.id,
+            installment_number=installment.installment_number,
+            work_order_id=order.id,
+            amount=amounts[row_index][column],
+            due_date=installment.due_date,
+            payment_code=installment.payment_code,
+            billing_compliance=compliance,
+            status="pending",
+            created_by=user.id,
+        ) for column, installment in enumerate(installments)]
+        db.add_all(entries_by_order[order.id])
+    await db.flush()
+    for order, obligation in zip(orders, obligations, strict=True):
+        for entry in entries_by_order[order.id]:
+            db.add(_audit(entry, "created", f"Faturamento em lote · {order.number}: {entry.description}"[:280], user.id, after=_snapshot(entry)))
+        db.add(FinancialAuditEvent(
+            entity_type="financial_obligation", entity_id=obligation.id, action="created",
+            description=f"Faturamento em lote da OS {order.number}", user_id=user.id,
+            after_data={"batch": metadata, "total_amount": str(obligation.total_amount), "work_order_id": order.id},
+        ))
+        await _mark_work_order_invoiced(
+            db, order, user.id, entries_by_order[order.id][0], exit_invoice=exit_invoice, increment_version=True,
+        )
+    await notify_activity(
+        db, actor=user, activity_module="financeiro", action="finance_billing_batch_created",
+        title=f"Faturamento de {len(orders)} OS", message=f"{user.name} registrou o faturamento conjunto de {len(orders)} OS.",
+        target="/financeiro", entity_type="financial_obligation", entity_id=obligations[0].id,
+    )
+    await db.flush()
+    result = await _billing_batch_output(db, batch_id, obligations)
+    await db.commit()
+    return result
+
+
 @router.post(
     "/obligations",
     response_model=FinancialObligationOutput,
@@ -977,13 +1222,23 @@ async def create_obligation(
 
     work_order = None
     billing_compliance = None
+    exit_invoice = None
     if payload.entry_type == "income" and payload.work_order_id:
         work_order = await _work_order_or_404(db, payload.work_order_id, for_update=True)
+        if normalized_key:
+            existing = await db.scalar(select(FinancialObligation).where(FinancialObligation.idempotency_key == normalized_key))
+            if existing:
+                if existing.idempotency_fingerprint != fingerprint:
+                    raise HTTPException(status_code=409, detail="A mesma chave de envio foi reutilizada com dados diferentes.")
+                return await _obligation_output(db, existing)
+        assert_work_order_version(work_order, payload.work_order_version)
         if work_order.company_code != payload.company_code:
             raise HTTPException(
                 status_code=422,
                 detail="A OS pertence a outra empresa do grupo.",
             )
+        exit_invoice = outgoing_invoice_number(payload)
+        outgoing_invoice_slot(work_order, exit_invoice)
         billing_compliance = await _validate_billing_confirmation(
             db,
             work_order,
@@ -1115,6 +1370,7 @@ async def create_obligation(
             work_order,
             user.id,
             created_entries[0],
+            exit_invoice=exit_invoice,
         )
 
     await db.commit()
@@ -1269,15 +1525,25 @@ async def create_entry(
     await _validate_entry_account_company(db, payload)
     await _assert_period_open(db, payload.company_code, payload.posting_date)
 
-    data = payload.model_dump(exclude={"billing_confirmation"})
+    data = payload.model_dump(exclude={"billing_confirmation", "exit_invoice", "work_order_version"})
     work_order_id = data.pop("work_order_id", None)
     work_order = None
     billing_compliance = None
+    exit_invoice = None
 
     if payload.entry_type == "income" and work_order_id:
         work_order = await _work_order_or_404(db, work_order_id, for_update=True)
+        if normalized_key:
+            existing = await db.scalar(select(FinancialEntry).where(FinancialEntry.idempotency_key == normalized_key))
+            if existing:
+                if existing.idempotency_fingerprint != fingerprint:
+                    raise HTTPException(status_code=409, detail="A mesma chave de envio foi reutilizada com dados diferentes.")
+                return existing
+        assert_work_order_version(work_order, payload.work_order_version)
         if work_order.company_code != payload.company_code:
             raise HTTPException(status_code=422, detail="A OS pertence a outra empresa do grupo.")
+        exit_invoice = outgoing_invoice_number(payload)
+        outgoing_invoice_slot(work_order, exit_invoice)
         billing_compliance = await _validate_billing_confirmation(
             db, work_order, payload.billing_confirmation
         )
@@ -1309,7 +1575,7 @@ async def create_entry(
                 return existing
         raise
     if work_order is not None:
-        await _mark_work_order_invoiced(db, work_order, user.id, entry)
+        await _mark_work_order_invoiced(db, work_order, user.id, entry, exit_invoice=exit_invoice)
     db.add(
         _audit(
             entry,
@@ -1344,13 +1610,16 @@ async def update_entry(
         before = _snapshot(entry)
         await _assert_period_open(db, entry.company_code, entry.posting_date)
         await _assert_period_open(db, payload.company_code, payload.posting_date)
-        data = payload.model_dump(exclude={"billing_confirmation"})
+        data = payload.model_dump(exclude={"billing_confirmation", "exit_invoice", "work_order_version"})
         work_order_id = data.pop("work_order_id", None)
         work_order = None
+        exit_invoice = _updated_exit_invoice(entry, payload)
         if payload.entry_type == "income" and work_order_id:
             work_order = await _work_order_or_404(db, work_order_id, for_update=True)
+            assert_work_order_version(work_order, payload.work_order_version)
             if work_order.company_code != payload.company_code:
                 raise HTTPException(status_code=422, detail="A OS pertence a outra empresa do grupo.")
+            outgoing_invoice_slot(work_order, exit_invoice)
             entry.billing_compliance = await _validate_billing_confirmation(
                 db, work_order, payload.billing_confirmation
             )
@@ -1360,7 +1629,7 @@ async def update_entry(
         for field, value in data.items():
             setattr(entry, field, value)
         if work_order is not None:
-            await _mark_work_order_invoiced(db, work_order, user.id, entry)
+            await _mark_work_order_invoiced(db, work_order, user.id, entry, exit_invoice=exit_invoice)
         db.add(
             _audit(
                 entry,

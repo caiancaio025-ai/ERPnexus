@@ -17,7 +17,8 @@ from sqlalchemy.pool import NullPool
 
 
 BASELINE = "20261009_01"
-TARGET = "20261126_01"
+TARGET = "20261126_02"
+READY_UPGRADES = {"20261126_01"}
 DATABASE = "sentico_v48_test"
 USERNAME = "teste_v48"
 MARKER = "sentico_local_test_bootstrap"
@@ -187,6 +188,11 @@ def bootstrap(workdir: Path | None = None) -> None:
                                            {"name": name, "code": code})
                     connection.execute(text(f"UPDATE public.{MARKER} SET stage='ready' WHERE id=1"))
                     connection.commit()
+                if marker["stage"] == "ready" and current_revision(connection) in READY_UPGRADES:
+                    # Uma instalação local já usada mantém usuário, senha e dados;
+                    # somente a migração incremental do pacote é executada.
+                    connection.commit()
+                    upgrade(TARGET, workdir)
                 if current_revision(connection) != TARGET:
                     raise BootstrapError("O banco local não está na revisão esperada; nenhuma regressão será aplicada.")
             finally:

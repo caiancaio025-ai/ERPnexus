@@ -14,6 +14,7 @@ from app.finance.router import router as finance_router
 from app.employees.router import router as employees_router
 from app.health.router import router as health_router
 from app.laboratory.router import router as laboratory_router
+from app.laboratory.grouped_quote_router import router as laboratory_grouped_quote_router
 from app.inventory.router import router as inventory_router
 from app.notifications.router import router as notifications_router
 from app.purchasing.router import router as purchasing_router
@@ -49,5 +50,6 @@ app.include_router(employees_router, tags=["employees"])
 app.include_router(purchasing_router, tags=["purchasing"])
 app.include_router(tracking_router, tags=["tracking"])
 app.include_router(laboratory_router, tags=["laboratory"])
+app.include_router(laboratory_grouped_quote_router, tags=["laboratory"])
 app.include_router(inventory_router, tags=["inventory"])
 app.include_router(notifications_router, tags=["notifications"])

@@ -17,7 +17,7 @@ API = f"{PROJECT}-api-1"
 WEB = f"{PROJECT}-web-1"
 DB = f"{PROJECT}-db-1"
 GATEWAY = f"{PROJECT}-gateway-1"
-TARGET_REVISION = "20261126_01"
+TARGET_REVISION = "20261126_02"
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 state_path = Path(os.environ["SENTICO_FAKE_STATE"])
@@ -153,7 +153,7 @@ def compose(command):
         assert command[command.index("--entrypoint") + 1] == "alembic"
         assert maintenance() and not state["containers"][API]["State"]["Running"]
         assert state.get("copy_verified"), "Real migration requires a restored and verified migrated copy"
-        assert state["revision"] == "20261123_02"
+        assert state["revision"] in {"20261123_02", "20261126_01"}
         state["migration_calls"] = state.get("migration_calls", 0) + 1
         fail_if("migration")
         state["revision"] = TARGET_REVISION
@@ -336,7 +336,7 @@ def docker():
             done(inventory_snapshot(copy=True))
         if "alembic" in args:
             assert args[-2:] == ["upgrade", TARGET_REVISION]
-            assert state["copy_revision"] == "20261123_02"
+            assert state["copy_revision"] in {"20261123_02", "20261126_01"}
             fail_if("copy-migration")
             state["copy_revision"] = TARGET_REVISION
             done("Fixture isolated migration committed")

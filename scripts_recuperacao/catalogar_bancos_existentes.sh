@@ -34,7 +34,7 @@ for db in $bancos; do
   [ "$tabelas" = 5 ] || { echo "BANCO_DESCARTADO_ESTRUTURA=$db"; continue; }
   rev="$(query "$db" 'SELECT version_num FROM public.alembic_version;' || :)"
   case "$rev" in
-    20261013_02|20261022_01|20261022_02|20261026_01|20261026_02|20261026_03|20261027_01|20261027_02|20261027_03|20261027_04|20261027_05|20261028_01|20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01) ;;
+    20261013_02|20261022_01|20261022_02|20261026_01|20261026_02|20261026_03|20261027_01|20261027_02|20261027_03|20261027_04|20261027_05|20261028_01|20261112_01|20261116_01|20261117_01|20261123_01|20261123_02|20261126_01|20261126_02) ;;
     *) echo "BANCO_DESCARTADO_REVISAO=$db"; continue ;;
   esac
   counts="$(query "$db" 'SELECT (SELECT count(*) FROM public.users), (SELECT count(*) FROM public.laboratory_customers), (SELECT count(*) FROM public.laboratory_work_orders), (SELECT count(*) FROM public.purchase_orders);' || :)"

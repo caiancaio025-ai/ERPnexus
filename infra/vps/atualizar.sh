@@ -22,7 +22,8 @@ NETWORK=sentico-green-hml_green_private
 HOST=erp.universoeletronica.com
 INTERNAL_URL=http://127.0.0.1:18089
 BASE_REVISION=20261123_02
-REVISION=20261126_01
+RECEIPT_REVISION=20261126_01
+REVISION=20261126_02
 BACKUP_ROOT=${SENTICO_BACKUP_ROOT:-/root/backups-sentico}
 LOCK_FILE=${SENTICO_LOCK_FILE:-/run/lock/sentico-green-deploy.lock}
 ATTEMPTS=${SENTICO_DEPLOY_ATTEMPTS:-60}
@@ -87,7 +88,7 @@ PG_IMAGE=$(inspect '{{.Image}}' "$DB")
 [[ $(inspect '{{range .Mounts}}{{if eq .Destination "/app/storage"}}{{.Name}}{{end}}{{end}}' "$API") == "$UPLOADS_VOLUME" ]] || fail 'volume de uploads inesperado.'
 docker volume inspect "$DB_VOLUME" "$UPLOADS_VOLUME" >/dev/null
 PREVIOUS_REVISION=$(revision)
-[[ $PREVIOUS_REVISION == "$BASE_REVISION" || $PREVIOUS_REVISION == "$REVISION" ]] || fail "o banco precisa estar na revisao $BASE_REVISION ou $REVISION; nenhuma migracao foi executada."
+[[ $PREVIOUS_REVISION == "$BASE_REVISION" || $PREVIOUS_REVISION == "$RECEIPT_REVISION" || $PREVIOUS_REVISION == "$REVISION" ]] || fail "o banco precisa estar na revisao $BASE_REVISION, $RECEIPT_REVISION ou $REVISION; nenhuma migracao foi executada."
 wait_api "$API" || fail 'a API atual nao esta pronta; diagnostique antes de atualizar.'
 DB_IP=$(inspect '{{(index .NetworkSettings.Networks "sentico-green-hml_green_private").IPAddress}}' "$DB")
 DB_NAME=$(docker exec "$DB" printenv POSTGRES_DB)
@@ -200,7 +201,7 @@ recover() {
     fi
     if [[ -s $B/estoque.anterior.json ]]; then
         current=$(revision) || current=NAO_CONFIRMADA
-        if [[ $current != "$PREVIOUS_REVISION" && $current != "$REVISION" ]]; then
+        if [[ $current != "$PREVIOUS_REVISION" && $current != "$REVISION" && ! ( $PREVIOUS_REVISION == "$BASE_REVISION" && $current == "$RECEIPT_REVISION" ) ]]; then
             recover_ok=0
         elif ! real_inventory_snapshot "$current" "$B/estoque.retorno.json" ||
              ! cmp -s "$B/estoque.anterior.json" "$B/estoque.retorno.json"; then
@@ -348,7 +349,7 @@ if [[ $PREVIOUS_REVISION != "$REVISION" ]]; then
     docker run --rm --pull never --network "$COPY_NETWORK" --env-file "$B/copia.env" \
         --entrypoint alembic "$NEW_API_ID" upgrade "$REVISION" >> "$B/migracao-ensaio.log" 2>&1 || fail 'a migracao falhou na copia; o banco real nao foi migrado.'
 fi
-copy_inventory_snapshot "$REVISION" "$B/estoque.copia.migrada.json" || fail 'a copia migrada nao confirmou a revisao e as restricoes de recebimento.'
+copy_inventory_snapshot "$REVISION" "$B/estoque.copia.migrada.json" || fail 'a copia migrada nao confirmou a revisao e as restricoes de estoque e orcamentos.'
 cmp -s "$B/estoque.anterior.json" "$B/estoque.copia.migrada.json" || fail 'a migracao da copia alterou registros, quantidades ou custos anteriores.'
 cleanup_copy || fail 'nao foi possivel remover os recursos isolados do ensaio.'
 [[ $(revision) == "$PREVIOUS_REVISION" && $(inspect '{{.Id}}' "$DB") == "$DB_ID" && $(inspect '{{.State.Running}}' "$API") == false ]] || fail 'o banco ou a API mudaram durante o ensaio.'
@@ -359,7 +360,7 @@ if [[ $PREVIOUS_REVISION != "$REVISION" ]]; then
         upgrade "$REVISION" >> "$B/migracao.log" 2>&1 || fail 'a migracao do banco existente nao concluiu; verificando retorno sem restaurar dados.'
 fi
 [[ $(revision) == "$REVISION" ]] || fail 'a revisao final do banco nao corresponde a migracao prevista.'
-real_inventory_snapshot "$REVISION" "$B/estoque.migrado.json" || fail 'a migracao real nao confirmou as restricoes de recebimento.'
+real_inventory_snapshot "$REVISION" "$B/estoque.migrado.json" || fail 'a migracao real nao confirmou as restricoes de estoque e orcamentos.'
 cmp -s "$B/estoque.anterior.json" "$B/estoque.migrado.json" || fail 'a conferência de preservacao do estoque falhou apos a migracao.'
 record_revision
 

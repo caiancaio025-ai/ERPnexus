@@ -31,7 +31,7 @@ NEW_WEB = "sha256:" + "d" * 64
 PG_IMAGE = "sha256:" + "e" * 64
 OLD_TAG = "v47-fixture"
 BASE_REVISION = "20261123_02"
-TARGET_REVISION = "20261126_01"
+TARGET_REVISION = "20261126_02"
 
 
 class UpdaterSandbox:
@@ -434,6 +434,21 @@ def test_already_migrated_database_is_verified_without_reapplying_migration(upda
     assert not any("alembic" in e["args"] for e in updater.events)
     assert any("--single-transaction" in e["args"] for e in updater.events)
     updater.assert_data_untouched(revision=TARGET_REVISION)
+
+
+def test_receipt_release_upgrades_to_grouped_quotes_preserving_existing_volumes(updater: UpdaterSandbox):
+    state = updater.state
+    state["revision"] = "20261126_01"
+    updater.write_state(state)
+    result = updater.run()
+    assert result.returncode == 0, updater.details(result)
+    assert updater.state["migration_calls"] == 1
+    assert updater.state["copy_verified"]
+    updater.assert_data_untouched(revision=TARGET_REVISION)
+    backup = next(updater.backups.iterdir())
+    assert (backup / "revisao-final.txt").read_text() == (
+        f"REVISAO_ANTERIOR=20261126_01\nREVISAO_FINAL={TARGET_REVISION}\n"
+    )
 
 
 def test_unknown_database_revision_is_rejected_before_build_or_stop(updater: UpdaterSandbox):

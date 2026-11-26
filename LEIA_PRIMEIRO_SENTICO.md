@@ -1,6 +1,8 @@
 # SÊNTICO V48 — estabilidade de gravação
 
-**V48, com atualização de aparência e recebimento em 26/11/2026.**
+**V48, com faturamento de várias OS e orçamento conjunto, em 26/11/2026.**
+
+Veja as instruções e a validação em [ATUALIZACAO_V48_MULTIPLAS_OS.md](ATUALIZACAO_V48_MULTIPLAS_OS.md).
 
 Aparência agora fica no cabeçalho, ao lado do usuário. Compras individuais utilizam a quantidade informada, recebem códigos EST automáticos e não exigem série do fabricante. Consulte [o relatório desta atualização](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md).
 
@@ -49,7 +51,7 @@ As correções estão no pacote entregue. O computador, o Docker Desktop e o ban
 
 O projeto operacional continua sendo **`sentico-v14-recuperado`**. Os volumes de PostgreSQL e uploads são descobertos/reutilizados pelo instalador existente. O arquivo de configuração permanece em `%LOCALAPPDATA%\Sentico\RecuperacaoV14\.env.recuperacao`.
 
-A atualização de 26/11 aplica a migração incremental **`20261126_01`**, que mantém os dados anteriores e permite várias unidades individuais por recebimento. O pacote não contém contas de teste habilitadas para a instalação operacional. Os usuários sintéticos são criados somente pelo projeto separado de testes.
+A atualização atual aplica a migração incremental **`20261126_02`**, acrescentando as tabelas de orçamentos conjuntos. A migração anterior **`20261126_01`**, de recebimento individual, é aplicada antes quando necessária. Os dados existentes são preservados. O pacote não contém contas de teste habilitadas para a instalação operacional. Os usuários sintéticos são criados somente pelo projeto separado de testes.
 
 A interface agora é compilada e servida por Caddy. A API operacional não usa recarga automática de código. O antigo volume de dependências do frontend é preservado, mas a interface passa a usar os arquivos da imagem construída.
 

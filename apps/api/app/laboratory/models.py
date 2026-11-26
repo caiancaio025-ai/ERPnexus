@@ -3,10 +3,14 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
+    JSON,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -506,3 +510,90 @@ class LaboratoryDocument(Base):
     checksum_sha256: Mapped[str] = mapped_column(String(64), index=True)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LaboratoryQuoteGroup(Base):
+    """Identidade permanente de um orçamento conjunto, independentemente da revisão."""
+    __tablename__ = "laboratory_quote_groups"
+    __table_args__ = (UniqueConstraint("created_by", "creation_key", name="uq_lab_quote_group_creation_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    company_code: Mapped[str] = mapped_column(String(40), index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("laboratory_customers.id", ondelete="RESTRICT"), index=True)
+    customer_name: Mapped[str] = mapped_column(String(180))
+    creation_key: Mapped[str | None] = mapped_column(String(128))
+    creation_fingerprint: Mapped[str] = mapped_column(String(64))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LaboratoryGroupedQuote(Base):
+    __tablename__ = "laboratory_grouped_quotes"
+    __table_args__ = (
+        UniqueConstraint("group_id", "revision", name="uq_lab_grouped_quote_revision"),
+        CheckConstraint("revision > 0 AND version > 0", name="ck_lab_grouped_quote_version"),
+        CheckConstraint("status IN ('draft','emitted')", name="ck_lab_grouped_quote_status"),
+        CheckConstraint("subtotal >= 0 AND discount_amount >= 0 AND total >= 0 AND total = subtotal - discount_amount", name="ck_lab_grouped_quote_totals"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("laboratory_quote_groups.id", ondelete="RESTRICT"), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    # Validação tipada é feita pelo contrato HTTP antes de persistir o cabeçalho.
+    content: Mapped[dict] = mapped_column(JSON)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    document_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    pdf_content: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64))
+    emitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    group: Mapped[LaboratoryQuoteGroup] = relationship(lazy="joined")
+    work_orders: Mapped[list["LaboratoryGroupedQuoteWorkOrder"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="LaboratoryGroupedQuoteWorkOrder.position",
+    )
+    items: Mapped[list["LaboratoryGroupedQuoteItem"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="LaboratoryGroupedQuoteItem.position",
+        foreign_keys="LaboratoryGroupedQuoteItem.quote_id",
+    )
+
+
+class LaboratoryGroupedQuoteWorkOrder(Base):
+    __tablename__ = "laboratory_grouped_quote_work_orders"
+    __table_args__ = (
+        UniqueConstraint("quote_id", "work_order_id", name="uq_lab_grouped_quote_os"),
+        UniqueConstraint("quote_id", "position", name="uq_lab_grouped_quote_os_position"),
+        CheckConstraint("position > 0", name="ck_lab_grouped_quote_os_position"),
+        CheckConstraint("subtotal >= 0 AND discount_amount >= 0 AND total >= 0 AND total = subtotal - discount_amount", name="ck_lab_grouped_quote_os_totals"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quote_id: Mapped[int] = mapped_column(ForeignKey("laboratory_grouped_quotes.id", ondelete="CASCADE"), index=True)
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("laboratory_work_orders.id", ondelete="RESTRICT"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+
+
+class LaboratoryGroupedQuoteItem(Base):
+    __tablename__ = "laboratory_grouped_quote_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["quote_id", "work_order_id"],
+            ["laboratory_grouped_quote_work_orders.quote_id", "laboratory_grouped_quote_work_orders.work_order_id"],
+            ondelete="CASCADE", name="fk_lab_grouped_quote_item_os",
+        ),
+        UniqueConstraint("quote_id", "position", name="uq_lab_grouped_quote_item_position"),
+        CheckConstraint("position > 0 AND quantity > 0 AND unit_value >= 0", name="ck_lab_grouped_quote_item_values"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quote_id: Mapped[int] = mapped_column(ForeignKey("laboratory_grouped_quotes.id", ondelete="CASCADE"), index=True)
+    work_order_id: Mapped[int] = mapped_column(Integer, index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String(500))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    unit_value: Mapped[Decimal] = mapped_column(Numeric(14, 2))

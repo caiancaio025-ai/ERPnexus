@@ -60,7 +60,7 @@ def test_cli_never_echoes_external_exception_or_database_credentials(monkeypatch
     assert secret not in captured.err and "b" * 64 not in captured.err and "RuntimeError" not in captured.err
 
 
-def test_native_postgres_fresh_repeat_and_foreign_database_refusal(monkeypatch):
+def test_native_postgres_fresh_ready_upgrade_repeat_and_foreign_database_refusal(monkeypatch):
     if os.environ.get("SENTICO_LOCAL_BOOTSTRAP_PG_SMOKE") != "1":
         pytest.skip("Smoke nativo exige PostgreSQL descartável explicitamente habilitado.")
     initial_url = os.environ.get("DATABASE_URL", "")
@@ -89,17 +89,40 @@ def test_native_postgres_fresh_repeat_and_foreign_database_refusal(monkeypatch):
                        env={**os.environ, "DATABASE_URL": native_url}, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
     monkeypatch.setattr(helper, "upgrade", native_upgrade)
-    helper.bootstrap(API)
-    assert calls == [helper.BASELINE, helper.TARGET]
+    # Reproduce the previous package's ready installation using its real
+    # migrations, then update with the current package without re-seeding it.
+    initial_revision = "20261126_01"
+    initial_plan = helper.migration_plan(API)
+    initial_plan = initial_plan[:initial_plan.index(initial_revision) + 1]
+    with monkeypatch.context() as old_package:
+        old_package.setattr(helper, "TARGET", initial_revision)
+        old_package.setattr(helper, "migration_plan", lambda workdir: initial_plan)
+        helper.bootstrap(API)
+    assert calls == [helper.BASELINE, initial_revision]
     with native_engine.connect() as connection:
         owner = connection.execute(text("SELECT * FROM users")).mappings().one()
         assert owner["username"] == "teste_v48" and owner["role"] == "gestao" and owner["is_active"]
         assert {"compras", "estoque", "financeiro", "configuracoes", "colaboradores"}.issubset(owner["modules"])
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == helper.TARGET
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == initial_revision
         names = set(connection.execute(text("SELECT trade_name FROM commercial_company_profiles")).scalars())
         assert names == {"Universo Eletrônica", "Universo Automação", "Soluções Eletrônica"}
         assert connection.scalar(text("SELECT count(*) FROM purchase_orders")) == 0
         supplier_count = connection.scalar(text("SELECT count(*) FROM purchase_suppliers"))
+        preserved_tables = ("users", "commercial_company_profiles", "purchase_suppliers", helper.MARKER)
+        before_upgrade = {
+            table: connection.execute(text(f"SELECT to_jsonb(t) FROM public.{table} t ORDER BY id")).scalars().all()
+            for table in preserved_tables
+        }
+    calls.clear()
+    helper.bootstrap(API)
+    assert calls == [helper.TARGET]
+    with native_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == helper.TARGET
+        assert {
+            table: connection.execute(text(f"SELECT to_jsonb(t) FROM public.{table} t ORDER BY id")).scalars().all()
+            for table in preserved_tables
+        } == before_upgrade
+        assert connection.scalar(text("SELECT count(*) FROM laboratory_quote_groups")) == 0
     # A real cookie login confirms that the synthetic owner has useful access.
     monkeypatch.setenv("DATABASE_URL", native_url)
     from fastapi.testclient import TestClient

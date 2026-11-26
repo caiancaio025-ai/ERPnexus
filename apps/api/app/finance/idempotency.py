@@ -19,4 +19,10 @@ def fingerprint_mapping(data: Mapping[str, Any]) -> str:
 
 
 def finance_request_fingerprint(payload: BaseModel) -> str:
-    return fingerprint_mapping(payload.model_dump(mode="json"))
+    data = payload.model_dump(mode="json")
+    # Adding optional documentary fields must not invalidate keys recorded by
+    # clients before those fields existed.
+    for field in ("exit_invoice", "work_order_version"):
+        if data.get(field) is None:
+            data.pop(field, None)
+    return fingerprint_mapping(data)

@@ -84,6 +84,32 @@ export type FinanceWorkOrderOption = {
   equipment_label: string;
   status: string;
   approved_value?: number | null;
+  customer_id: number | null;
+  version: number;
+  total_registered: number | string;
+  remaining_to_issue: number | string | null;
+  exit_invoice?: string | null;
+  exit_invoice_2?: string | null;
+  exit_invoice_3?: string | null;
+};
+
+export type WorkOrderBillingDraft = {
+  order: FinanceWorkOrderOption;
+  amount: string;
+  confirmation: BillingConfirmation;
+};
+export type BillingBatchResult = {
+  batch_id: string;
+  total_amount: number | string;
+  exit_invoice: string;
+  work_orders: Array<{
+    work_order_id: number; work_order_number: string; amount: number | string;
+    obligation: { id: number; installments: FinancialEntry[] };
+  }>;
+};
+export type FinanceInvoiceSync = {
+  exit_invoice?: string | null;
+  work_order_version?: number;
 };
 
 export type BillingChecklistItem = {
