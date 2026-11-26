@@ -325,7 +325,15 @@ class WorkOrderReceivablesOutput(BaseModel):
     installments: list[FinancialEntryOutput]
 
 
+class IncomeTotals(BaseModel):
+    amount: float
+    settled: float
+    pending: float
+    overdue: float
+
+
 class FinancialEntryPage(BaseModel):
+    income_totals: IncomeTotals | None = None
     items: list[FinancialEntryOutput]
     page: int
     page_size: int
