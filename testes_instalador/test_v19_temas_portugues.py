@@ -15,9 +15,13 @@ def test_seletor_de_tema_globais():
     assert 'iniciarTema();' in (WEB / 'main.tsx').read_text(encoding='utf-8')
 
 
-def test_controle_tema_no_menu_compartilhado():
+def test_controle_tema_no_cabecalho_compartilhado():
     menu = (WEB / 'shared/ui/SenticoSidebar.tsx').read_text(encoding='utf-8')
-    assert '<ThemeSwitcher' in menu
+    header = (WEB / 'shared/ui/SenticoHeaderActions.tsx').read_text(encoding='utf-8')
+    appearance = (WEB / 'shared/theme/AppearanceMenu.tsx').read_text(encoding='utf-8')
+    assert '<ThemeSwitcher' not in menu
+    assert '<AppearanceMenu' in header
+    assert '<ThemeSwitcher' in appearance
     assert 'Tema claro' in (WEB / 'shared/theme/ThemeSwitcher.tsx').read_text(encoding='utf-8')
     assert 'Tema escuro' in (WEB / 'shared/theme/ThemeSwitcher.tsx').read_text(encoding='utf-8')
 

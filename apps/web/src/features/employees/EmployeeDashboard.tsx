@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import { useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../auth/AuthCard";
@@ -101,17 +102,17 @@ export function EmployeeDashboard({ user, onLogout }: Props) {
       <SenticoSidebar user={user} onLogout={onLogout} />
 
       <main className="employees-main sentico-content">
-        <header className="employees-header">
-          <div>
+        <header className="employees-header sentico-page-header">
+          <div className="sentico-page-heading">
             <small>ACESSOS AO SÊNTICO</small>
             <h1>Colaboradores</h1>
             <p>Você cria o ID, define o perfil e controla o acesso ao sistema.</p>
           </div>
-          {canManage && (
+          <div className="sentico-header-tools">{canManage && (
             <button className="employees-primary" onClick={() => setCreating(true)}>
               <Plus size={18}/>Novo colaborador
             </button>
-          )}
+          )}<SenticoHeaderActions user={user} onLogout={onLogout} /></div>
         </header>
 
         <section className="employees-summary">

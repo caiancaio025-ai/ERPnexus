@@ -26,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
+import { StockReceiptSummary, individualReceiptLimit, individualReceiptLimitMessage } from "../inventory/PurchaseStockDestination";
 import { AnimatePresence, motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 
@@ -398,8 +400,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
         if (form.inventory_destination === "new" && form.inventory_name.trim().length < 2) {
           throw new Error("Informe o nome técnico do item no Estoque; não será copiado automaticamente do título da compra.");
         }
-        if (form.inventory_destination === "new" && form.inventory_mode === "serialized" && (Number(form.quantity) !== 1 || !form.inventory_serial.trim())) {
-          throw new Error("Item individualizado exige quantidade 1 e número de série.");
+        if (form.inventory_destination === "new" && form.inventory_mode === "serialized" && Number(form.quantity) > individualReceiptLimit) {
+          throw new Error(individualReceiptLimitMessage);
         }
       }
       const totalAmount = moneyInput(form.total_amount);
@@ -419,7 +421,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
           : form.inventory_destination === "existing" ? (editing?.status === "delivered" ? form.inventory_name || null : selectedStock?.name || form.inventory_name || null)
           : null,
         inventory_mode: form.inventory_destination === "new" ? form.inventory_mode : null,
-        inventory_serial: form.inventory_destination === "new" && form.inventory_mode === "serialized" ? form.inventory_serial.trim() || null : null,
+        inventory_serial: form.inventory_destination === "new" && form.inventory_mode === "serialized" && Number(form.quantity) === 1 ? form.inventory_serial.trim() || null : null,
         inventory_category: form.inventory_destination === "new" ? form.inventory_category : null,
         inventory_format_id: form.inventory_destination === "new" && form.inventory_format_id ? Number(form.inventory_format_id) : null,
         total_amount: totalAmount,
@@ -561,9 +563,12 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
       />
 
       <section className="purchasing-content sentico-content">
-        <header className="purchasing-header">
-          <div><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "requests" ? "Solicitações de material" : view === "orders" ? "Gerenciar pedidos" : view === "report" ? "Relatório de gastos" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
-          {canViewValues && <motion.button className="primary-action" onClick={openNew} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}><Plus size={18} />Nova compra</motion.button>}
+        <header className="purchasing-header sentico-page-header">
+          <div className="sentico-page-heading"><p>GESTÃO DE SUPRIMENTOS</p><h1>{view === "new" ? (editing ? "Editar compra" : "Registrar pedido de compra") : view === "requests" ? "Solicitações de material" : view === "orders" ? "Gerenciar pedidos" : view === "report" ? "Relatório de gastos" : view === "audit" ? "Auditoria de compras" : "Compras e entregas"}</h1></div>
+          <div className="sentico-header-tools">
+            {canViewValues && <motion.button className="primary-action" onClick={openNew} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}><Plus size={18} />Nova compra</motion.button>}
+            <SenticoHeaderActions user={user} onLogout={onLogout} />
+          </div>
         </header>
 
         <div className="company-switcher">
@@ -635,7 +640,7 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
             <Field label="NF da compra"><input value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
             <Field label="Cliente/destino"><input value={form.client_destination} onChange={(e) => setForm({ ...form, client_destination: e.target.value })} placeholder="Para quem é?" /></Field>
             <Field label="Título / descrição da compra*" wide><input required value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} placeholder="Ex.: Inversor, máscara, cabos..." /></Field>
-            <Field label="Quantidade*"><input required type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+            <Field label="Quantidade*"><input required disabled={editing?.status === "delivered"} type="number" min="1" max="100000" step="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
             <Field label="Valor total (R$)*"><input required value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: e.target.value })} placeholder="0,00" /></Field>
             <Field label="Loja/fornecedor*"><select required value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}><option value="">Selecione</option>{suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
             <Field label="Origem"><select value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value as PurchaseOrigin })}><option value="national">Nacional</option><option value="international">Internacional</option></select></Field>
@@ -686,8 +691,8 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
                   </label>
                   <label>Tipo de controle
                     <select disabled={editing?.status === "delivered"} value={form.inventory_mode} onChange={(e) => setForm((f) => ({ ...f, inventory_mode: e.target.value as "bulk" | "serialized", inventory_serial: "" }))}>
-                      <option value="bulk">Quantidade / componentes (mesma etiqueta)</option>
-                      <option value="serialized">Item único / número de série</option>
+                      <option value="bulk">Por quantidade · mesma etiqueta</option>
+                      <option value="serialized">Individual · etiqueta por unidade</option>
                     </select>
                   </label>
                   <label>Categoria técnica
@@ -699,8 +704,9 @@ export function PurchasingDashboard({ user, onLogout }: Props) {
                       {stockFormats.filter((v) => v.category === form.inventory_category.trim().toLowerCase()).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                   </label>
-                  {form.inventory_mode === "serialized" && <label>Número de série do item recebido
-                    <input required={form.status === "delivered"} disabled={editing?.status === "delivered"} maxLength={120} value={form.inventory_serial} onChange={(e) => setForm((f) => ({ ...f, inventory_serial: e.target.value }))} placeholder="Série da peça, não da OS" />
+                  <StockReceiptSummary quantity={Number(form.quantity)} mode={form.inventory_mode} />
+                  {form.inventory_mode === "serialized" && Number(form.quantity) === 1 && <label>Série do fabricante (opcional)
+                    <input disabled={editing?.status === "delivered"} maxLength={120} value={form.inventory_serial} onChange={(e) => setForm((f) => ({ ...f, inventory_serial: e.target.value }))} placeholder="Preencha somente se o fabricante informar" />
                   </label>}
                 </>}
               </div>

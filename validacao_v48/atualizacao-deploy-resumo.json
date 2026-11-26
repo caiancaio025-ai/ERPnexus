@@ -1,0 +1,60 @@
+{
+  "scope": "V48 updater and installer support for individual receipt migration",
+  "baseline_revision": "20261123_02",
+  "target_revision": "20261126_01",
+  "vps_executed": false,
+  "docker_executed": false,
+  "checks": {
+    "bash_git_harness_initial": {
+      "passed": 23,
+      "evidence": "harness-first-run-record.log",
+      "evidence_kind": "faithful record of tool output from combined run; not an original redirected stdout file"
+    },
+    "bash_git_harness_final_guard": {
+      "passed": 8,
+      "deselected": 15,
+      "log": "rollback-final.log"
+    },
+    "helpers_with_postgresql17": {
+      "passed": 90,
+      "log": "helper-postgres.log"
+    },
+    "installer": {
+      "passed": 64,
+      "log": "installer.log"
+    },
+    "populated_dump_restore_migration": {
+      "passed": 5,
+      "server_and_clients": "PostgreSQL 16.2",
+      "result": "real-dump-restore-result.json",
+      "log": "real-dump-restore-runner.log"
+    }
+  },
+  "behavior": [
+    "Accept only baseline or target revision; preflight candidate API read-only before stopping the current API.",
+    "Require validated database/uploads backups, stopped API, isolated restored copy and identical inventory fingerprints before exact live upgrade.",
+    "Preserve every old inventory field; validate new required index default1, positive CHECK and composite source/index UNIQUE constraints.",
+    "Never downgrade or restore live data during automatic image rollback; compare inventory even when repeating deployment at target revision.",
+    "Record previous/final revision and clean only uniquely named temporary copy resources."
+  ],
+  "limitations": [
+    "The populated pg_dump/pg_restore roundtrip uses homogeneous PostgreSQL16.2 because available PostgreSQL17 package omits client tools; the optional PG17 source build was stopped when bison was unavailable.",
+    "PostgreSQL17 separately passed all90 helper tests including real target-schema checks; purchasing agent owns the populated PG17 migration tests.",
+    "Docker and HTTP are simulated in the Bash/Git harness; no production VPS action was performed."
+  ],
+  "sha256": {
+    "INSTALAR_SENTICO.ps1": "f9acb01b12b00338007d3865fcb58fde6fb590deca4b55d62b230be13f0f6a8b",
+    "apps/api/scripts/verificar_escrita_recuperacao.py": "7f15046c6bdf85a266799875f0f00ebf097aef25119fa3a492495229a1bff772",
+    "infra/vps/atualizar.sh": "9c01b4855ec160a2b5fec872f44c251f08a6b29ad7fee3bf1ec4166eab5f1855",
+    "infra/vps/deploy_v48.py": "60a5a478bc39c1ee85e29d4778283519316fd9d63abf10d1cfd1c7cf946a8156",
+    "infra/vps/LEIA-ME-DEPLOY.md": "7f89d7d6ac6bd63e7160dd4a059e5d7cd85bcae7efa629900a2b916c9e4b2876",
+    "infra/vps/tests/fakes/vps_commands.py": "592e2208d5c917e88832ef27625955059b02eeb02b00b2300f17d5b098974f72",
+    "infra/vps/tests/test_v48_vps_update.py": "72a91f0826495ed0c12094cc28e9b8c17c6517c0cf2159ee139600670ccdffee",
+    "infra/vps/tests/test_deploy_v48_inventory_snapshot.py": "a679f31d7c5cedeaf1c8190074c0d621505e8fb1cbeeab8d7b671b00a24edec3",
+    "scripts_recuperacao/catalogar_bancos_existentes.sh": "518790f9ee5fa0ed1b6fafbdbcd02e3b47ee055d0c4f5d12834a37fec60507d6",
+    "scripts_recuperacao/inspecionar_arquivo_pgdata.sh": "c119111383212144d9bf2b3f4b2f9a4bcee056c3a3acbffb3b54d8044fb865f9",
+    "testes_instalador/test_catalogo_instalador_unico.py": "ebb8eff2d3e469c224e21f97856c97dfe0ba6e5799abd665935f1e5251de8e03",
+    "testes_instalador/test_push_desktop_v16.py": "14f39bf912f20bf3f8a61f25c47b6336bb9ffd7bd29a447d0fcaaf514e59fe40",
+    "apps/api/migrations/versions/20261126_01_individual_purchase_receipts.py": "161507fbcc8e1bed5d2c38e0bbd39d8df4ae0fb76ca3c92e6cf6426b40180303"
+  }
+}

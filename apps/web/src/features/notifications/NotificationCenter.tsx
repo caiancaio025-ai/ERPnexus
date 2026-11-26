@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type { AuthUser } from "../auth/AuthCard";
 import type { NotificationItem } from "../dashboard/types";
 import { formatarNumeroOS, textoEmPortugues } from "../../shared/i18n/portugues";
@@ -163,9 +164,9 @@ export function NotificationCenter({ user, onLogout }: Props) {
     <SenticoSidebar user={user} onLogout={onLogout} />
     <main className="sentico-content sentico-notifications__main">
       <div className="sentico-notifications__topline"><button type="button" onClick={() => navigate("/painel")}><ArrowLeft size={16}/> Painel inicial</button><span>ATIVIDADES DO SISTEMA</span></div>
-      <header className="sentico-notifications__heading">
-        <div className="sentico-notifications__intro"><h1>Central de notificações</h1><p>Histórico das movimentações, com responsável, ordem de serviço e equipamento. Exibimos somente o que seu perfil permite acompanhar.</p></div>
-        <div className="sentico-notifications__header-actions"><button type="button" onClick={refresh} disabled={loading}><RefreshCw size={16} /> Atualizar</button>{history.unread_count > 0 && <button type="button" onClick={() => void markAllRead()}><CheckCheck size={16} /> Marcar todas como lidas</button>}</div>
+      <header className="sentico-notifications__heading sentico-page-header">
+        <div className="sentico-notifications__intro sentico-page-heading"><h1>Central de notificações</h1><p>Histórico das movimentações, com responsável, ordem de serviço e equipamento. Exibimos somente o que seu perfil permite acompanhar.</p></div>
+        <div className="sentico-notifications__header-actions sentico-header-tools"><button type="button" onClick={refresh} disabled={loading}><RefreshCw size={16} /> Atualizar</button>{history.unread_count > 0 && <button type="button" onClick={() => void markAllRead()}><CheckCheck size={16} /> Marcar todas como lidas</button>}<SenticoHeaderActions user={user} onLogout={onLogout} /></div>
       </header>
       <div className="sentico-notifications__overview" aria-label="Resumo das notificações">
         <div className="sentico-notifications__overview-main"><span className="sentico-notifications__overview-icon"><Activity size={21}/></span><div><span>Atividades encontradas</span><strong>{history.total}</strong></div></div>

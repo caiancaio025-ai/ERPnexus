@@ -27,7 +27,11 @@ case "$*" in
     esac
     ;;
   *"version_num"*)
-    [ "${SCENARIO:-}" = badrevision ] && echo 20991231_01 || echo 20261028_01
+    case "${SCENARIO:-}" in
+      badrevision) echo 20991231_01 ;;
+      latestrevision) echo 20261126_01 ;;
+      *) echo 20261028_01 ;;
+    esac
     ;;
   *"SELECT (SELECT count"*)
     case "${SCENARIO:-}" in
@@ -77,16 +81,24 @@ class CatalogoTests(unittest.TestCase):
         self.assertEqual(r.returncode, 35)
         self.assertIn('BANCO_DESCARTADO_REVISAO=sentico_green', r.stdout)
 
+    def test_individual_receipt_revision_remains_compatible_on_repeat_install(self):
+        r = self.run_scenario('latestrevision')
+        self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
+        self.assertIn('CANDIDATO|sentico_green|20261126_01|12|292|1045|8', r.stdout)
+
     def test_tcp_connection_failure_is_explained(self):
         r = self.run_scenario('connfail')
         self.assertEqual(r.returncode, 34)
         self.assertIn('ERRO_CATALOGO_CONEXAO_TCP', r.stdout)
 
     def test_only_one_launcher_and_one_engine(self):
-        self.assertEqual(sorted(p.name for p in ROOT.glob('INICIAR_*.cmd')), ['INICIAR_SENTICO.cmd'])
+        self.assertEqual(sorted(p.name for p in ROOT.glob('INICIAR_*.cmd')), ['INICIAR_SENTICO.cmd', 'INICIAR_TESTE_V48.cmd'])
         self.assertEqual(sorted(p.name for p in ROOT.glob('INSTALAR_*.ps1')), ['INSTALAR_SENTICO.ps1'])
         launcher = (ROOT/'INICIAR_SENTICO.cmd').read_text(encoding='utf-8')
         self.assertIn('INSTALAR_SENTICO.ps1', launcher)
+        local_test = (ROOT/'INICIAR_TESTE_V48.cmd').read_text(encoding='utf-8')
+        self.assertIn('TESTE_LOCAL_V48.ps1', local_test)
+        self.assertNotIn('INSTALAR_SENTICO.ps1', local_test)
 
     def test_docker_project_and_volumes_unchanged(self):
         content = (ROOT/'INSTALAR_SENTICO.ps1').read_text(encoding='utf-8-sig')

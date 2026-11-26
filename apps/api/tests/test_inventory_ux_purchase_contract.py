@@ -18,7 +18,7 @@ def test_serialized_cannot_receive_additional_units_from_ui_or_api():
     router = (ROOT / "app" / "inventory" / "router.py").read_text(encoding="utf-8")
     assert 'selected.mode==="bulk"&&<div className="inv-inline"' in ui
     assert 'if item.mode == "serialized":' in router
-    assert 'Equipamento individual não admite novas entradas' in router
+    assert 'Item individual não admite novas entradas' in router
 
 
 def test_auto_purchase_receives_only_when_physically_delivered():

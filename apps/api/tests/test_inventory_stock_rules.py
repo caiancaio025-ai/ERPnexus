@@ -39,13 +39,12 @@ def test_bulk_keeps_lot_when_consuming_quantity():
         stock_balance_after("bulk", 10, 0, consume=True)
 
 
-def test_serialized_requires_manufacturer_serial_and_one_unit():
+def test_individual_item_keeps_one_unit_with_optional_manufacturer_serial():
     valid = {"company_code": "universo_eletronica", "name": "Inversor WEG", "mode": "serialized", "quantity": 1, "manufacturer_serial": "SN123"}
     assert ItemInput.model_validate(valid).mode == "serialized"
     with pytest.raises(ValueError):
         ItemInput.model_validate({**valid, "quantity": 2})
-    with pytest.raises(ValueError):
-        ItemInput.model_validate({**valid, "manufacturer_serial": None})
+    assert ItemInput.model_validate({**valid, "manufacturer_serial": None}).manufacturer_serial is None
     assert ItemInput.model_validate({"company_code": "universo_eletronica", "name": "Capacitor 470uF", "mode": "bulk", "quantity": 300}).quantity == 300
 
 
@@ -101,10 +100,11 @@ async def test_consumed_cost_issue_and_return_use_original_price():
     engine.dispose()
 
 
-def test_edit_payload_keeps_serial_company_and_stock_identity_immutable():
+def test_edit_payload_allows_optional_oem_but_keeps_company_and_stock_identity_immutable():
     from app.inventory.schemas import ItemUpdate
 
     payload = ItemUpdate(name="Capacitor 470uF", category="capacitor", slot_id=None)
     assert payload.model_dump()["slot_id"] is None
-    for protected in ("company_code", "manufacturer_serial", "serial_normalized", "stock_code", "quantity", "mode"):
+    assert ItemUpdate(name="Drive", category="outros", manufacturer_serial="OEM-1").manufacturer_serial == "OEM-1"
+    for protected in ("company_code", "serial_normalized", "stock_code", "quantity", "mode"):
         assert protected not in ItemUpdate.model_fields

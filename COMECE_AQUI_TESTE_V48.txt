@@ -1,0 +1,133 @@
+SENTICO / ERPnexus V48 — TESTE LOCAL
+Pacote de avaliação de 26/11/2026
+
+Esta é a V48 com Aparência no cabeçalho e recebimento individual corrigido.
+Este guia permite avaliar as alterações em um ambiente local separado.
+
+1. COMO ABRIR NO WINDOWS
+
+1) Extraia TODO o ZIP em uma pasta própria. Exemplo: C:\Sentico-Teste-V48.
+2) Abra o Docker Desktop, com containers Linux, e espere ele terminar de iniciar.
+3) Na pasta extraída, dê dois cliques em INICIAR_TESTE_V48.cmd.
+4) Na primeira execução, aguarde o download das dependências e a compilação.
+   É necessário acesso à internet nessa preparação.
+5) Ao terminar, o inicializador mostra o usuário e a senha do teste e abre o
+   navegador. O endereço padrão é http://127.0.0.1:5185/. Use o endereço
+   exibido na janela caso ele selecione outra porta livre.
+6) Entre com o usuário teste_v48 e a senha gerada pelo inicializador.
+
+A senha é criada no seu computador na primeira execução. As informações
+de acesso ficam em %LOCALAPPDATA%\Sentico\TesteLocalV48\acesso.txt.
+Executar o mesmo atalho novamente mostra o acesso e mantém o banco de teste.
+Se você mudar a senha dentro do sistema, use a nova senha nas próximas
+entradas; reiniciar o teste mantém essa alteração.
+
+O sistema inicia com um usuário de Gestão, as empresas e os cadastros mínimos.
+Clientes, ordens de serviço, compras e itens do seu sistema em uso não são
+copiados. Os registros que você criar nesta avaliação permanecem neste teste.
+
+O atalho do teste manual é INICIAR_TESTE_V48.cmd. O arquivo INICIAR_SENTICO.cmd
+é o instalador da versão operacional e possui outro procedimento.
+
+2. O QUE CONFERIR
+
+APARÊNCIA
+
+- Abra Aparência no canto superior direito, à esquerda do usuário e de Sair.
+- Alterne Claro/Escuro, o tema comemorativo e Animar decoração.
+- Recarregue a página e veja se as escolhas foram mantidas.
+- Abra Compras, Estoque e Laboratório e confira a posição do botão.
+- Feche o painel com Escape ou clicando fora; teste também uma janela estreita.
+
+COMPRA AVULSA: 10 ITENS INDIVIDUAIS SEM SÉRIE DO FABRICANTE
+
+1) Abra Compras, a área Solicitações de material e Solicitar compra.
+2) Use a empresa Universo Eletrônica e uma descrição fácil de localizar,
+   como FITA TESTE INDIVIDUAL V48. Informe quantidade 10.
+3) No destino de estoque, escolha Cadastrar novo item com etiqueta e o controle
+   Individual · etiqueta por unidade. Confira o nome que aparecerá no estoque.
+4) Confira a prévia: serão criadas 10 unidades com identificação automática.
+   A quantidade vem da solicitação; para várias unidades não há uma série única
+   do fabricante a preencher.
+5) Envie para aprovação. Reabra o registro e confira quantidade e controle.
+6) Avance pelas ações Aprovar e Iniciar compra. Preencha Valor unitário com
+   um valor positivo de teste, por exemplo R$ 2,00, e use Marcar comprado.
+7) Reabra o registro e conclua pelo botão Recebido.
+8) Em Estoque > Itens e entradas, pesquise pelo nome do item. O resultado
+   esperado é 10 cadastros, cada um com saldo 1 e um código EST diferente.
+9) Abra um dos itens, confira a Etiqueta PDF e, se desejar, edite apenas nele
+   uma Série do fabricante. Salve e reabra para conferir a gravação.
+10) Reabra a solicitação recebida e confira que continuam existindo somente
+    as mesmas 10 unidades no estoque.
+
+COMPRA POR QUANTIDADE
+
+Repita com outro nome, por exemplo FITA TESTE QUANTIDADE V48, quantidade 10
+e controle Por quantidade · mesma etiqueta. Ao receber, o resultado esperado
+é um cadastro com saldo 10 e um código EST para o conjunto.
+
+ORDEM DE SERVIÇO E PERSISTÊNCIA
+
+1) Em Clientes, mantenha Empresa = Universo Eletrônica e abra Novo cliente.
+2) Preencha Razão social com Cliente teste Windows e use Salvar cadastro.
+3) Em Laboratório > Nova O.S., mantenha Empresa emissora = Universo Eletrônica.
+4) Pesquise Cliente teste Windows e clique na sugestão correspondente.
+   A seleção do cliente exige clicar no resultado da pesquisa.
+5) Preencha Equipamento = Inversor de teste e Defeito informado = Não liga.
+   Clique em Cadastrar e gerar O.S.
+6) Abra a OS e, em Edição completa, altere Defeito informado para
+   Não liga - teste revisado e Condição de entrada para Carcaça íntegra.
+7) Use Salvar alterações, aguarde Salvo, feche, pressione F5 e reabra a OS.
+   Os dois textos devem permanecer como foram gravados.
+8) Faça uma alteração identificável também em uma compra em andamento,
+   salve e reabra. Pare e inicie o ambiente pelos atalhos abaixo e confira
+   novamente esses registros.
+
+3. PARAR E VOLTAR A TESTAR
+
+Para parar: dê dois cliques em PARAR_TESTE_V48.cmd.
+Para voltar: dê dois cliques em INICIAR_TESTE_V48.cmd.
+
+O projeto Docker é sentico-v48-teste-local, com banco e uploads próprios.
+Parar mantém esses volumes. A instalação operacional e a Hostinger seguem
+seus procedimentos próprios; este inicializador usa o Docker local do Windows.
+
+4. SE A PORTA 5185 ESTIVER OCUPADA
+
+O inicializador procura outra porta livre próxima e mostra o endereço final.
+Para escolher uma porta específica, siga o comando abaixo.
+
+Abra o PowerShell dentro da pasta extraída e execute, por exemplo:
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\TESTE_LOCAL_V48.ps1 -Porta 5186
+
+A porta escolhida é salva para as próximas aberturas. Use o endereço exibido
+pelo inicializador. A API e o banco não publicam portas próprias.
+
+5. SE HOUVER UM PROBLEMA
+
+Mantenha a janela aberta e copie a mensagem de erro. Para um erro dentro do
+sistema, anote a tela, a ação, o horário, a referência exibida e o resultado
+esperado. Use dados fictícios neste banco de avaliação.
+
+O guia oficial para instalar o Docker Desktop no Windows está em:
+https://docs.docker.com/desktop/setup/install/windows-install/
+
+6. SOBRE A VALIDAÇÃO JÁ REALIZADA
+
+As correções da aplicação passaram por 684 testes de API/instalador,
+sem falhas; 7 testes históricos foram ignorados por falta dos arquivos
+privados necessários. A interface compilou e 17 cenários com navegador,
+API e PostgreSQL reais passaram, incluindo recebimento de 10 unidades,
+gravação/reabertura, série opcional, aparência e navegação nos nove módulos.
+
+O novo inicializador possui validação própria registrada em
+validacao_v48/teste-local-resumo.json. O Windows e o Docker Desktop do seu
+computador ainda precisam ser exercitados por você nesta avaliação.
+
+O relatório das alterações está em ATUALIZACAO_V48_APARENCIA_ESTOQUE.md.
+TESTAR_SENTICO.cmd executa a suíte automatizada em outro banco descartável;
+é uma opção adicional e não abre o sistema para avaliação manual.
+
+Para aplicar a atualização no servidor, siga o procedimento próprio em
+infra/vps/LEIA-ME-DEPLOY.md. O inicializador local atende apenas esta avaliação.

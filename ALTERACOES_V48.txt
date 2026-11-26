@@ -1,4 +1,6 @@
-SENTICO V48 — ARQUIVOS EM RELAÇÃO À V47 RECEBIDA
+SENTICO V48 — INVENTÁRIO DA ENTREGA INICIAL DE 25/11/2026
+
+As atualizações posteriores do GitHub estão no histórico de commits e em ATUALIZACAO_V48_APARENCIA_ESTOQUE.md. A contagem abaixo descreve o ZIP inicial em relação à V47 recebida.
 
 Arquivos originais mantidos: 485
 Arquivos originais atualizados: 62

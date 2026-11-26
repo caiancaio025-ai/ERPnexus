@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-26",
+  "purpose": "Pacote V48 para avaliacao local antes da publicacao no GitHub",
+  "base_commit": "07c07d41704fbe2deb151c1cf1c2b94cb64604d2",
+  "application_validation": "atualizacao-resumo.json",
+  "project": "sentico-v48-teste-local",
+  "default_url": "http://127.0.0.1:5185/",
+  "alembic_target": "20261126_01",
+  "results": {
+    "launcher_isolation_contracts_and_existing_installer": {
+      "passed": 69,
+      "failed": 0,
+      "new_isolation_contracts": 5,
+      "existing_installer_tests": 64,
+      "evidence": "teste-local-instalador.log",
+      "powershell_execution": false
+    },
+    "bootstrap_guards_and_native_postgresql": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "guards_and_error_handling": 11,
+      "postgresql_smoke": 1,
+      "postgresql": "17.12",
+      "evidence": "teste-local-bootstrap.xml",
+      "checked": [
+        "Fresh baseline, synthetic manager, final migration",
+        "Login, separate cookie, Financeiro and three companies",
+        "Restart preserves changed password, name, company and synthetic supplier",
+        "Foreign instance and nonempty unidentified database refused"
+      ]
+    },
+    "independent_launcher_review": "completed; null-port and already-stopped handling corrected"
+  },
+  "limits": [
+    "Windows PowerShell and Docker Desktop not executed in this Linux validation environment",
+    "Native PostgreSQL smoke adapts only database transport in test code; product guards remain enforced",
+    "Initial catalogue suppliers are provided by existing migrations; operational data are not imported",
+    "No GitHub publication or VPS deployment for this local package"
+  ],
+  "files_sha256": {
+    "INICIAR_TESTE_V48.cmd": "c49b90afd1d463b51a8a618a4568eec2c1f0e980cd446c1496fef6f07d8f77b9",
+    "PARAR_TESTE_V48.cmd": "d40a5ceee1220c26c1ee792738e0a4990058106a60b4a783fc401ab3f915ff64",
+    "TESTE_LOCAL_V48.ps1": "a0bf58edab795c17318d3944f3ca508944d2a91c5d5374bf453d0619a658ab7f",
+    "compose.teste-local.yml": "8b18b41a97063ea8cac173a3f0a9377fdf3006cf776b52efe32597dba58570f0",
+    "infra/teste-local/bootstrap_v48.py": "411564eb2207695d7aff11261ebc70074f5d6b3a6f20d2f7ae3d290a47421622",
+    "infra/teste-local/tests/test_local_v48_launcher.py": "2f975dd07256adef6a919a569d84513d6b68f9fd5aeef3f7d636475815e44370",
+    "infra/teste-local/tests/test_local_v48_bootstrap.py": "164ac822cd399d720935cc8907103fab717062788784a658b466b6aad74a1ac9"
+  }
+}

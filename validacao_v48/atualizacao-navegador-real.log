@@ -1,0 +1,74 @@
+PostgreSQL 17.12 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260714_01, create users table
+INFO  [alembic.runtime.migration] Running upgrade 20260714_01 -> 20260714_02, create user sessions
+INFO  [alembic.runtime.migration] Running upgrade 20260714_02 -> 20260715_01, create finance module
+INFO  [alembic.runtime.migration] Running upgrade 20260715_01 -> 20260715_02, expand finance entries for companies and banking details
+INFO  [alembic.runtime.migration] Running upgrade 20260715_02 -> 20260715_03, finance entry management and audit detail
+INFO  [alembic.runtime.migration] Running upgrade 20260715_03 -> 20260715_04, split invoice numbers into NFS-e and NF-e fields
+INFO  [alembic.runtime.migration] Running upgrade 20260715_04 -> 20260715_05, create purchasing module
+INFO  [alembic.runtime.migration] Running upgrade 20260715_05 -> 20260727_01, add user module access
+INFO  [alembic.runtime.migration] Running upgrade 20260727_01 -> 20260729_01, create laboratory module
+INFO  [alembic.runtime.migration] Running upgrade 20260729_01 -> 20260730_01, laboratory customers technicians and operational fields
+INFO  [alembic.runtime.migration] Running upgrade 20260730_01 -> 20260731_01, create laboratory quotes
+INFO  [alembic.runtime.migration] Running upgrade 20260731_01 -> 20260811_01, add laboratory documents, tracking token and invoiced_at
+INFO  [alembic.runtime.migration] Running upgrade 20260811_01 -> 20260811_02, link financial entries to laboratory work orders
+INFO  [alembic.runtime.migration] Running upgrade 20260811_02 -> 20260812_01, add persistent login rate limiting
+INFO  [alembic.runtime.migration] Running upgrade 20260812_01 -> 20260814_01, customer master foundation
+INFO  [alembic.runtime.migration] Running upgrade 20260814_01 -> 20260817_01, create employees module
+INFO  [alembic.runtime.migration] Running upgrade 20260817_01 -> 20260818_01, material request flow
+INFO  [alembic.runtime.migration] Running upgrade 20260818_01 -> 20260818_02, notifications and billing compliance foundation
+INFO  [alembic.runtime.migration] Running upgrade 20260818_02 -> 20260821_01, create commercial equipment registry
+INFO  [alembic.runtime.migration] Running upgrade 20260821_01 -> 20260821_02, allow standalone material requests
+INFO  [alembic.runtime.migration] Running upgrade 20260821_02 -> 20260827_01, add finance idempotency keys
+INFO  [alembic.runtime.migration] Running upgrade 20260827_01 -> 20260904_01, add textual commercial terms to laboratory quotes
+INFO  [alembic.runtime.migration] Running upgrade 20260904_01 -> 20260904_02, expand commercial workflow
+INFO  [alembic.runtime.migration] Running upgrade 20260904_02 -> 20260914_01, laboratory configurable statuses and substatuses
+INFO  [alembic.runtime.migration] Running upgrade 20260914_01 -> 20261007_01, scope financial accounts by company
+INFO  [alembic.runtime.migration] Running upgrade 20261007_01 -> 20261007_02, add native finance obligations and installments
+INFO  [alembic.runtime.migration] Running upgrade 20261007_02 -> 20261008_01, finance period closing and alert acknowledgments
+INFO  [alembic.runtime.migration] Running upgrade 20261008_01 -> 20261008_02, laboratory workflow, invoice keys, locations and quote photos
+INFO  [alembic.runtime.migration] Running upgrade 20261008_02 -> 20261009_01, allow multiple work orders in same laboratory location
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 20261009_01 -> 20261009_02, config master foundation: companies and physical locations
+INFO  [alembic.runtime.migration] Running upgrade 20261009_02 -> 20261009_03, add configurable rack placement to laboratory map
+INFO  [alembic.runtime.migration] Running upgrade 20261009_03 -> 20261009_04, add mechanics external-painting custody controls
+INFO  [alembic.runtime.migration] Running upgrade 20261009_04 -> 20261013_01, add laboratory technical release events
+INFO  [alembic.runtime.migration] Running upgrade 20261013_01 -> 20261013_02, individualize commercial assets and add patrimony locations
+INFO  [alembic.runtime.migration] Running upgrade 20261013_02 -> 20261022_01, Inventario com localizacao fisica, serie/lote, consumo e fotos.
+INFO  [alembic.runtime.migration] Running upgrade 20261022_01 -> 20261022_02, Encapsulamentos editáveis e origem única para recebimento automático de compras.
+INFO  [alembic.runtime.migration] Running upgrade 20261022_02 -> 20261026_01, Planejamento do destino de estoque por pedido sem vincular pela descrição.
+INFO  [alembic.runtime.migration] Running upgrade 20261026_01 -> 20261026_02, Destino de estoque para solicitações avulsas e de ordens de serviço.
+INFO  [alembic.runtime.migration] Running upgrade 20261026_02 -> 20261026_03, Categorias e subtipos técnicos editáveis, preservando Estoque V5.
+INFO  [alembic.runtime.migration] Running upgrade 20261026_03 -> 20261027_01, NF de garantia e inativação auditável de OS.
+INFO  [alembic.runtime.migration] Running upgrade 20261027_01 -> 20261027_02, Três campos independentes para notas fiscais de garantia na OS.
+INFO  [alembic.runtime.migration] Running upgrade 20261027_02 -> 20261027_03, Três notas de entrada e três de saída independentes na OS.
+INFO  [alembic.runtime.migration] Running upgrade 20261027_03 -> 20261027_04, NFs comuns independentes de tres pares de NFs de garantia.
+INFO  [alembic.runtime.migration] Running upgrade 20261027_04 -> 20261027_05, Codigos curtos EST: EST-01 ... EST-99, EST-100 etc.
+INFO  [alembic.runtime.migration] Running upgrade 20261027_05 -> 20261028_01, Cliente atual da locação na etiqueta patrimonial.
+INFO  [alembic.runtime.migration] Running upgrade 20261028_01 -> 20261112_01, Referências textuais de localização para exclusão física de endereços.
+INFO  [alembic.runtime.migration] Running upgrade 20261112_01 -> 20261116_01, Web Push opt-in per browser, and committed notification queue.
+INFO  [alembic.runtime.migration] Running upgrade 20261116_01 -> 20261117_01, Central de atividades internas estruturada e filtrável.
+INFO  [alembic.runtime.migration] Running upgrade 20261117_01 -> 20261123_01, Chaves NF-e de entrada e saida independentes para cada garantia.
+INFO  [alembic.runtime.migration] Running upgrade 20261123_01 -> 20261123_02, Vincular fotos de envio e retorno de pintura a cada peca, preservando historico.
+INFO  [alembic.runtime.migration] Running upgrade 20261123_02 -> 20261126_01, Permite receber varias unidades individuais sem duplicar a origem fisica.
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: header appearance/user/logout order and sidebar space
+PASS: appearance light/dark/season/animation persistence and Escape/outside close
+PASS: mobile appearance fits viewport and can be closed
+PASS: save/reopen/receive SC quantity10 without OEM; ten unique codes; repeated receipt unchanged
+PASS: add optional manufacturer serial later through stock UI; internal identity preserved
+PASS: PC delivered through UI and persisted/reopened
+PASS: PC delivered through UI and persisted/reopened
+PASS: PC delivered through UI and persisted/reopened
+PASS: header logout ends session
+{"status": "passed", "passed": 17}

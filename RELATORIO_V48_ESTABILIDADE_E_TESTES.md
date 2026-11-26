@@ -1,10 +1,10 @@
 # SÊNTICO V48 — correções de gravação e validação
 
-**Data:** 25/11/2026. **Base recebida:** SENTICO_V47_CABECALHOS_FIXOS_TABELAS_20261123.zip.
+**Relatório da entrega inicial:** 25/11/2026. As alterações posteriores de aparência e recebimento estão em [ATUALIZACAO_V48_APARENCIA_ESTOQUE.md](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md). **Base recebida:** SENTICO_V47_CABECALHOS_FIXOS_TABELAS_20261123.zip.
 
 ## Organização no GitHub
 
-O repositório mantém `apps/` e os arquivos Compose na raiz. Os caminhos de instalação e teste foram adaptados do ZIP, que usa `codigo-fonte/`. As correções de aplicação permanecem idênticas. Em 26/11/2026, o atualizador da VPS foi adaptado para V47 → V48, preservando o Compose de produção, os volumes e a revisão do banco. O procedimento exige execução no servidor e está descrito em [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md); o procedimento V47 anterior foi arquivado em `infra/vps/historico/`.
+O repositório mantém `apps/` e os arquivos Compose na raiz. Os caminhos de instalação e teste foram adaptados do ZIP, que usa `codigo-fonte/`. As correções descritas nesta entrega inicial foram mantidas. Em 26/11/2026, o atualizador da VPS foi adaptado para V47 → V48. A atualização posterior de recebimento acrescenta a migração `20261126_01`, mantendo o Compose de produção e os volumes existentes. O procedimento exige execução no servidor e está descrito em [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md); o procedimento V47 anterior foi arquivado em `infra/vps/historico/`.
 
 ## Resultado
 
@@ -128,7 +128,7 @@ O ambiente de execução utilizado para os testes Python foi Linux com Python 3.
 
 ## 6. Instalação e operação
 
-Consulte `LEIA_PRIMEIRO_SENTICO.md` para o procedimento curto. O inicializador continua sendo `INICIAR_SENTICO.cmd`; os nomes do projeto e dos volumes de dados foram preservados. Não há nova migração de estrutura nesta V48. Instalações anteriores à revisão atual ainda aplicam as migrações que já pertenciam ao pacote V47.
+Consulte `LEIA_PRIMEIRO_SENTICO.md` para o procedimento curto. O inicializador continua sendo `INICIAR_SENTICO.cmd`; os nomes do projeto e dos volumes de dados foram preservados. A entrega inicial não acrescentou migração à V47. A atualização de recebimento de 26/11 acrescenta `20261126_01`; utilize o instalador e o guia atuais da branch `main`.
 
 O Compose operacional agora entrega a interface compilada por Caddy, sem Vite/HMR em execução. A API operacional usa dois processos sem `--reload`. O volume antigo de `node_modules` permanece preservado, mas deixa de determinar quais dependências a interface usa. O Compose de desenvolvimento continua separado.
 

@@ -1,0 +1,89 @@
+{
+  "backend": "real FastAPI and disposable migrated PostgreSQL; no API mocks",
+  "checks": [
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/painel"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/compras"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/laboratorio"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/estoque"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/comercial"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/financeiro"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/clientes"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/colaboradores"
+    },
+    {
+      "check": "header appearance/user/logout order and sidebar space",
+      "route": "/notificacoes"
+    },
+    {
+      "check": "appearance light/dark/season/animation persistence and Escape/outside close"
+    },
+    {
+      "check": "mobile appearance fits viewport and can be closed"
+    },
+    {
+      "check": "save/reopen/receive SC quantity10 without OEM; ten unique codes; repeated receipt unchanged",
+      "stock_codes": [
+        "EST-10",
+        "EST-09",
+        "EST-08",
+        "EST-07",
+        "EST-06",
+        "EST-05",
+        "EST-04",
+        "EST-03",
+        "EST-02",
+        "EST-01"
+      ]
+    },
+    {
+      "check": "add optional manufacturer serial later through stock UI; internal identity preserved"
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "serialized",
+      "quantity": 3,
+      "items": 3
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "serialized",
+      "quantity": 1,
+      "items": 1
+    },
+    {
+      "check": "PC delivered through UI and persisted/reopened",
+      "mode": "bulk",
+      "quantity": 10,
+      "items": 1
+    },
+    {
+      "check": "header logout ends session"
+    }
+  ],
+  "page_errors": [],
+  "http_errors": [],
+  "status": "passed"
+}

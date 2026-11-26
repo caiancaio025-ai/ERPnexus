@@ -116,13 +116,19 @@ class InventoryItem(Base):
 
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
-    __table_args__ = (CheckConstraint("quantity > 0", name="ck_inv_movement_qty_positive"),)
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_inv_movement_qty_positive"),
+        CheckConstraint("receipt_unit_index > 0", name="ck_inv_receipt_unit_positive"),
+        UniqueConstraint("purchase_order_id", "receipt_unit_index", name="uq_inv_movements_purchase_unit"),
+        UniqueConstraint("material_request_id", "receipt_unit_index", name="uq_inv_movements_request_unit"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id", ondelete="RESTRICT"), index=True)
     work_order_id: Mapped[int | None] = mapped_column(ForeignKey("laboratory_work_orders.id", ondelete="RESTRICT"), index=True)
     reversal_of_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_movements.id", ondelete="RESTRICT"), index=True)
-    purchase_order_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_orders.id", ondelete="RESTRICT"), unique=True)
-    material_request_id: Mapped[int | None] = mapped_column(ForeignKey("material_requests.id", ondelete="RESTRICT"), unique=True)
+    purchase_order_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_orders.id", ondelete="RESTRICT"))
+    material_request_id: Mapped[int | None] = mapped_column(ForeignKey("material_requests.id", ondelete="RESTRICT"))
+    receipt_unit_index: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     kind: Mapped[str] = mapped_column(String(20))  # receipt | issue | return
     quantity: Mapped[int] = mapped_column(Integer)
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # fotografia historica

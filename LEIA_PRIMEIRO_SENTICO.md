@@ -1,14 +1,22 @@
 # SÊNTICO V48 — estabilidade de gravação
 
-**Atualização de 25/11/2026, baseada na V47 recebida.**
+**V48, com atualização de aparência e recebimento em 26/11/2026.**
 
-Neste repositório, `apps/` e os arquivos Compose ficam diretamente na raiz. Os caminhos do instalador e dos testes foram adaptados a essa organização. O ZIP entregue na conversa usa uma pasta intermediária `codigo-fonte/`; o código da aplicação é o mesmo.
+Aparência agora fica no cabeçalho, ao lado do usuário. Compras individuais utilizam a quantidade informada, recebem códigos EST automáticos e não exigem série do fabricante. Consulte [o relatório desta atualização](ATUALIZACAO_V48_APARENCIA_ESTOQUE.md).
+
+Neste repositório e no pacote atual, `apps/` e os arquivos Compose ficam diretamente na raiz. Os caminhos do instalador e dos testes foram adaptados a essa organização. O ZIP inicial entregue em 25/11 usava a pasta intermediária `codigo-fonte/`. Esta versão inclui a atualização de aparência e recebimento e o ambiente separado para avaliação local.
 
 Esta versão corrige falhas de gravação em Compras e nas ordens de serviço, conflitos entre usuários, duplicação na tentativa de reenviar anexos, perda de campos e mensagens de erro após uma operação já confirmada. Também inclui correções em Estoque, Orçamentos, Comercial, Clientes, Colaboradores e Financeiro.
 
-A validação conjunta terminou com **665 testes Python aprovados, nenhuma falha e sete testes históricos ignorados por falta dos CSVs originais**. A compilação da interface, os testes JavaScript, 18 cenários de navegador com falhas controladas e 12 verificações com navegador/API/PostgreSQL reais passaram. Os detalhes, a cobertura e as limitações estão em `RELATORIO_V48_ESTABILIDADE_E_TESTES.md`.
+A validação conjunta da entrega inicial terminou com **665 testes Python aprovados, nenhuma falha e sete testes históricos ignorados por falta dos CSVs originais**. A compilação da interface, os testes JavaScript, 18 cenários de navegador com falhas controladas e 12 verificações com navegador/API/PostgreSQL reais passaram. Os detalhes, a cobertura e as limitações estão em `RELATORIO_V48_ESTABILIDADE_E_TESTES.md`.
 
-## Atualizar a instalação existente
+## Experimentar a atualização primeiro
+
+Extraia o ZIP em uma pasta própria, abra o Docker Desktop com containers Linux e execute **`INICIAR_TESTE_V48.cmd`**. Acesse o endereço exibido, por padrão **http://127.0.0.1:5185/**, com o usuário e a senha de teste. O roteiro completo está em **`COMECE_AQUI_TESTE_V48.txt`**.
+
+Esse teste manual usa o projeto **`sentico-v48-teste-local`**, com banco e uploads próprios. Ele começa com o usuário de avaliação e os cadastros mínimos do sistema. Use **`PARAR_TESTE_V48.cmd`** para parar os serviços; iniciar de novo mantém os registros de teste.
+
+## Atualizar a instalação existente, após a validação
 
 1. Faça um backup atualizado do PostgreSQL e dos uploads da instalação em uso. Mantenha também o pacote anterior para eventual retorno.
 2. Extraia **todo o ZIP** em uma pasta no Windows. Execute os arquivos a partir da pasta extraída.
@@ -25,6 +33,9 @@ As correções estão no pacote entregue. O computador, o Docker Desktop e o ban
 
 | Arquivo | Finalidade |
 |---|---|
+| `INICIAR_TESTE_V48.cmd` | Abrir a versão para avaliação manual com banco separado. |
+| `PARAR_TESTE_V48.cmd` | Parar a avaliação e preservar os dados de teste. |
+| `COMECE_AQUI_TESTE_V48.txt` | Passos para iniciar, entrar e conferir as mudanças. |
 | `INICIAR_SENTICO.cmd` | Instalar/atualizar e iniciar o sistema operacional. |
 | `TESTAR_SENTICO.cmd` | Executar testes em banco descartável separado do sistema em uso. |
 | `DIAGNOSTICAR_SENTICO.cmd` | Consultar versão, API/banco, reinícios, memória e volumes; somente leitura. |
@@ -38,7 +49,7 @@ As correções estão no pacote entregue. O computador, o Docker Desktop e o ban
 
 O projeto operacional continua sendo **`sentico-v14-recuperado`**. Os volumes de PostgreSQL e uploads são descobertos/reutilizados pelo instalador existente. O arquivo de configuração permanece em `%LOCALAPPDATA%\Sentico\RecuperacaoV14\.env.recuperacao`.
 
-Não há nova migração de estrutura na V48; a revisão atual continua sendo **`20261123_02`**. O pacote não contém contas de teste habilitadas para a instalação operacional. Os usuários sintéticos são criados somente pelo projeto separado de testes.
+A atualização de 26/11 aplica a migração incremental **`20261126_01`**, que mantém os dados anteriores e permite várias unidades individuais por recebimento. O pacote não contém contas de teste habilitadas para a instalação operacional. Os usuários sintéticos são criados somente pelo projeto separado de testes.
 
 A interface agora é compilada e servida por Caddy. A API operacional não usa recarga automática de código. O antigo volume de dependências do frontend é preservado, mas a interface passa a usar os arquivos da imagem construída.
 

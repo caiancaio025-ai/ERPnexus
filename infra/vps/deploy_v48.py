@@ -10,6 +10,7 @@ errors: this helper is also run inside the API image through stdin.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import os
@@ -315,6 +316,99 @@ def probe_db(expected_ip: str, expected_db: str, expected_user: str, revision: s
         engine.dispose()
 
 
+def _validate_receipt_schema(connection) -> None:
+    """Validate the additive unit-receipt schema, not only the Alembic marker."""
+    from sqlalchemy import text
+
+    column = connection.execute(text(
+        "SELECT a.attnotnull AS required, t.typname AS type, "
+        "pg_get_expr(d.adbin, d.adrelid) AS default_value "
+        "FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid "
+        "LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum "
+        "WHERE a.attrelid = 'public.inventory_movements'::regclass "
+        "AND a.attname = 'receipt_unit_index' AND a.attnum > 0 AND NOT a.attisdropped"
+    )).mappings().one_or_none()
+    if (column is None or column["required"] is not True or column["type"] != "int4"
+            or column["default_value"] != "1"):
+        raise CheckError("A coluna de identificação das unidades recebidas não está correta.")
+    constraints = connection.execute(text(
+        "SELECT c.contype AS kind, pg_get_constraintdef(c.oid) AS definition, "
+        "ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(attnum, position) "
+        "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum "
+        "ORDER BY k.position) AS columns FROM pg_constraint c "
+        "WHERE c.conrelid = 'public.inventory_movements'::regclass"
+    )).mappings().all()
+    unique_keys = {tuple(row["columns"]) for row in constraints if row["kind"] == "u"}
+    expected_keys = {("purchase_order_id", "receipt_unit_index"), ("material_request_id", "receipt_unit_index")}
+    positive_index = any(
+        row["kind"] == "c" and re.sub(r"[\s()]", "", row["definition"]).lower()
+        == "checkreceipt_unit_index>0"
+        for row in constraints
+    )
+    if (not expected_keys.issubset(unique_keys) or not positive_index
+            or ("purchase_order_id",) in unique_keys or ("material_request_id",) in unique_keys):
+        raise CheckError("As restrições de recebimento individual não correspondem à migração esperada.")
+
+
+def inventory_snapshot(revision: str) -> dict:
+    """Read-only fingerprints prove that the receipt migration kept every row.
+
+    The old revision has no unit index. Its expected value is represented as 1
+    before hashing, so a legacy snapshot equals the upgraded snapshot only when
+    all existing fields and the new default value were preserved.
+    """
+    if revision not in {"20261123_02", "20261126_01"}:
+        raise CheckError("Revisão não suportada para a conferência do estoque.")
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.pool import NullPool
+
+    url = make_url(_load_settings().database_url)
+    if url.get_backend_name() != "postgresql":
+        raise CheckError("A conferência do estoque exige PostgreSQL.")
+    engine = create_engine(
+        url, poolclass=NullPool, isolation_level="REPEATABLE READ",
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c default_transaction_read_only=on -c statement_timeout=120000 -c timezone=UTC",
+        },
+    )
+    try:
+        with engine.connect() as connection:
+            if connection.execute(text("SELECT current_setting('transaction_read_only')")).scalar_one() != "on":
+                raise CheckError("A conferência do estoque não está em modo somente leitura.")
+            if connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all() != [revision]:
+                raise CheckError("A revisão do estoque mudou durante a conferência.")
+            if revision == "20261126_01":
+                _validate_receipt_schema(connection)
+            snapshot = {}
+            for table in ("inventory_items", "inventory_movements"):
+                projection = "to_jsonb(t)"
+                if table == "inventory_movements" and revision == "20261123_02":
+                    projection += " || jsonb_build_object('receipt_unit_index', 1)"
+                digest = hashlib.sha256()
+                rows = 0
+                statement = text(f"SELECT ({projection})::text FROM public.{table} t ORDER BY id")
+                result = connection.execution_options(stream_results=True).execute(statement)
+                for row in result:
+                    digest.update(row[0].encode("utf-8"))
+                    digest.update(b"\n")
+                    rows += 1
+                totals = connection.execute(text(
+                    f"SELECT count(*) AS rows, coalesce(sum(quantity), 0) AS quantity, "
+                    f"coalesce(sum(quantity * unit_cost), 0) AS value FROM public.{table}"
+                )).mappings().one()
+                if rows != totals["rows"]:
+                    raise CheckError("A contagem do estoque mudou durante a conferência.")
+                snapshot[table] = {
+                    "rows": rows, "quantity": str(totals["quantity"]),
+                    "value": str(totals["value"]), "sha256": digest.hexdigest(),
+                }
+            return snapshot
+    finally:
+        engine.dispose()
+
+
 class NoRedirect(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -372,6 +466,8 @@ def build_parser() -> SafeArgumentParser:
     database.add_argument("expected_db")
     database.add_argument("expected_user")
     database.add_argument("revision")
+    inventory = commands.add_parser("inventory-snapshot")
+    inventory.add_argument("revision")
     http = commands.add_parser("probe-http")
     http.add_argument("expected_version", nargs="?")
     return parser
@@ -392,6 +488,8 @@ def main(argv: list[str] | None = None) -> int:
             probe_uploads()
         elif args.command == "probe-db":
             probe_db(args.expected_ip, args.expected_db, args.expected_user, args.revision)
+        elif args.command == "inventory-snapshot":
+            print(json.dumps(inventory_snapshot(args.revision), sort_keys=True))
         elif args.command == "probe-http":
             probe_http(args.expected_version)
         return 0

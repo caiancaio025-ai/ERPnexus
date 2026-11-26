@@ -486,11 +486,12 @@ async def create_item(payload: ItemInput, db: AsyncSession = DB, user: User = De
         raise HTTPException(422, "Empresa do estoque inválida ou inativa.")
     if payload.unit_cost and not _money_allowed(user):
         raise HTTPException(403, "Somente Gestão pode definir custos de peças.")
-    normalized = payload.manufacturer_serial.strip().upper() if payload.mode == "serialized" and payload.manufacturer_serial else None
+    serial = (payload.manufacturer_serial or "").strip() or None
+    normalized = serial.upper() if payload.mode == "serialized" and serial else None
     item = InventoryItem(
         **payload.model_dump(exclude={"manufacturer_serial", "unit_cost"}),
         stock_code=f"TMP-{uuid4().hex[:24]}",
-        manufacturer_serial=payload.manufacturer_serial.strip() if payload.manufacturer_serial else None,
+        manufacturer_serial=serial,
         serial_normalized=normalized, unit_cost=payload.unit_cost, created_by=user.id,
     )
     db.add(item)
@@ -533,12 +534,17 @@ async def edit_item(item_id: int, payload: ItemUpdate, db: AsyncSession = DB, us
     # Clientes V5 não enviam subtype_id: preservar o subtipo salvo ao editar
     # outros campos, exceto quando a categoria técnica é modificada.
     changing_category = payload.category.strip().lower() != item.category.strip().lower()
-    for key, value in payload.model_dump(exclude={"unit_cost"}).items():
+    for key, value in payload.model_dump(exclude={"unit_cost", "manufacturer_serial"}).items():
         if key == "subtype_id" and key not in payload.model_fields_set:
             if changing_category:
                 item.subtype_id = None
             continue
         setattr(item, key, value)
+    # A identificação EST não muda. A série OEM pode ser preenchida depois;
+    # clientes antigos que omitem o campo não apagam a série cadastrada.
+    if "manufacturer_serial" in payload.model_fields_set:
+        item.manufacturer_serial = (payload.manufacturer_serial or "").strip() or None
+        item.serial_normalized = item.manufacturer_serial.upper() if item.mode == "serialized" and item.manufacturer_serial else None
     if old_slot != item.slot_id:
         previous_slot = await db.get(InventorySlot, old_slot) if old_slot else None
         new_slot = await db.get(InventorySlot, item.slot_id) if item.slot_id else None
@@ -550,11 +556,15 @@ async def edit_item(item_id: int, payload: ItemUpdate, db: AsyncSession = DB, us
         ))
     if payload.unit_cost is not None:
         item.unit_cost = payload.unit_cost
-    await notify_activity(db, actor=user, activity_module="estoque", action="inventory_updated",
-        title=f"Item atualizado · {item.stock_code}", message=f"{user.name} alterou cadastro/localização de {item.name}.", target="/estoque",
-        entity_type="inventory_item", entity_id=item.id, work_order_id=None, work_order_number=None,
-        equipment_name=item.name)
-    await db.commit()
+    try:
+        await notify_activity(db, actor=user, activity_module="estoque", action="inventory_updated",
+            title=f"Item atualizado · {item.stock_code}", message=f"{user.name} alterou cadastro/localização de {item.name}.", target="/estoque",
+            entity_type="inventory_item", entity_id=item.id, work_order_id=None, work_order_number=None,
+            equipment_name=item.name)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Número de série já cadastrado nesta empresa ou conflito no cadastro do item.") from None
     return _item_dict(item, user)
 
 
@@ -590,7 +600,7 @@ async def receive_item(item_id: int, payload: MovementInput, db: AsyncSession = 
     if item is None:
         raise HTTPException(404, "Item não encontrado.")
     if item.mode == "serialized":
-        raise HTTPException(409, "Equipamento individual não admite novas entradas; cadastre outra série.")
+        raise HTTPException(409, "Item individual não admite novas entradas; cadastre outra unidade.")
     return await _change(item_id, payload, "receipt", db, user)
 
 
@@ -722,6 +732,6 @@ async def label(item_id: int, db: AsyncSession = DB):
     slot = await db.get(InventorySlot, item.slot_id) if item.slot_id else None
     content = await asyncio.to_thread(
         inventory_label_pdf, stock_code=item.stock_code, name=item.name,
-        serial=item.manufacturer_serial, location=_readable_location(slot.code) if slot else "SEM LOCAL",
+        serial=item.manufacturer_serial, location=_readable_location(slot.code) if slot else "SEM LOCAL", mode=item.mode,
     )
     return Response(content=content, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{item.stock_code}.pdf"'})

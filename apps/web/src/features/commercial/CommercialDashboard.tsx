@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "../../shared/api/apiClient";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type { AuthUser } from "../auth/AuthCard";
 import { CommercialQuoteEditor } from "./CommercialQuoteEditor";
 import type { CommercialAssetLocationConfig, CommercialAssetMap, CommercialCompany, CommercialEquipment, CommercialPurpose, CommercialQuote, CompanyCode, CustomerLite, PreventiveOrder, QuoteType } from "./types";
@@ -146,7 +147,7 @@ export function CommercialDashboard({ user, onLogout }: Props) {
         onClick: () => setTab(id),
       }))}
     />
-    <main className="com-main sentico-content"><header className="com-header"><div><p>SÊNTICO ERP</p><h1>Operação comercial</h1><span>Clientes, patrimônio, venda, locação e preventiva em um fluxo separado do Laboratório.</span></div></header>
+    <main className="com-main sentico-content"><header className="com-header sentico-page-header"><div className="sentico-page-heading"><p>SÊNTICO ERP</p><h1>Operação comercial</h1><span>Clientes, patrimônio, venda, locação e preventiva em um fluxo separado do Laboratório.</span></div><SenticoHeaderActions user={user} onLogout={onLogout} /></header>
       <div className="com-tabs">{tabLabels.map(([value,label])=><button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{label}</button>)}</div>{message&&<div className="com-notice">{message}</div>}{error&&<div className="com-notice danger">{error}</div>}
 
       {tab==="cadastros"&&<div className="com-register-grid">

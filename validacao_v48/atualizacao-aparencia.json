@@ -1,0 +1,13 @@
+{
+  "passed": 7,
+  "checks": [
+    "desktop header order: appearance, user, logout; sidebar footer removed",
+    "keyboard opens preferences, focuses selected theme, Escape closes and restores focus",
+    "color, seasonal choice and animation preference persist; outside click dismisses",
+    "mobile 390px: appearance and logout visible; popover fits viewport",
+    "mobile 320px: appearance and logout visible; popover fits viewport",
+    "commercial mobile header keeps username and logout visible",
+    "shared appearance and single logout render in all nine modules"
+  ],
+  "page_errors": []
+}

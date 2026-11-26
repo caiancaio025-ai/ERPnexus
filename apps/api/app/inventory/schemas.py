@@ -69,8 +69,8 @@ class ItemInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode(self):
-        if self.mode == "serialized" and (self.quantity != 1 or not (self.manufacturer_serial or "").strip()):
-            raise ValueError("Item serializado exige um número de série e quantidade exatamente 1.")
+        if self.mode == "serialized" and self.quantity != 1:
+            raise ValueError("Cada item individual deve ter quantidade exatamente 1; seu código interno é gerado automaticamente.")
         return self
 
 
@@ -81,6 +81,7 @@ class ItemUpdate(BaseModel):
     format_id: int | None = Field(default=None, gt=0)
     manufacturer: str | None = Field(default=None, max_length=120)
     model: str | None = Field(default=None, max_length=120)
+    manufacturer_serial: str | None = Field(default=None, max_length=120)
     slot_id: int | None = Field(default=None, gt=0)
     unit_cost: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     notes: str | None = Field(default=None, max_length=4000)

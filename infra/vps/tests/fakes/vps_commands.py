@@ -17,6 +17,7 @@ API = f"{PROJECT}-api-1"
 WEB = f"{PROJECT}-web-1"
 DB = f"{PROJECT}-db-1"
 GATEWAY = f"{PROJECT}-gateway-1"
+TARGET_REVISION = "20261126_01"
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 state_path = Path(os.environ["SENTICO_FAKE_STATE"])
@@ -52,6 +53,15 @@ def fail_if(name):
         state.setdefault("injected_failures", []).append(name)
         print(f"Injected fixture failure: {name}", file=sys.stderr)
         done(code=23)
+
+
+def inventory_snapshot(*, copy=False):
+    snapshot = {"inventory_items": {"rows": 10, "quantity": "10", "value": "125.00", "sha256": "items-fixture"},
+                "inventory_movements": {"rows": 10, "quantity": "10", "value": "125.00", "sha256": "movements-fixture"}}
+    if copy and state["failure"] == "copy-data":
+        state.setdefault("injected_failures", []).append("copy-data")
+        snapshot["inventory_movements"]["quantity"] = "11"
+    return json.dumps(snapshot, sort_keys=True)
 
 
 def env_tag():
@@ -131,6 +141,24 @@ def compose(command):
         state["images"][f"sentico-green-api:{tag}"] = state["new_api"]
         state["images"][f"sentico-green-web:{tag}"] = state["new_web"]
         done("Fixture build complete")
+    if operation == "run" and "inventory-snapshot" in command:
+        assert command[-3:] == ["-", "inventory-snapshot", state["revision"]]
+        assert "PGOPTIONS=-c default_transaction_read_only=on" in command
+        assert "--no-deps" in command and "--rm" in command and "--entrypoint" in command
+        assert command[command.index("--entrypoint") + 1] == "python"
+        assert input_bytes
+        done(inventory_snapshot())
+    if operation == "run" and "alembic" in command:
+        assert command[-3:] == ["api", "upgrade", TARGET_REVISION]
+        assert command[command.index("--entrypoint") + 1] == "alembic"
+        assert maintenance() and not state["containers"][API]["State"]["Running"]
+        assert state.get("copy_verified"), "Real migration requires a restored and verified migrated copy"
+        assert state["revision"] == "20261123_02"
+        state["migration_calls"] = state.get("migration_calls", 0) + 1
+        fail_if("migration")
+        state["revision"] = TARGET_REVISION
+        fail_if("migration-after-commit")
+        done("Fixture live migration committed")
     if operation == "run" and "--name" in command and command[-1] == "api":
         assert "--no-deps" in command and "--service-ports" not in command and "--use-aliases" not in command
         assert "PGOPTIONS=-c default_transaction_read_only=on" in command
@@ -217,6 +245,18 @@ def docker_exec(command):
         unsupported()
     if name == DB and command[:1] == ["printenv"]:
         done({"POSTGRES_DB": "sentico_fixture", "POSTGRES_USER": "fixture"}[command[1]])
+    if name.startswith(f"{PROJECT}-copy-"):
+        if command[:1] == ["pg_isready"]:
+            fail_if("copy-start")
+            done()
+        if command[:1] == ["pg_restore"]:
+            assert input_bytes == b"PGDMP-complete-fixture-database\n"
+            assert "--single-transaction" in command and "--exit-on-error" in command
+            assert "--no-owner" in command and "--no-privileges" in command
+            assert command[-4:] == ["-U", "sentico_deploy_copy", "-d", "sentico_deploy_copy"]
+            fail_if("copy-restore")
+            state["copy_revision"] = state["revision"]
+            done()
     if name == GATEWAY and command == ["wget", "-qO-", "http://127.0.0.1:2019/config/"]:
         done(json.dumps(state["caddy"]))
     if name == GATEWAY and command[:1] == ["caddy"]:
@@ -236,6 +276,16 @@ def docker_exec(command):
 
 
 def docker():
+    if args == ["info", "--format", "{{.DockerRootDir}}"]:
+        done(state["project_dir"])
+    if args[:3] == ["network", "create", "--internal"]:
+        assert len(args) == 4 and args[3].startswith(f"{PROJECT}-copy-network-")
+        state.setdefault("copy_networks", []).append(args[3])
+        done(args[3])
+    if args[:2] == ["network", "rm"]:
+        assert len(args) == 3 and args[2].startswith(f"{PROJECT}-copy-network-")
+        state["copy_networks"].remove(args[2])
+        done(args[2])
     if args[:1] == ["compose"]:
         command = args[1:]
         while command and command[0].startswith("-"):
@@ -256,13 +306,41 @@ def docker():
     if args[:1] == ["exec"]:
         docker_exec(args[1:])
     if args[:2] == ["rm", "-f"]:
-        assert len(args) == 3 and args[2].startswith(f"{PROJECT}-preflight-")
+        assert len(args) == 3 and args[2].startswith((f"{PROJECT}-preflight-", f"{PROJECT}-copy-"))
         state["containers"].pop(args[2], None)
         done()
     if args == ["start", API]:
         assert maintenance(), "Recovery must keep maintenance active until the old API is ready"
         state["containers"][API]["State"]["Running"] = True
         done(API)
+    if args[:1] == ["run"] and "--network" in args and args[args.index("--network") + 1].startswith(f"{PROJECT}-copy-network-"):
+        assert "--rm" in args and "--pull" in args
+        assert "--mount" not in args and "-v" not in args and "--volume" not in args
+        assert "-p" not in args and "--publish" not in args
+        assert maintenance() and not state["containers"][API]["State"]["Running"]
+        env_file = Path(args[args.index("--env-file") + 1])
+        assert env_file.name == "copia.env" and env_file.stat().st_mode & 0o777 == 0o600
+        copy_env = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+        assert copy_env["POSTGRES_USER"] == copy_env["POSTGRES_DB"] == "sentico_deploy_copy"
+        assert copy_env["DATABASE_URL"].startswith("postgresql+psycopg://sentico_deploy_copy:")
+        if "--name" in args:
+            name = args[args.index("--name") + 1]
+            assert name.startswith(f"{PROJECT}-copy-") and args[-1] == state["pg_image"]
+            assert f"@{name}:5432/sentico_deploy_copy" in copy_env["DATABASE_URL"]
+            state["containers"][name] = {"Id": name, "Image": state["pg_image"], "State": {"Running": True}}
+            done(name)
+        if "inventory-snapshot" in args:
+            assert args[-3:] == ["-", "inventory-snapshot", state["copy_revision"]]
+            if state["copy_revision"] == TARGET_REVISION:
+                state["copy_verified"] = True
+            done(inventory_snapshot(copy=True))
+        if "alembic" in args:
+            assert args[-2:] == ["upgrade", TARGET_REVISION]
+            assert state["copy_revision"] == "20261123_02"
+            fail_if("copy-migration")
+            state["copy_revision"] = TARGET_REVISION
+            done("Fixture isolated migration committed")
+        unsupported()
     if args[:1] == ["run"] and "--entrypoint" in args and "du" in args:
         assert "--network" in args and args[args.index("--network") + 1] == "none"
         assert "--read-only" in args

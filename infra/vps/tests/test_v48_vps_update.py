@@ -30,6 +30,8 @@ NEW_API = "sha256:" + "c" * 64
 NEW_WEB = "sha256:" + "d" * 64
 PG_IMAGE = "sha256:" + "e" * 64
 OLD_TAG = "v47-fixture"
+BASE_REVISION = "20261123_02"
+TARGET_REVISION = "20261126_01"
 
 
 class UpdaterSandbox:
@@ -168,11 +170,13 @@ class UpdaterSandbox:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
         )
 
-    def assert_data_untouched(self) -> None:
+    def assert_data_untouched(self, *, revision: str = BASE_REVISION) -> None:
         state = self.state
         assert state["containers"][DB] == self.initial_state["containers"][DB]
         assert state["volume_names"] == self.initial_state["volume_names"]
-        assert state["revision"] == self.initial_state["revision"]
+        assert state["revision"] == revision
+        assert not state.get("copy_networks", [])
+        assert not any(name.startswith(f"{PROJECT}-copy-") for name in state["containers"])
         for event in self.events:
             args = event["args"]
             command = " ".join(args)
@@ -184,7 +188,7 @@ class UpdaterSandbox:
                     assert " -l" in command or "--list" in command or "--file" in command or "-f" in command, command
                     assert "--dbname" not in args and "-d" not in args, command
 
-    def assert_old_application(self, *, had_tag: bool = True) -> None:
+    def assert_old_application(self, *, had_tag: bool = True, revision: str = BASE_REVISION) -> None:
         state = self.state
         assert state["containers"][API]["Image"] == OLD_API
         assert state["containers"][WEB]["Image"] == OLD_WEB
@@ -198,7 +202,7 @@ class UpdaterSandbox:
         else:
             assert not (self.app / ".tag").exists()
         assert not any("-preflight-" in name for name in state["containers"])
-        self.assert_data_untouched()
+        self.assert_data_untouched(revision=revision)
 
     def details(self, result: subprocess.CompletedProcess[str]) -> str:
         logs = "\n".join(f"{p.name}:\n{p.read_text(errors='replace')[-2500:]}" for p in self.backups.rglob("*.log"))
@@ -268,7 +272,7 @@ def test_success_backs_up_before_switch_and_keeps_database_and_upload_volumes(up
     assert updater.state["containers"][WEB]["Image"] == NEW_WEB
     assert updater.state["caddy"] == updater.initial_caddy
     assert not any("-preflight-" in name for name in updater.state["containers"])
-    updater.assert_data_untouched()
+    updater.assert_data_untouched(revision=TARGET_REVISION)
     assert updater.git("status", "--porcelain").stdout == ""
     assert updater.git("rev-parse", "HEAD").stdout.strip() == updater.commit
 
@@ -291,11 +295,20 @@ def test_success_backs_up_before_switch_and_keeps_database_and_upload_volumes(up
     dump = next(i for i, e in enumerate(events) if "pg_dump" in " ".join(e["args"]))
     verified = next(i for i, e in enumerate(events) if "--file=/dev/null" in e["args"])
     archive = next(i for i, e in enumerate(events) if "--entrypoint" in e["args"] and "tar" in e["args"])
+    restored = next(i for i, e in enumerate(events) if "pg_restore" in e["args"] and "--single-transaction" in e["args"])
+    copy_migrated = next(i for i, e in enumerate(events) if "alembic" in e["args"] and "compose" not in e["args"])
+    live_migrated = next(i for i, e in enumerate(events) if "alembic" in e["args"] and "compose" in e["args"])
     switched = next(i for i, e in enumerate(events) if e["args"][:1] == ["compose"] and "up" in e["args"])
-    assert build < probe < maintenance < stopped < dump < verified < archive < switched
+    assert build < probe < maintenance < stopped < dump < verified < archive < restored < copy_migrated < live_migrated < switched
     assert len(updater.compose_events("up")) == 1
     backup_manifest = (backup / "imagens-e-revisao.txt").read_text()
     assert f"API_ANTERIOR={OLD_API}" in backup_manifest and f"WEB_ANTERIOR={OLD_WEB}" in backup_manifest
+    assert f"REVISAO_ANTERIOR={BASE_REVISION}" in backup_manifest
+    assert f"REVISAO_ALVO={TARGET_REVISION}" in backup_manifest
+    assert (backup / "revisao-final.txt").read_text() == f"REVISAO_ANTERIOR={BASE_REVISION}\nREVISAO_FINAL={TARGET_REVISION}\n"
+    assert (backup / "estoque.anterior.json").read_bytes() == (backup / "estoque.migrado.json").read_bytes()
+    assert (backup / "estoque.anterior.json").read_bytes() == (backup / "estoque.copia.migrada.json").read_bytes()
+    assert not (backup / "copia.env").exists()
 
 
 @pytest.mark.parametrize("failure,had_tag", [
@@ -319,7 +332,7 @@ def test_post_switch_failure_restores_exact_old_images_and_environment_without_d
     assert swaps[1]["env"] == updater.old_env
     assert updater.state["images"][f"sentico-green-api:{swaps[1]['tag']}"] == OLD_API
     assert updater.state["images"][f"sentico-green-web:{swaps[1]['tag']}"] == OLD_WEB
-    updater.assert_old_application(had_tag=had_tag)
+    updater.assert_old_application(had_tag=had_tag, revision=TARGET_REVISION)
     if failure == "released-gateway":
         reloads = [json.loads(e["stdin"]) for e in updater.events if "caddy" in e["args"] and "reload" in e["args"]]
         assert len(reloads) == 4
@@ -341,7 +354,7 @@ def test_public_proxy_failure_keeps_verified_v48_running_and_returns_distinct_st
     assert updater.state["containers"][WEB]["Image"] == NEW_WEB
     assert updater.state["caddy"] == updater.initial_caddy
     assert (updater.app / ".tag").read_text().startswith(f"v48-{updater.commit[:12]}-")
-    updater.assert_data_untouched()
+    updater.assert_data_untouched(revision=TARGET_REVISION)
 
 
 def test_repeating_same_commit_uses_new_tag_and_can_restore_previous_successful_build(updater: UpdaterSandbox):
@@ -376,4 +389,59 @@ def test_repeating_same_commit_uses_new_tag_and_can_restore_previous_successful_
     assert (updater.app / ".env.production").read_bytes() == previous_env
     assert (updater.app / ".tag").read_bytes() == previous_tag
     assert len(list(updater.backups.iterdir())) == 2
-    updater.assert_data_untouched()
+    updater.assert_data_untouched(revision=TARGET_REVISION)
+    assert updater.state["migration_calls"] == 1, "A repeat run must not reapply the committed migration"
+
+
+@pytest.mark.parametrize("failure", ["copy-start", "copy-restore", "copy-data", "copy-migration"])
+def test_failed_isolated_rehearsal_keeps_live_revision_and_restores_old_api(updater: UpdaterSandbox, failure: str):
+    result = updater.run(failure)
+    assert result.returncode != 0, updater.details(result)
+    assert failure in updater.state.get("injected_failures", []), updater.details(result)
+    assert "RETORNO_APLICACAO_ANTERIOR=OK" in result.stdout, updater.details(result)
+    assert not updater.state.get("migration_calls", 0)
+    assert not updater.compose_events("up")
+    assert not list(updater.backups.glob("*/copia.env"))
+    updater.assert_old_application()
+
+
+@pytest.mark.parametrize("failure,expected_revision", [
+    ("migration", BASE_REVISION), ("migration-after-commit", TARGET_REVISION),
+])
+def test_migration_failure_never_downgrades_or_restores_database(
+    updater: UpdaterSandbox, failure: str, expected_revision: str,
+):
+    result = updater.run(failure)
+    assert result.returncode != 0, updater.details(result)
+    assert failure in updater.state.get("injected_failures", []), updater.details(result)
+    assert updater.state.get("copy_verified")
+    assert updater.state["migration_calls"] == 1
+    assert "RETORNO_APLICACAO_ANTERIOR=OK" in result.stdout, updater.details(result)
+    assert f"REVISAO_BANCO_APOS_RETORNO={expected_revision}" in result.stdout
+    assert not any("downgrade" in e["args"] for e in updater.events)
+    assert not updater.compose_events("up")
+    updater.assert_old_application(revision=expected_revision)
+    backup = next(updater.backups.iterdir())
+    assert f"REVISAO_FINAL={expected_revision}\n" in (backup / "revisao-final.txt").read_text()
+
+
+def test_already_migrated_database_is_verified_without_reapplying_migration(updater: UpdaterSandbox):
+    state = updater.state
+    state["revision"] = TARGET_REVISION
+    updater.write_state(state)
+    result = updater.run()
+    assert result.returncode == 0, updater.details(result)
+    assert not any("alembic" in e["args"] for e in updater.events)
+    assert any("--single-transaction" in e["args"] for e in updater.events)
+    updater.assert_data_untouched(revision=TARGET_REVISION)
+
+
+def test_unknown_database_revision_is_rejected_before_build_or_stop(updater: UpdaterSandbox):
+    state = updater.state
+    state["revision"] = "unexpected_revision"
+    updater.write_state(state)
+    result = updater.run()
+    assert result.returncode != 0, updater.details(result)
+    assert "nenhuma migracao foi executada" in result.stderr
+    assert not updater.compose_events("build") and not updater.compose_events("stop")
+    updater.assert_old_application(revision="unexpected_revision")

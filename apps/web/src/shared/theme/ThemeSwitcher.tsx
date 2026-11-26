@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Moon, Sun, Sparkles } from "lucide-react";
 import { escolherTema, eventoTema, temaSalvo, type SenticoTheme } from "./theme";
 import { EVENTO_TEMPORADA, lerConfigTemporada, salvarConfigTemporada, nomesTemporadas, temporadaEfetiva, type ConfigTemporada, type EscolhaTemporada } from "./seasonal";
 import "./theme-switcher.css";
 
-export function ThemeSwitcher({ compacto = false }: { compacto?: boolean }) {
+export function ThemeSwitcher({ compacto = false, titulo = "Aparência" }: { compacto?: boolean; titulo?: string }) {
+  const seasonSelectId = useId();
   const [tema, setTema] = useState<SenticoTheme>(temaSalvo);
   const [festas, setFestas] = useState<ConfigTemporada>(lerConfigTemporada);
   useEffect(() => {
@@ -23,7 +24,7 @@ export function ThemeSwitcher({ compacto = false }: { compacto?: boolean }) {
     salvarConfigTemporada(proxima);
   }
   return <div className={`sentico-tema ${compacto ? "sentico-tema--compacto" : ""}`} role="group" aria-label="Aparência do SÊNTICO">
-    {!compacto && <span className="sentico-tema__titulo">Aparência</span>}
+    {!compacto && <span className="sentico-tema__titulo">{titulo}</span>}
     <div className="sentico-tema__opcoes">
       <button type="button" onClick={() => escolherTema("claro")} aria-pressed={tema === "claro"} title="Ativar tema claro" aria-label="Tema claro" className={tema === "claro" ? "is-active" : ""}><Sun size={16} aria-hidden="true" /><span>Claro</span></button>
       <button type="button" onClick={() => escolherTema("escuro")} aria-pressed={tema === "escuro"} title="Ativar tema escuro" aria-label="Tema escuro" className={tema === "escuro" ? "is-active" : ""}><Moon size={16} aria-hidden="true" /><span>Escuro</span></button>
@@ -34,8 +35,8 @@ export function ThemeSwitcher({ compacto = false }: { compacto?: boolean }) {
       </button>
     ) : (
       <div className="sentico-tema__festas">
-        <label htmlFor="sentico-seletor-temporada">Temas comemorativos</label>
-        <select id="sentico-seletor-temporada" value={festas.escolha} onChange={(evento) => alterarFestas({ escolha: evento.target.value as EscolhaTemporada })}>
+        <label htmlFor={seasonSelectId}>Temas comemorativos</label>
+        <select id={seasonSelectId} value={festas.escolha} onChange={(evento) => alterarFestas({ escolha: evento.target.value as EscolhaTemporada })}>
           <option value="automatico">Automático pela data</option>
           <option value="desativado">Desativado</option>
           {(Object.entries(nomesTemporadas) as Array<[EscolhaTemporada, string]>).map(([valor, nome]) => <option key={valor} value={valor}>{nome} (prévia)</option>)}

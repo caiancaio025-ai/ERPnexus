@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../shared/api/apiClient";
 import { moneyInput } from "../../shared/forms/moneyInput";
 import type { MaterialRequest, MaterialRequestStatus } from "./types";
-import { PurchaseStockDestination, emptyStockDestination, stockDestinationFromRequest, stockDestinationPayload } from "../inventory/PurchaseStockDestination";
+import { PurchaseStockDestination, emptyStockDestination, stockDestinationFromRequest, stockDestinationPayload, individualReceiptLimit, individualReceiptLimitMessage } from "../inventory/PurchaseStockDestination";
 
 const labels: Record<MaterialRequestStatus, string> = {
   awaiting_approval: "Aguardando aprovação", approved: "Aprovado", rejected: "Reprovado",
@@ -85,7 +85,7 @@ function StandaloneRequestModal({ onClose, onSaved }: { onClose: () => void; onS
   async function submit(e: React.FormEvent) {
     e.preventDefault(); if (pendingRef.current) return; pendingRef.current = true; setSaving(true); setError("");
     try {
-      await apiClient.post("/purchasing/material-requests", { ...form, quantity: Number(form.quantity), technical_note: form.technical_note || null, suggested_link: form.suggested_link || null, ...stockDestinationPayload(stockTarget) });
+      await apiClient.post("/purchasing/material-requests", { ...form, quantity: Number(form.quantity), technical_note: form.technical_note || null, suggested_link: form.suggested_link || null, ...stockDestinationPayload(stockTarget, Number(form.quantity)) });
       await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível criar a solicitação."); }
     finally { pendingRef.current = false; setSaving(false); }
@@ -115,11 +115,12 @@ function MaterialRequestEditor({ item, canViewValues, onOpenLab, onClose, onSave
     if (nextStatus === "received" && item.status !== "received") {
       if (!stockTarget.inventory_destination) { setError("Selecione como o material entrará no Estoque antes de marcar Recebido."); return; }
       if (stockTarget.inventory_destination === "existing" && !stockTarget.inventory_item_id) { setError("Selecione o cadastro do Estoque que receberá a quantidade."); return; }
-      if (stockTarget.inventory_destination === "new" && stockTarget.inventory_mode === "serialized" && (item.quantity !== 1 || !stockTarget.inventory_serial.trim())) { setError("Item individual exige uma unidade e número de série."); return; }
+      if (stockTarget.inventory_destination === "new" && stockTarget.inventory_name.trim().length < 2) { setError("Informe o nome do item no Estoque antes de receber."); return; }
+      if (stockTarget.inventory_destination === "new" && stockTarget.inventory_mode === "serialized" && item.quantity > individualReceiptLimit) { setError(individualReceiptLimitMessage); return; }
     }
     pendingRef.current = true; setSaving(true); setError("");
     try {
-      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, ...(canViewValues ? { unit_cost: form.unit_cost ? parsedUnitCost : null } : {}), expected_delivery_date: form.expected_delivery_date || null, note: form.note || null, ...(["received", "delivered_to_lab"].includes(item.status) ? {} : stockDestinationPayload(stockTarget)) });
+      await apiClient.patch(`/purchasing/material-requests/${item.id}`, { status: nextStatus, supplier_name: form.supplier_name || null, purchase_reference: form.purchase_reference || null, purchase_link: form.purchase_link || null, tracking_code: form.tracking_code || null, ...(canViewValues ? { unit_cost: form.unit_cost ? parsedUnitCost : null } : {}), expected_delivery_date: form.expected_delivery_date || null, note: form.note || null, ...(["received", "delivered_to_lab"].includes(item.status) ? {} : stockDestinationPayload(stockTarget, item.quantity)) });
       await onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível atualizar."); }
     finally { pendingRef.current = false; setSaving(false); }

@@ -45,8 +45,10 @@ async def test_received_purchase_is_idempotent_and_request_can_share_the_same_re
     class Adapter:
         def __init__(self, session): self.session = session
         async def scalar(self, query): return self.session.scalar(query)
+        async def scalars(self, query): return self.session.scalars(query)
         async def flush(self): self.session.flush()
         def add(self, obj): self.session.add(obj)
+        def add_all(self, objects): self.session.add_all(objects)
     with Session(engine) as session:
         db = Adapter(session)
         params = dict(company_code="universo_eletronica", name="Capacitor 470uF", quantity=50, unit_cost=Decimal("3.20"), user_id=1)
@@ -66,8 +68,10 @@ async def test_received_purchase_is_idempotent_and_request_can_share_the_same_re
 
 
 def test_receipt_uniqueness_and_fk_provenance():
+    from sqlalchemy import UniqueConstraint
+    unique_columns = {tuple(c.columns.keys()) for c in InventoryMovement.__table__.constraints if isinstance(c, UniqueConstraint)}
     for field in ("purchase_order_id", "material_request_id"):
-        assert InventoryMovement.__table__.c[field].unique is True
+        assert (field, "receipt_unit_index") in unique_columns
         assert InventoryMovement.__table__.c[field].foreign_keys
 
 

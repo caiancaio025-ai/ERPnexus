@@ -32,6 +32,7 @@ import { useNavigate } from "react-router-dom";
 import type { AuthUser } from "../auth/AuthCard";
 import { apiClient } from "../../shared/api/apiClient";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type {
   CustomerContact,
   CustomerDetail,
@@ -177,11 +178,11 @@ export function CustomerMaster({ user, onLogout }: CustomerMasterProps) {
       <SenticoSidebar user={user} onLogout={onLogout} />
 
       <main className="customers-main sentico-content">
-        <header className="customers-header">
-          <div className="customers-title-wrap">
+        <header className="customers-header sentico-page-header">
+          <div className="customers-title-wrap sentico-page-heading">
             <div><span>CADASTRO CORPORATIVO</span><h1>Clientes</h1><p>Relacionamento, operação e histórico em uma única visão.</p></div>
           </div>
-          <button className="customers-primary" onClick={startNew}><Plus size={17} />Novo cliente</button>
+          <div className="sentico-header-tools"><button className="customers-primary" onClick={startNew}><Plus size={17} />Novo cliente</button><SenticoHeaderActions user={user} onLogout={onLogout} /></div>
         </header>
 
         <section className="customers-toolbar">

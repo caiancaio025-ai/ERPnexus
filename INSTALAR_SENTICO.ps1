@@ -25,7 +25,7 @@ $ScriptsDir = Join-Path $PSScriptRoot 'scripts_recuperacao'
 $Role = 'sentico_green'
 $BancoPreferido = 'postgres'
 $VolumeOrigem = $null
-$Revisoes = @('20261013_02','20261022_01','20261022_02','20261026_01','20261026_02','20261026_03','20261027_01','20261027_02','20261027_03','20261027_04','20261027_05','20261028_01','20261112_01','20261116_01','20261117_01','20261123_01','20261123_02')
+$Revisoes = @('20261013_02','20261022_01','20261022_02','20261026_01','20261026_02','20261026_03','20261027_01','20261027_02','20261027_03','20261027_04','20261027_05','20261028_01','20261112_01','20261116_01','20261117_01','20261123_01','20261123_02','20261126_01')
 $Senha = $null
 $Banco = $null
 
@@ -480,7 +480,7 @@ try {
     Compose @('build','api','web')
     Compose @('up','-d','--no-build','--force-recreate','api')
     $head=ComposeOutput @('exec','-T','api','alembic','heads')
-    if ($head.Code -ne 0 -or ($head.Lines -join ' ') -notmatch '20261123_02') { throw 'ERRO_MIGRATIONS_V14_NAO_ENCONTRADAS' }
+    if ($head.Code -ne 0 -or ($head.Lines -join ' ') -notmatch '20261126_01') { throw 'ERRO_MIGRATIONS_V14_NAO_ENCONTRADAS' }
     $atual=ComposeOutput @('exec','-T','api','alembic','current')
     if ($atual.Code -ne 0 -or ($atual.Lines -join ' ') -notmatch [regex]::Escape($escolha.Revisao)) {
         throw 'ERRO_REVISAO_ATUAL_DIFERENTE_DA_COPIA. Nenhuma migration executada.'
@@ -501,14 +501,14 @@ try {
     Write-Host 'API_WRITE_PREFLIGHT=OK' -ForegroundColor Green
 
     Etapa '09 - CONFERIR MIGRATIONS DO BANCO EXISTENTE'
-    if ($escolha.Revisao -ne '20261123_02') { Compose @('exec','-T','api','alembic','upgrade','head') }
+    if ($escolha.Revisao -ne '20261126_01') { Compose @('exec','-T','api','alembic','upgrade','head') }
     $depois=ComposeOutput @('exec','-T','api','alembic','current')
-    if ($depois.Code -ne 0 -or ($depois.Lines -join ' ') -notmatch '20261123_02') { throw 'ERRO_ALEMBIC_NAO_CONCLUIU_V14' }
+    if ($depois.Code -ne 0 -or ($depois.Lines -join ' ') -notmatch '20261126_01') { throw 'ERRO_ALEMBIC_NAO_CONCLUIU_V14' }
     $apos=ExecutarScriptNoBanco 'catalogar_bancos_existentes.sh'
-    if ($apos.Code -ne 0 -or (@($apos.Lines | Where-Object { $_ -match "^CANDIDATO\|$([regex]::Escape($Banco))\|20261123_02\|" }).Count -eq 0)) {
+    if ($apos.Code -ne 0 -or (@($apos.Lines | Where-Object { $_ -match "^CANDIDATO\|$([regex]::Escape($Banco))\|20261126_01\|" }).Count -eq 0)) {
         throw 'ERRO_VALIDACAO_CADASTROS_POS_MIGRATION'
     }
-    Write-Host 'ALEMBIC_V46_E_DADOS_PRESERVADOS=OK' -ForegroundColor Green
+    Write-Host 'ALEMBIC_V48_E_DADOS_PRESERVADOS=OK' -ForegroundColor Green
 
     Etapa '10 - INICIAR SITE LOCAL'
     Compose @('up','-d','--no-build','web','gateway')

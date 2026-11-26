@@ -1,0 +1,98 @@
+name: sentico-v48-teste-local
+
+x-api-image: &api-image
+  image: sentico-v48-teste-local-api:atual
+  build:
+    context: ./apps/api
+    dockerfile: Dockerfile
+
+x-api-environment: &api-environment
+  APP_ENV: development
+  DATABASE_URL: postgresql+psycopg://sentico_v48_test:${SENTICO_V48_TEST_DB_PASSWORD:?Use INICIAR_TESTE_V48.cmd}@db:5432/sentico_v48_test
+  ALLOWED_HOSTS: localhost,127.0.0.1,api,web,bootstrap
+  CORS_ORIGINS: http://127.0.0.1:${SENTICO_V48_TEST_PORT:-5185},http://localhost:${SENTICO_V48_TEST_PORT:-5185}
+  STORAGE_ROOT: /app/storage
+  SESSION_COOKIE_NAME: sentico_v48_teste_local_session
+  TRACKING_BASE_URL: http://127.0.0.1:${SENTICO_V48_TEST_PORT:-5185}/api/e
+  SENTICO_DEV_TEST_ACCOUNT: "0"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      POSTGRES_DB: sentico_v48_test
+      POSTGRES_USER: sentico_v48_test
+      POSTGRES_PASSWORD: ${SENTICO_V48_TEST_DB_PASSWORD:?Use INICIAR_TESTE_V48.cmd}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U sentico_v48_test -d sentico_v48_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 45
+      start_period: 5s
+    networks: [teste_local]
+
+  bootstrap:
+    <<: *api-image
+    restart: "no"
+    environment:
+      <<: *api-environment
+      SENTICO_LOCAL_TEST_RUN: v48
+      SENTICO_LOCAL_TEST_INSTANCE: ${SENTICO_V48_TEST_INSTANCE:?Configuracao local ausente}
+      SENTICO_LOCAL_TEST_PASSWORD: ${SENTICO_V48_TEST_PASSWORD:?Configuracao local ausente}
+    entrypoint: ["python", "/bootstrap/bootstrap_v48.py"]
+    command: []
+    volumes:
+      - type: bind
+        source: ./infra/teste-local/bootstrap_v48.py
+        target: /bootstrap/bootstrap_v48.py
+        read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [teste_local]
+
+  api:
+    <<: *api-image
+    restart: "no"
+    environment:
+      <<: *api-environment
+    volumes:
+      - uploads:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 3s
+      timeout: 6s
+      retries: 40
+    networks: [teste_local]
+
+  web:
+    image: sentico-v48-teste-local-web:atual
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    restart: "no"
+    ports:
+      - "127.0.0.1:${SENTICO_V48_TEST_PORT:-5185}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [teste_local]
+
+networks:
+  teste_local:
+    name: sentico-v48-teste-local_rede
+    internal: true
+
+volumes:
+  pgdata:
+    name: sentico-v48-teste-local_pgdata
+  uploads:
+    name: sentico-v48-teste-local_uploads

@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-26",
+  "release": "V48 atualizacao de aparencia e recebimento",
+  "base_commit": "07c07d41704fbe2deb151c1cf1c2b94cb64604d2",
+  "alembic_target": "20261126_01",
+  "results": {
+    "api_and_installer": {
+      "passed": 684,
+      "skipped": 7,
+      "failed": 0,
+      "postgres": "17.12",
+      "evidence": "atualizacao-api-instalador.xml"
+    },
+    "frontend_build": "passed",
+    "frontend_node_tests": {
+      "passed": 18,
+      "additional_assertions": 20
+    },
+    "real_browser_api_postgresql": {
+      "passed": 17,
+      "page_errors": 0,
+      "http_errors": 0,
+      "evidence": "atualizacao-navegador-real.json"
+    },
+    "mocked_browser_appearance": {
+      "passed_groups": 7,
+      "evidence": "atualizacao-aparencia.json"
+    },
+    "vps_bash_git_scenarios": {
+      "passed": 23,
+      "docker_and_http": "simulated",
+      "final_affected_scenarios_rechecked": 8
+    },
+    "deployment_helpers_real_postgresql17": {
+      "passed": 90,
+      "evidence": "atualizacao-deploy-helper-postgresql.log"
+    },
+    "dump_restore_and_migration": {
+      "passed": 5,
+      "server_and_clients": "PostgreSQL 16.2",
+      "evidence": "atualizacao-deploy-dump-restore.json"
+    }
+  },
+  "limits": [
+    "Nenhum acesso ou deploy na VPS Hostinger",
+    "Docker/HTTP do fluxo Bash simulados",
+    "Sete testes historicos exigem arquivos privados ausentes",
+    "Roundtrip dump/restore em PostgreSQL16.2; migracao populada, API e helpers tambem validados em PostgreSQL17.12",
+    "Controle individual limitado a1000 unidades por recebimento"
+  ],
+  "files_sha256": {
+    "apps/api/app/inventory/purchase_cycle.py": "27c558a486c75388e5006cd83da8dc9ee20585025b34b447d74bdf0c99893689",
+    "apps/api/app/inventory/models.py": "d990cbbb5a2f2dbb5522cac668be9121765ccb6b553bd96b290ed1994d3eb30c",
+    "apps/api/app/inventory/router.py": "43b9211b1eef02149ce28db66a6908a9356c45b0c887f301d8b0284788330c9c",
+    "apps/api/app/purchasing/router.py": "efebf5fc95dde2097d51a3ac208ecb73be6d4d9f3d8c4191f901b3002b1753bf",
+    "apps/api/migrations/versions/20261126_01_individual_purchase_receipts.py": "161507fbcc8e1bed5d2c38e0bbd39d8df4ae0fb76ca3c92e6cf6426b40180303",
+    "apps/web/src/features/purchasing/PurchasingDashboard.tsx": "736fa321ef61beec50ea35cf8755ad5e027c617fe24e3391ed9dba123455bfef",
+    "apps/web/src/features/purchasing/MaterialRequestsPanel.tsx": "b38c05b74a321bfdcd11efa7dfe63a63028799068f361449769a31db2c4acde5",
+    "apps/web/src/features/inventory/PurchaseStockDestination.tsx": "91232c0240b5fc49fe64908441662f28ca5e1437dfbd8793d24089bb27f4fcfa",
+    "apps/web/src/shared/ui/SenticoHeaderActions.tsx": "4ca9dc0b2d0bdec356d1f5d1d8063628da4720ce8145b5f55160e8ea245dc7f4",
+    "apps/web/src/shared/theme/AppearanceMenu.tsx": "5c5c4cff8f70591e73d983d936bf47871ed0a83d4a5f7acf8185691c34b9c8af",
+    "infra/vps/atualizar.sh": "9c01b4855ec160a2b5fec872f44c251f08a6b29ad7fee3bf1ec4166eab5f1855",
+    "infra/vps/deploy_v48.py": "60a5a478bc39c1ee85e29d4778283519316fd9d63abf10d1cfd1c7cf946a8156"
+  }
+}

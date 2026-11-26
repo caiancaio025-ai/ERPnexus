@@ -1,0 +1,57 @@
+{
+  "database": "disposable PostgreSQL 16.2",
+  "baseline": "20261123_02",
+  "target": "20261126_01",
+  "cases": [
+    {
+      "name": "pg_dump_restore_preserves_legacy_records",
+      "status": "passed"
+    },
+    {
+      "name": "migrated_copy_preserves_all_fields_quantities_costs_and_constraints",
+      "status": "passed"
+    },
+    {
+      "name": "same_upgrade_preserves_disposable_original",
+      "status": "passed"
+    },
+    {
+      "name": "historical_index_is_one_and_next_index_is_accepted",
+      "status": "passed"
+    },
+    {
+      "name": "duplicate_purchase_and_request_unit_indexes_rejected",
+      "status": "passed"
+    }
+  ],
+  "baseline_snapshot": {
+    "inventory_items": {
+      "rows": 2,
+      "quantity": "10",
+      "value": "33.30",
+      "sha256": "939750935a1e48e88b692b9c59ce013633da31ab626e997f58ee98543466fabd"
+    },
+    "inventory_movements": {
+      "rows": 3,
+      "quantity": "12",
+      "value": "2502.42",
+      "sha256": "8351bee62fd3b269ed6260ab353e7581e99331ce6b51df135588c875b597fb02"
+    }
+  },
+  "final_snapshot": {
+    "inventory_items": {
+      "rows": 2,
+      "quantity": "10",
+      "value": "33.30",
+      "sha256": "939750935a1e48e88b692b9c59ce013633da31ab626e997f58ee98543466fabd"
+    },
+    "inventory_movements": {
+      "rows": 3,
+      "quantity": "12",
+      "value": "2502.42",
+      "sha256": "8351bee62fd3b269ed6260ab353e7581e99331ce6b51df135588c875b597fb02"
+    }
+  },
+  "status": "passed",
+  "limitation": "This dump/restore roundtrip uses PostgreSQL 16.2 server and matching clients; PostgreSQL 17 helper/schema validation is recorded separately in helper-postgres.log."
+}

@@ -34,7 +34,7 @@ def test_material_actions_keep_existing_api_flows():
     use = (root / "inventory" / "InventoryUsePanel.tsx").read_text(encoding="utf-8")
     assert "activeAction === \"stock\"" in materials
     assert "activeAction === \"purchase\"" in materials
-    assert "stockDestinationPayload(stockTarget)" in materials
+    assert "stockDestinationPayload(stockTarget, Number(quantity))" in materials
     assert 'apiClient.post(`/inventory/items/${selected.id}/issue`' in use
 
 

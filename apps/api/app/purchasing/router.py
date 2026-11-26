@@ -746,6 +746,11 @@ async def update_material_request(
 
     previous = request.status
     previous_receipt = await db.scalar(select(InventoryMovement).where(InventoryMovement.material_request_id == request.id))
+    if (previous_receipt is not None and previous_receipt.purchase_order_id is not None
+            and "purchase_reference" in payload.model_fields_set):
+        physical_purchase = await db.get(PurchaseOrder, previous_receipt.purchase_order_id)
+        if physical_purchase is None or payload.purchase_reference != physical_purchase.code:
+            raise HTTPException(409, "A solicitação já recebeu itens vinculados a um pedido. Preserve a referência desse pedido.")
     if previous_receipt is not None and payload.status not in {"received", "delivered_to_lab"}:
         raise HTTPException(409, "Material já recebido em estoque; alteração de status requer estorno controlado.")
     if (previous_receipt is not None and "unit_cost" in payload.model_fields_set

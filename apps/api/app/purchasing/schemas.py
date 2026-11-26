@@ -62,8 +62,10 @@ class PurchaseInput(BaseModel):
                 if not (self.inventory_name or "").strip() or len(self.inventory_name.strip()) < 2:
                     raise ValueError("Informe o nome do item no Estoque antes de confirmar o recebimento.")
                 if self.inventory_mode == "serialized":
-                    if self.quantity != 1 or not (self.inventory_serial or "").strip():
-                        raise ValueError("Item individual exige quantidade 1 e número de série.")
+                    if self.quantity > 1000:
+                        raise ValueError("Recebimento individual permite até 1.000 unidades; use controle por quantidade para quantidades maiores.")
+                    if self.quantity > 1 and (self.inventory_serial or "").strip():
+                        raise ValueError("Uma série de fabricante identifica apenas uma unidade. Para várias unidades, deixe a série em branco e informe-a depois por item no Estoque.")
         return self
 
 

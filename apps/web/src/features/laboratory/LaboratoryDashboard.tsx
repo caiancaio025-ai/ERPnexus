@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BadgeDollarSign, BarChart3, CheckCircle2, ClipboardList, FileText, FlaskConical,
-  Camera, ChevronDown, History, Image, Layers3, LogOut, MapPin, Pencil, Plus, Printer, RefreshCw, Save, Search, Settings, ShieldCheck,
+  Camera, ChevronDown, History, Image, Layers3, MapPin, Pencil, Plus, Printer, RefreshCw, Save, Search, Settings, ShieldCheck,
   Trash2, UploadCloud, UserRoundCog, Users, Wrench, X,
 } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { changedFields, conflictingFields, ConcurrentEditError, saveVersionedCha
 import { optionalMoneyInput } from "../../shared/forms/moneyInput";
 import type { WorkOrderReceivables } from "../finance/types";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import type { AuthUser } from "../auth/AuthCard";
 import { ActionButton } from "./components/ActionButton";
 import { QuoteEditor, type QuoteEditorHandle } from "./components/QuoteEditor";
@@ -647,9 +648,9 @@ export function LaboratoryDashboard({ user, onLogout }: Props) {
       />
 
       <section className="lab-shell sentico-content">
-        <header className="lab-header">
-          <div><p className="lab-eyebrow">SÊNTICO ERP</p><h1>Operação técnica e rastreabilidade</h1><span>Controle completo de entrada, execução, orçamento e saída.</span></div>
-          <div className="lab-user"><span>{user.name}</span><ActionButton variant="secondary" icon={<LogOut size={17} />} onClick={onLogout}>Sair</ActionButton></div>
+        <header className="lab-header sentico-page-header">
+          <div className="sentico-page-heading"><p className="lab-eyebrow">SÊNTICO ERP</p><h1>Operação técnica e rastreabilidade</h1><span>Controle completo de entrada, execução, orçamento e saída.</span></div>
+          <SenticoHeaderActions user={user} onLogout={onLogout} />
         </header>
         {error && <div className="lab-alert error">{error}</div>}{message && <div className="lab-alert success">{message}</div>}
 

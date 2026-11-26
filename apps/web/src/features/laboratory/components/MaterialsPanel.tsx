@@ -67,7 +67,7 @@ export function MaterialsPanel({ workOrderId, onInventoryChange }: { workOrderId
       await apiClient.post(`/laboratory/work-orders/${workOrderId}/materials`, {
         item_name: itemName.trim(), quantity: Number(quantity), priority,
         technical_note: technicalNote.trim() || null, suggested_link: suggestedLink.trim() || null,
-        ...stockDestinationPayload(stockTarget),
+        ...stockDestinationPayload(stockTarget, Number(quantity)),
       });
       setItemName(""); setQuantity("1"); setTechnicalNote(""); setSuggestedLink(""); setPriority("normal"); setStockTarget(emptyStockDestination);
       await load();

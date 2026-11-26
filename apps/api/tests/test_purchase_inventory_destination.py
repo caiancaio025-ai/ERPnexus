@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User  # noqa: F401
+from app.main import app  # noqa: F401 — registers all model/FK targets for isolated execution
 from app.core.models import Base
 from app.inventory.models import InventoryItem, InventoryMovement
 from app.inventory.purchase_cycle import receive_purchase
@@ -17,9 +18,11 @@ from app.purchasing.schemas import PurchaseInput
 class Adapter:
     def __init__(self, session): self.session = session
     async def scalar(self, query): return self.session.scalar(query)
+    async def scalars(self, query): return self.session.scalars(query)
     async def flush(self): self.session.flush()
     async def get(self, model, row_id): return self.session.get(model, row_id)
     def add(self, obj): self.session.add(obj)
+    def add_all(self, objects): self.session.add_all(objects)
 
 
 def purchase(**kw):
@@ -39,8 +42,10 @@ def test_purchase_optional_mapping_before_delivery_and_mandatory_when_delivered(
     assert purchase(status="delivered").inventory_destination is None
     with pytest.raises(ValueError, match="Selecione"):
         purchase(status="delivered", inventory_destination="existing")
+    assert purchase(status="delivered", inventory_destination="new", inventory_name="Módulo industrial", inventory_mode="serialized").quantity == 4
     with pytest.raises(ValueError, match="série"):
-        purchase(status="delivered", inventory_destination="new", inventory_name="Módulo industrial", inventory_mode="serialized")
+        purchase(status="delivered", inventory_destination="new", inventory_name="Módulo industrial",
+                 inventory_mode="serialized", inventory_serial="Uma série não pode identificar quatro unidades")
     assert purchase(status="delivered", inventory_destination="existing", inventory_item_id=22).inventory_item_id == 22
     assert purchase(status="delivered", inventory_destination="new", inventory_mode="bulk", inventory_name="Capacitor 100nF").inventory_name == "Capacitor 100nF"
 

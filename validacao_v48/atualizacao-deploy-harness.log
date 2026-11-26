@@ -1,0 +1,6 @@
+Registro fiel do resultado observado na ferramenta de execução; o stdout original não foi redirecionado para arquivo.
+Comando executado: WORKSPACE/.venv/bin/python -m pytest infra/vps/tests/test_deploy_v48_inventory_snapshot.py infra/vps/tests/test_v48_vps_update.py -q
+Resultado observado: 40 passed, 1 skipped in 61.08s (0:01:01)
+Distribuição: 23 cenários Bash/Git; 17 testes unitários novos de snapshot; 1 teste PostgreSQL ignorado nessa primeira rodada sem variável de banco.
+A lista dos 23 cenários está em harness-cases.log (somente coleta, sem nova execução).
+Após o guard final de recuperação e a exigência de readiness TCP, os oito cenários afetados foram executados novamente: rollback-final.log.

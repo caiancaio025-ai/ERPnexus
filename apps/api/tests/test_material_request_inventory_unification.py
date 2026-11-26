@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User  # noqa: F401
+from app.main import app  # noqa: F401 — registers all model/FK targets for isolated execution
 from app.core.models import Base
 from app.inventory.models import InventoryItem, InventoryMovement
 from app.inventory.purchase_cycle import receive_purchase
@@ -25,6 +26,9 @@ class Adapter:
     async def scalar(self, stmt):
         return self.session.scalar(stmt)
 
+    async def scalars(self, stmt):
+        return self.session.scalars(stmt)
+
     async def get(self, model, row_id):
         return self.session.get(model, row_id)
 
@@ -33,6 +37,9 @@ class Adapter:
 
     def add(self, model):
         self.session.add(model)
+
+    def add_all(self, models):
+        self.session.add_all(models)
 
 
 def test_stock_target_optional_at_request_creation_and_editable_until_received():
@@ -104,8 +111,8 @@ def test_backend_and_ui_connect_requests_in_laboratory_and_purchasing():
     web = root.parent / "web/src/features"
     purchasing = (web / "purchasing/MaterialRequestsPanel.tsx").read_text(encoding="utf-8")
     laboratory = (web / "laboratory/components/MaterialsPanel.tsx").read_text(encoding="utf-8")
-    assert 'stockDestinationPayload(stockTarget)' in purchasing
-    assert 'stockDestinationPayload(stockTarget)' in laboratory
+    assert 'stockDestinationPayload(stockTarget, item.quantity)' in purchasing
+    assert 'stockDestinationPayload(stockTarget, Number(quantity))' in laboratory
     assert 'source="laboratory"' in laboratory
 
 

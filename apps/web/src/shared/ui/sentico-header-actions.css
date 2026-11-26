@@ -1,0 +1,113 @@
+/* A mesma ordem e acesso à aparência em todos os módulos. */
+.sentico-shell .sentico-content .sentico-page-header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.sentico-page-header > .sentico-page-heading { flex: 1 1 260px; min-width: 0; }
+.sentico-shell .sentico-content .sentico-header-tools {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+}
+.sentico-header-actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
+  color: #c6dce9;
+}
+.sentico-shell .sentico-content .sentico-header-actions { flex: 0 1 auto; }
+.sentico-header-actions .sentico-appearance-trigger, .sentico-header-actions .sentico-header-logout, .sentico-appearance-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #31526a;
+  border-radius: 10px;
+  background: #102a3e;
+  color: #dcecf5;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sentico-appearance-trigger:hover, .sentico-appearance-trigger[aria-expanded="true"], .sentico-header-logout:hover, .sentico-appearance-close:hover { background: #193c53; border-color: #5e9cba; }
+.sentico-appearance-trigger:focus-visible, .sentico-header-logout:focus-visible, .sentico-appearance-close:focus-visible { outline: 3px solid #77caff; outline-offset: 3px; }
+.sentico-header-actions .sentico-header-user { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; font-weight: 600; }
+.sentico-header-user > svg { flex: 0 0 auto; color: #83b4cf; }
+.sentico-header-actions .sentico-header-user__name { display: block; max-width: 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sentico-header-actions .sentico-appearance-trigger__label, .sentico-header-actions .sentico-header-logout > span { display: inline; }
+
+/* The native popover lives in the top layer, outside clipped module headers. */
+.sentico-appearance-popover {
+  position: fixed;
+  inset: auto;
+  width: min(320px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid #395b72;
+  border-radius: 16px;
+  background: #102438;
+  color: #edf6ff;
+  box-shadow: 0 20px 60px #0006, 0 4px 14px #0003;
+  font-family: inherit;
+  font-size: 14px;
+}
+.sentico-appearance-popover:not(:popover-open) { display: none; }
+.sentico-appearance-popover__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sentico-appearance-popover__heading h2 { margin: 0; color: inherit; font-size: 15px; font-weight: 750; line-height: 1.4; }
+.sentico-appearance-close { width: 32px; min-height: 32px; padding: 0; border-color: transparent; background: transparent; }
+.sentico-appearance-popover .sentico-tema { border: 0; padding: 0; }
+.sentico-appearance-popover .sentico-tema__titulo { margin: 0 0 8px; }
+.sentico-appearance-popover .sentico-tema__festas { margin-top: 16px; gap: 10px; }
+.sentico-appearance-popover .sentico-tema__festas > label:first-child { font-size: 12px; }
+.sentico-appearance-popover .sentico-tema__festas select { height: 42px; font-size: 13px; }
+.sentico-appearance-popover .sentico-tema__animacoes { min-height: 36px; font-size: 12px; }
+.sentico-appearance-popover .sentico-tema__ativo { font-size: 11px; }
+
+html[data-sentico-theme="claro"] .sentico-header-actions { color: #23445b; }
+html[data-sentico-theme="claro"] :is(.sentico-appearance-trigger, .sentico-header-logout, .sentico-appearance-close) { background: #f4f8fc; border-color: #c3d3df; color: #24475e; }
+html[data-sentico-theme="claro"] :is(.sentico-appearance-trigger:hover, .sentico-appearance-trigger[aria-expanded="true"], .sentico-header-logout:hover, .sentico-appearance-close:hover) { background: #e3eff7; border-color: #73a7c4; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover { background: #fff; color: #15374e; border-color: #c3d3df; box-shadow: 0 18px 55px #183e5c29, 0 3px 10px #183e5c17; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__titulo,
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__festas > label,
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__animacoes { color: #385b70; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__opcoes { background: #edf4f8; border-color: #c3d3df; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__opcoes button { color: #31556c; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__opcoes button.is-active { color: #fff; background: #196c94; border-color: #196c94; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__festas select { background: #f5f9fc; border-color: #b9cedd; color: #24475e; }
+html[data-sentico-theme="claro"] .sentico-appearance-popover .sentico-tema__ativo { color: #276c58; }
+
+@media (max-width: 680px) {
+  .sentico-shell .sentico-content .sentico-page-header { gap: 14px; }
+  .sentico-page-header > .sentico-header-tools, .sentico-page-header > .sentico-header-actions { width: 100%; }
+  .sentico-header-actions { gap: 8px; }
+  .sentico-header-actions .sentico-header-user__name { max-width: 145px; }
+  .sentico-header-actions .sentico-appearance-trigger, .sentico-header-actions .sentico-header-logout, .sentico-appearance-close { min-height: 44px; }
+  .sentico-appearance-close { width: 44px; }
+  .sentico-appearance-popover .sentico-tema__opcoes button, .sentico-appearance-popover .sentico-tema__festas select { min-height: 44px; }
+  .sentico-appearance-popover .sentico-tema__animacoes { min-height: 44px; }
+}
+@media (max-width: 430px) {
+  .sentico-header-actions .sentico-appearance-trigger__label, .sentico-appearance-trigger__chevron, .sentico-header-user > svg { display: none; }
+  .sentico-header-actions .sentico-appearance-trigger { width: 44px; padding: 0; }
+  .sentico-header-actions .sentico-header-user__name { max-width: 140px; }
+}

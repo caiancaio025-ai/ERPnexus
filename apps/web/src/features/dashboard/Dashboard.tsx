@@ -20,19 +20,18 @@ import {
   FlaskConical,
   Handshake,
   LayoutDashboard,
-  LogOut,
   PackageOpen,
   ReceiptText,
   Search,
   ShoppingCart,
   TriangleAlert,
   Truck,
-  UserRound,
   UsersRound,
   WalletCards,
   Wrench,
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import { SeasonalDashboardBanner } from "../../shared/theme/SeasonalDashboardBanner";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -92,10 +91,6 @@ const actionIcons = {
   new_budget: ReceiptText,
   unnoted_movement: PackageOpen,
 };
-
-function initials(name: string) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-}
 
 function displayName(name: string) {
   return name.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
@@ -460,13 +455,13 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       <SenticoSidebar user={user} onLogout={onLogout} />
 
       <main className="dashboard-main sentico-content">
-        <header className="dashboard-header">
-          <div className="dashboard-heading">
+        <header className="dashboard-header sentico-page-header">
+          <div className="dashboard-heading sentico-page-heading">
             <span>Visão geral</span>
             <h1>{summary ? dashboardRoleName[summary.audience] : "Painel operacional"}</h1>
             <p>Olá, {fullName}. Estes são os pontos que exigem atenção hoje.</p>
           </div>
-          <div className="dashboard-tools">
+          <div className="dashboard-tools sentico-header-tools">
             {(!summary || ["gestao", "admin", "lab"].includes(summary.audience)) &&
               <label className="global-search"><Search size={17} /><input
                 aria-label="Pesquisar OS ou equipamento no laboratório"
@@ -493,7 +488,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                 <button className="notification-expand" type="button" onClick={() => { setNotificationsOpen(false); navigate("/notificacoes"); }}><Expand size={16} /> Abrir central completa de notificações</button>
               </section>}
             </div>
-            <button className="user-button" aria-label="Perfil do usuário"><UserRound size={18} /><span>{initials(user.name)}</span></button>
+            <SenticoHeaderActions user={user} onLogout={onLogout} />
           </div>
         </header>
         <SeasonalDashboardBanner />

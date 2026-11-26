@@ -35,7 +35,7 @@ def _lines(value: str, size: float, width: float, limit: int) -> list[str]:
     return lines or [""]
 
 
-def inventory_label_pdf(*, stock_code: str, name: str, serial: str | None, location: str) -> bytes:
+def inventory_label_pdf(*, stock_code: str, name: str, serial: str | None, location: str, mode: str = "bulk") -> bytes:
     target = BytesIO()
     c = Canvas(target, pagesize=(WIDTH, HEIGHT))
 
@@ -63,7 +63,8 @@ def inventory_label_pdf(*, stock_code: str, name: str, serial: str | None, locat
     c.setFont("Helvetica-Bold", 6.1)
     c.drawString(3 * mm, 9.6 * mm, "SÉRIE / LOTE")
     c.setFont("Helvetica", 5.8)
-    c.drawString(3 * mm, 7.0 * mm, _crop(serial or "Controle por quantidade", 5.8, 27 * mm))
+    identification = serial or ("Identificação interna EST" if mode == "serialized" else "Controle por quantidade")
+    c.drawString(3 * mm, 7.0 * mm, _crop(identification, 5.8, 27 * mm))
 
     c.setFont("Helvetica-Bold", 6.1)
     c.drawString(3 * mm, 4.4 * mm, "LOCAL")

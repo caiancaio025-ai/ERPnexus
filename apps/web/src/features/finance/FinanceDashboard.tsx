@@ -6,6 +6,7 @@ import {
   RotateCcw, Search, ShieldCheck, Trash2, TriangleAlert, UploadCloud, WalletCards, X,
 } from "lucide-react";
 import { SenticoSidebar } from "../../shared/ui/SenticoSidebar";
+import { SenticoHeaderActions } from "../../shared/ui/SenticoHeaderActions";
 import { useLocation, useNavigate } from "react-router-dom";
 import { monthlyInstallmentDates, splitInstallmentAmounts } from "./installmentPlan";
 
@@ -694,9 +695,9 @@ export function FinanceDashboard({ user, onLogout }: Props) {
       }))}
     />
     <main className="finance-main sentico-content">
-      <header className="finance-header">
-        <div className="finance-heading"><span>GESTÃO FINANCEIRA</span><h1>{title}</h1><p>Receitas e saídas separadas, visão por competência, baixas e auditoria completa.</p></div>
-        <div className="finance-header__tools"><button className="finance-primary income" onClick={() => linkedReceivables ? openNewForWorkOrder(linkedReceivables) : openNew("income")}><ArrowUpRight size={18}/>Nova receita</button><button className="finance-primary expense" onClick={() => openNew("expense")}><ArrowDownRight size={18}/>Nova saída</button></div>
+      <header className="finance-header sentico-page-header">
+        <div className="finance-heading sentico-page-heading"><span>GESTÃO FINANCEIRA</span><h1>{title}</h1><p>Receitas e saídas separadas, visão por competência, baixas e auditoria completa.</p></div>
+        <div className="finance-header__tools sentico-header-tools"><button className="finance-primary income" onClick={() => linkedReceivables ? openNewForWorkOrder(linkedReceivables) : openNew("income")}><ArrowUpRight size={18}/>Nova receita</button><button className="finance-primary expense" onClick={() => openNew("expense")}><ArrowDownRight size={18}/>Nova saída</button><SenticoHeaderActions user={user} onLogout={onLogout} /></div>
       </header>
 
       <section className="finance-toolbar">

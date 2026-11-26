@@ -1,14 +1,13 @@
 import { useState } from "react";
 import {
   Bell, Boxes, Building2, ChevronLeft, ChevronRight, FlaskConical, Handshake,
-  LayoutDashboard, LogOut, Menu, ShoppingCart, UsersRound, WalletCards, X,
+  LayoutDashboard, Menu, ShoppingCart, UsersRound, WalletCards, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { AuthUser } from "../../features/auth/AuthCard";
 import { SenticoMark } from "./SenticoMark";
-import { ThemeSwitcher } from "../theme/ThemeSwitcher";
 import "./sentico-sidebar.css";
 
 export type SenticoSidebarItem = {
@@ -48,12 +47,8 @@ function storedCollapseState() {
   }
 }
 
-function userInitials(name: string) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "S";
-}
-
 /** Um único menu, com a mesma posição, dimensões, ícones e recolhimento em todos os módulos. */
-export function SenticoSidebar({ user, onLogout, sectionLabel, sectionItems = [] }: Props) {
+export function SenticoSidebar({ user, sectionLabel, sectionItems = [] }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(storedCollapseState);
@@ -146,16 +141,6 @@ export function SenticoSidebar({ user, onLogout, sectionLabel, sectionItems = []
           )}
         </div>
 
-        <footer className="sentico-sidebar__footer">
-          <ThemeSwitcher compacto={collapsed && !mobileOpen} />
-          <div className="sentico-sidebar__profile" title={`${user.name} · ${user.role}`}>
-            <span className="sentico-sidebar__avatar">{userInitials(user.name)}</span>
-            <div className="sentico-sidebar__profile-text"><strong>{user.name}</strong><small>{({super_admin:"Superadministrador",gestao:"Gestão",admin:"Administrador",laboratorio:"Laboratório",tecnico:"Técnico",compras:"Compras",estoque:"Estoque"} as Record<string,string>)[user.role] ?? user.role}</small></div>
-          </div>
-          <button className="sentico-sidebar__item sentico-sidebar__logout" type="button" onClick={() => runAction(onLogout)} title="Sair do sistema" aria-label="Sair do sistema">
-            <LogOut size={19} aria-hidden="true" /><span>Sair do sistema</span>
-          </button>
-        </footer>
       </aside>
     </>
   );
