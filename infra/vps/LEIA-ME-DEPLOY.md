@@ -1,21 +1,68 @@
-# Sêntico Green — histórico da implantação controlada V47
+# SÊNTICO Green — atualizar a VPS da V47 para a V48
 
-## Publicação da V48
+Atualizador preparado em **26/11/2026** para a instalação existente em `/opt/sentico-green`, com projeto Docker `sentico-green-hml`, volumes de PostgreSQL e uploads existentes e esquema Alembic `20261123_02`.
 
-A branch principal agora contém o código da V48. Enviar ou atualizar esse código pelo Git não substitui os containers em execução nem aplica alterações no banco da VPS. Consulte o `README.md` da raiz para instalação e testes locais da V48.
+## Comando no terminal da Hostinger
 
-O script `infra/vps/atualizar.sh` continua restrito à implantação V47 descrita abaixo: ele verifica o commit homologado, a revisão inicial do banco e os IDs exatos das imagens V47. Essas verificações foram preservadas; o script bloqueia uma aplicação diferente, inclusive a V48. Ele não é o instalador nem o atualizador da V48.
+Execute como **root**:
 
-A V48 mantém a revisão Alembic `20261123_02`. Sua implantação na VPS exige um procedimento próprio para construir e validar as imagens V48; trocar apenas a tag ou reutilizar as etapas V47 abaixo não atende a essa atualização.
+```bash
+cd /opt/sentico-green &&
+git pull --ff-only origin main &&
+bash infra/vps/atualizar.sh
+```
 
-## Procedimento histórico — somente V47
+O `git pull` baixa também o atualizador novo. Executar uma cópia antiga de `atualizar.sh` antes desse passo ainda pode chamar o procedimento V47.
 
-Procedimento específico para a V47 homologada em b98407ed0ed70c7b3e4185ffc4318c4e5ad14eb9. Não é um atualizador genérico. Não altera a aplicação homologada nem a configuração Compose. As imagens aprovadas na VPS são reutilizadas por tag e ID exatos.
+Acompanhe o terminal até o resultado. A compilação acontece enquanto a versão anterior continua disponível. Depois há um período de manutenção para concluir o backup e trocar a aplicação. Execute em um intervalo adequado para os usuários.
 
-1. Com o ERP em funcionamento, confira a main remota e faça fetch. Exija working tree limpa e atualização fast-forward para o commit de infraestrutura aprovado, sem reset/force.
-2. Ative a manutenção com `python3 /root/sentico-manutencao/manutencao.py ativar`. Confira HTTP 503, API/web/gateway parados.
-3. Execute `bash /opt/sentico-green/infra/vps/atualizar.sh` interativamente. Ele exige main sincronizada, revisão 20261117_01 e autorização MIGRAR V47. Faz backup novo do banco e dos uploads, restauração isolada estrita, hashes dos registros, migração e teste de readiness na cópia. Só depois migra o banco real para 20261123_02 e verifica registros. Não recria o banco, volumes ou gateway. Não faz rebuild.
-4. Exija DEPLOY INTERNO V47 OK; MANUTENCAO ATIVA. Confirme relatório e saúde interna. Retire manutenção com `python3 /root/sentico-manutencao/manutencao.py voltar`. Confira HTTP 200 e API ready, login, garantia, pintura, orçamento e PDF.
-5. Em erro, não repita cegamente. Leia a revisão real e logs em /root/backups-sentico/v47-deploy-*. Se a revisão for anterior, avalie retorno operacional com os containers antigos. Após a migração, mantenha manutenção, preserve backups e diagnostique antes de iniciar imagens antigas ou restaurar dados. O voltar.sh de infraestrutura falha fechado: downgrade automático proibido. Retirar manutenção não é rollback.
+No sucesso, o final informa:
 
-As sete verificações históricas de conciliação (CSV ausentes) e o teste opcional de desempenho permanecem pendentes. A generalização do deploy e rollback com CI deve ocorrer em outro commit, sem esta urgência.
+```text
+SENTICO_V48_ATUALIZADO=OK
+COMMIT=...
+TAG=v48-...
+BACKUP=/root/backups-sentico/v48-...
+SITE=https://erp.universoeletronica.com/
+```
+
+Depois abra o sistema e use **Ctrl+F5**. O endereço `https://erp.universoeletronica.com/api/health/version` deve informar `"version":"48"`.
+
+## O que acontece automaticamente
+
+1. Verifica root, ferramentas (incluindo Python 3.9+), lock de atualização, branch `main` limpa e sincronizada, containers atuais, volumes e revisão do banco. Se o estado não corresponder à instalação esperada, interrompe antes de trocar o sistema.
+2. Registra as imagens realmente em uso e a configuração anterior em um diretório restrito. Constrói API e interface V48 com uma tag exclusiva por execução; uma repetição não sobrescreve a tag anterior.
+3. Inicia uma API temporária sem portas publicadas nem aliases do serviço. Confirma a V48, o destino do banco em conexão somente leitura e as permissões de uploads sob o usuário da nova imagem. Os arquivos de teste são exclusivos e removidos ao terminar.
+4. Verifica espaço aproximado para o backup, ativa HTTP 503 temporário no gateway e para a API que recebe gravações. O PostgreSQL continua em execução. Gera backup do banco e dos uploads, lê integralmente o dump sem restaurá-lo e valida o arquivo de uploads e seus hashes.
+5. Atualiza a tag em `.env.production`/`.tag` e recria somente API e interface. Banco, gateway, volumes e redes existentes são preservados. **Não executa migração ou downgrade de esquema.**
+6. Confere a revisão do banco, IDs das imagens, saúde, versão 48, HTML e hashes dos arquivos iniciais da interface através do gateway. Essas consultas usam uma autorização temporária enquanto os demais acessos permanecem em manutenção. Restaura a configuração anterior do gateway e verifica o domínio público.
+
+## Falha durante a atualização
+
+- **Antes da troca:** preserva a aplicação anterior. Se a API havia sido parada para o backup, tenta reiniciá-la e retirar a manutenção somente depois da conferência de saúde.
+- **Durante a troca ou conferência interna:** reaplica a manutenção, restaura a configuração e retorna API/interface às imagens anteriores. Confere os IDs e a saúde antes de liberar o acesso.
+- **Retorno não confirmado:** mantém a manutenção quando possível e informa `RETORNO_APLICACAO_ANTERIOR=FALHOU`, com o diretório dos registros. Não tenta restaurar o banco por cima de dados existentes.
+- **Somente a confirmação pública falhou:** informa `V48_INTERNA=OK` e `ACESSO_PUBLICO=NAO_CONFIRMADO`, com código de saída 2. A V48 validada internamente permanece ativa; o proxy externo/DNS deve ser conferido. Esse resultado não deve ser tratado como confirmação do acesso público.
+
+Em uma interrupção, preserve a saída do terminal e os arquivos no diretório informado em `REGISTROS` ou `BACKUP`. O diretório contém credenciais de recuperação: mantenha-o privado e não o publique no GitHub.
+
+O script não remove volumes, não recria o PostgreSQL e não executa restauração automática de dados. Ele não usa `infra/vps/voltar.sh`, que continua sendo um bloqueio legado. O procedimento V47 original está preservado para consulta em `infra/vps/historico/`.
+
+## Validação e limites
+
+O script é verificado com Bash/Git reais e um simulador de Docker/HTTP em diretórios descartáveis, exercitando sucesso, falhas de preflight e backup, troca parcial, retorno das imagens, repetição do mesmo commit e falha de confirmação pública. Os helpers possuem testes de preservação de configuração, arquivos e validações.
+
+A configuração de manutenção, o bypass temporário e a restauração foram testados com **Caddy 2.10.2 real**. A verificação de banco também foi exercitada com PostgreSQL descartável. Foram aprovados 15 cenários Bash/Git, 72 testes do helper, 11 verificações com Caddy e cinco casos com PostgreSQL. O [resumo das execuções](../../validacao_v48/deploy-vps-resumo.json) distingue os componentes reais dos simulados e registra os arquivos verificados.
+
+**A execução Docker na VPS da Hostinger ainda precisa ser feita pelo comando acima.** Os testes locais não representam uma implantação já realizada no servidor. O atualizador realiza suas verificações de ambiente antes de interromper a aplicação.
+
+Para repetir os testes do atualizador em um ambiente de desenvolvimento com Git, Bash, Python e pytest:
+
+```bash
+python -m pytest infra/vps/tests -q
+bash -n infra/vps/atualizar.sh
+```
+
+A regressão PostgreSQL real só é executada quando `DATABASE_URL` e `SENTICO_TEST_DATABASE_URL` apontam explicitamente para o mesmo banco descartável, com nome terminado em `_test` e esquema atual. Sem esse ambiente, esse teste é marcado como ignorado.
+
+Referências técnicas: [Docker Compose run](https://docs.docker.com/reference/cli/docker/compose/run/), [Caddy reload](https://caddyserver.com/docs/command-line#caddy-reload) e [pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html).

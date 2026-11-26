@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-26",
+  "scope": "Atualizador da VPS existente V47 para V48; aplicacao V48 inalterada",
+  "base_application_commit": "faa49c699aff41e0358639830ef642c7acc89b49",
+  "verification": {
+    "bash_git_scenarios": {
+      "passed": 15,
+      "docker_and_external_http": "simulated",
+      "log": "deploy-vps-bash-git.log"
+    },
+    "helper_after_final_sql_fix": {
+      "passed": 72,
+      "includes_real_postgresql_regression": true,
+      "log": "deploy-vps-helper-postgresql.log"
+    },
+    "real_postgresql_17_smoke": {
+      "passed": 5,
+      "sql_read_only": true,
+      "result": "deploy-vps-postgresql.json"
+    },
+    "real_caddy_2_10_2_smoke": {
+      "passed": 11,
+      "result": "deploy-vps-caddy.json"
+    },
+    "bash_syntax": "passed",
+    "git_diff_whitespace": "passed"
+  },
+  "execution_note": "A execucao conjunta anterior teve 86 aprovados (71 helper + 15 Bash/Git). A correcao final de host(inet_server_addr()) e a nova regressao real foram verificadas em seguida com 72 testes do helper e 5 casos PostgreSQL. O Bash e seu harness nao mudaram entre essas execucoes.",
+  "limitations": [
+    "Docker real nao executado neste ambiente",
+    "Nenhuma conexao ou implantacao na VPS Hostinger",
+    "Estado real do servidor sera conferido pelo atualizador antes da manutencao"
+  ],
+  "files_sha256": {
+    "infra/vps/atualizar.sh": "2db530e415d8c66b6c1dfa1b4be25923ea56da62ee1a1a3d92154e0e595f412b",
+    "infra/vps/deploy_v48.py": "c66ac3a48b93b7422aaeffc8f88e15cefe6d63d6232582f80c27de87f60f268e",
+    "infra/vps/tests/test_deploy_v48_helper.py": "677f4fd999f97d8341aaf944c41e65986514130bf43271883c668a2588e20136",
+    "infra/vps/tests/test_v48_vps_update.py": "251b0c0bb4015a078056cef699eeb4f0359dd01a432102d99162dc8656d1e994",
+    "infra/vps/tests/fakes/vps_commands.py": "1fcccc4dab8c817bd6b863022005adc86cf1b758a996a9e0c3d90ec516014e90",
+    "docker-compose.prod.yml": "040470df01f72cdb8529f8ec18aa736e829781b3976a1c8cf9181d73fce27768",
+    "Caddyfile.green": "fb0634e1581bc32d5456e86b607a22e3c3aaf48160ff5200c3b96686973e159a"
+  },
+  "logs_note": "Caminhos absolutos de scratch substituidos por <workspace>; dados de testes descartaveis."
+}

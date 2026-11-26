@@ -51,13 +51,21 @@ As evidências da entrega estão em [validacao_v48](validacao_v48/). Os testes d
 
 O repositório mantém a estrutura anterior com `apps/` na raiz. No ZIP V48 entregue na conversa, a mesma aplicação fica em `codigo-fonte/apps/`; somente os caminhos de instalação e teste foram adaptados para este repositório.
 
-## VPS e procedimentos anteriores
+## Atualização da VPS Hostinger
 
-**Atualizar este repositório não atualiza automaticamente a VPS.** O Compose de produção, os volumes externos, as redes e os scripts de backup existentes foram preservados.
+O atualizador da VPS foi adaptado para **V47 → V48**. No terminal do servidor, como root:
 
-O arquivo `infra/vps/atualizar.sh` é um procedimento restrito à V47, com commits e imagens fixados. Ele mantém suas verificações e **não deve ser usado como instalador da V48**. Consulte [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md) para entender o escopo histórico. Não há implantação automática adicionada nesta atualização.
+```bash
+cd /opt/sentico-green &&
+git pull --ff-only origin main &&
+bash infra/vps/atualizar.sh
+```
 
-O atalho antigo `TESTAR-V26-LOCAL.cmd` agora encaminha para `TESTAR_SENTICO.cmd`, sem trocar a branch atual. Seu conteúdo original foi preservado como texto em `historico_documentacao/TESTAR-V26-LOCAL_ORIGINAL.txt`. `TESTAR-V26-LOCAL.md` e relatórios de versões anteriores são históricos.
+Ele verifica a instalação, constrói as imagens V48, faz backup, ativa manutenção temporária e troca somente API/interface, com retorno às imagens anteriores se a conferência interna falhar. A revisão do banco permanece `20261123_02`.
+
+Aguarde **`SENTICO_V48_ATUALIZADO=OK`**. Publicar ou baixar o código pelo Git ainda não executa essa implantação; é necessário rodar o atualizador no servidor. Veja [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md) para resultados, limitações e registros de recuperação.
+
+O atalho antigo `TESTAR-V26-LOCAL.cmd` encaminha para `TESTAR_SENTICO.cmd`, sem trocar a branch atual. Procedimentos V26/V47 anteriores foram preservados como histórico.
 
 ## Diagnóstico
 

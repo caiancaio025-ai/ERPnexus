@@ -43,8 +43,9 @@ echo.
 echo ------------------------------------------------------------
 echo OK - enviado para o GitHub.
 echo O envio publica o codigo e nao altera os containers da VPS.
-echo A V48 exige um procedimento proprio de implantacao.
-echo infra/vps/atualizar.sh e exclusivo da V47 e nao instala a V48.
+echo Para aplicar a V48, entre no terminal da Hostinger como root.
+echo Na pasta /opt/sentico-green, execute git pull --ff-only origin main.
+echo Depois execute: bash infra/vps/atualizar.sh
 echo Consulte README.md e infra/vps/LEIA-ME-DEPLOY.md.
 echo ------------------------------------------------------------
 goto fim

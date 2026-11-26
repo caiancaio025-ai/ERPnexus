@@ -1,0 +1,13 @@
+PASS: official release archive matches published SHA512
+Caddy: v2.10.2 h1:g/gTYjGMD0dec+UgMw8SnfmJ3I9+M2TdvoRL/Ovu6U8=
+PASS: baseline frontend and API routes return200
+PASS: generated maintenance JSON passes real Caddy validation via stdin
+PASS: maintenance frontend returns503 with no-store and retry-after
+PASS: maintenance API returns503 without token
+PASS: maintenance tracking route returns503 without token
+PASS: wrong verification token does not bypass maintenance
+PASS: correct verification token reaches frontend200
+PASS: correct verification token reaches ready and version routes
+PASS: original snapshot remains byte-for-byte intact
+PASS: original configuration restored; frontend/API work without token
+{"status": "passed", "passed": 11, "temporary_binary_removed": true, "artifacts": "<workspace>/validation-deploy-caddy"}

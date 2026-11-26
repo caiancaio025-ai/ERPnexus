@@ -1,0 +1,69 @@
+{
+  "scope": "probe_db_after_disposable_database_setup",
+  "database_engine": "PostgreSQL 17 disposable",
+  "passed": true,
+  "cases": [
+    {
+      "case": "correct_identity_and_revision",
+      "passed": true,
+      "rejected": false,
+      "sql_count": 2,
+      "read_queries_only": true,
+      "unexpected_error": false
+    },
+    {
+      "case": "reject_wrong_ip",
+      "passed": true,
+      "rejected": true,
+      "sql_count": 1,
+      "read_queries_only": true,
+      "unexpected_error": false
+    },
+    {
+      "case": "reject_wrong_database",
+      "passed": true,
+      "rejected": true,
+      "sql_count": 1,
+      "read_queries_only": true,
+      "unexpected_error": false
+    },
+    {
+      "case": "reject_wrong_user",
+      "passed": true,
+      "rejected": true,
+      "sql_count": 1,
+      "read_queries_only": true,
+      "unexpected_error": false
+    },
+    {
+      "case": "reject_wrong_revision",
+      "passed": true,
+      "rejected": true,
+      "sql_count": 2,
+      "read_queries_only": true,
+      "unexpected_error": false
+    }
+  ],
+  "diagnostic": {
+    "configured_db_matches": true,
+    "configured_user_matches": true,
+    "connected_db_matches": true,
+    "connected_user_matches": true,
+    "connected_read_only_on": true,
+    "types": {
+      "address": "str",
+      "db_name": "str",
+      "role_name": "str",
+      "mode": "str"
+    },
+    "inet_cast_text_is_bare_ip": false
+  },
+  "sql_count": 7,
+  "read_queries_only": true,
+  "distinct_statements": [
+    "SELECT host(inet_server_addr()) AS server_addr, current_database() AS database_name, current_user AS user_name, current_setting('transaction_read_only') AS read_only",
+    "SELECT version_num FROM alembic_version"
+  ],
+  "application_files_changed": false,
+  "verified_address_fix": "host(inet_server_addr()) excludes the inet mask from the SQL result"
+}

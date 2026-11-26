@@ -4,7 +4,7 @@
 
 ## Organização no GitHub
 
-O repositório mantém `apps/` e os arquivos Compose na raiz. Os caminhos de instalação e teste foram adaptados do ZIP, que usa `codigo-fonte/`. As correções de aplicação permanecem idênticas. A infraestrutura própria do repositório foi preservada; os scripts restritos à implantação V47 continuam com suas travas e não implantam a V48 automaticamente.
+O repositório mantém `apps/` e os arquivos Compose na raiz. Os caminhos de instalação e teste foram adaptados do ZIP, que usa `codigo-fonte/`. As correções de aplicação permanecem idênticas. Em 26/11/2026, o atualizador da VPS foi adaptado para V47 → V48, preservando o Compose de produção, os volumes e a revisão do banco. O procedimento exige execução no servidor e está descrito em [infra/vps/LEIA-ME-DEPLOY.md](infra/vps/LEIA-ME-DEPLOY.md); o procedimento V47 anterior foi arquivado em `infra/vps/historico/`.
 
 ## Resultado
 

@@ -84,6 +84,6 @@ fi
 echo
 echo "OK. Deploy por git preparado em $DEST."
 echo "Atualizar o checkout nao altera os containers em execucao."
-echo "A V48 exige um procedimento proprio de implantacao na VPS."
-echo "infra/vps/atualizar.sh permanece exclusivo da V47 e nao instala a V48."
+echo "Para aplicar a V48, atualize primeiro a branch main com git pull --ff-only origin main."
+echo "Depois execute: bash $DEST/infra/vps/atualizar.sh"
 echo "Consulte README.md e infra/vps/LEIA-ME-DEPLOY.md."

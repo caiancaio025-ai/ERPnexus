@@ -1,0 +1,25 @@
+{
+  "release": "v2.10.2",
+  "source": "https://github.com/caddyserver/caddy/releases/download/v2.10.2/",
+  "checks": [
+    "official release archive matches published SHA512",
+    "baseline frontend and API routes return200",
+    "generated maintenance JSON passes real Caddy validation via stdin",
+    "maintenance frontend returns503 with no-store and retry-after",
+    "maintenance API returns503 without token",
+    "maintenance tracking route returns503 without token",
+    "wrong verification token does not bypass maintenance",
+    "correct verification token reaches frontend200",
+    "correct verification token reaches ready and version routes",
+    "original snapshot remains byte-for-byte intact",
+    "original configuration restored; frontend/API work without token"
+  ],
+  "archive_checksum": {
+    "algorithm": "sha512",
+    "value": "747df7ee74de188485157a383633a1a963fd9233b71fbb4a69ddcbcc589ce4e2cc82dacf5dbbe136cb51d17e14c59daeb5d9bc92487610b0f3b93680b2646546"
+  },
+  "binary_version": "v2.10.2 h1:g/gTYjGMD0dec+UgMw8SnfmJ3I9+M2TdvoRL/Ovu6U8=",
+  "status": "passed",
+  "passed": 11,
+  "temporary_binary_removed": true
+}

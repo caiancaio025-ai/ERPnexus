@@ -1,0 +1,11 @@
+DIAGNOSTIC {"configured_db_matches": true, "configured_user_matches": true, "connected_db_matches": true, "connected_ip_matches": false, "connected_read_only_on": true, "connected_user_matches": true, "types": {"address": "str", "db_name": "str", "mode": "str", "role_name": "str"}}
+PASS correct_identity_and_revision
+REJECTION reject_wrong_ip: A identidade do banco não corresponde ao ambiente esperado.
+PASS reject_wrong_ip
+REJECTION reject_wrong_database: A identidade do banco não corresponde ao ambiente esperado.
+PASS reject_wrong_database
+REJECTION reject_wrong_user: A identidade do banco não corresponde ao ambiente esperado.
+PASS reject_wrong_user
+REJECTION reject_wrong_revision: A revisão única do banco não corresponde à revisão esperada.
+PASS reject_wrong_revision
+RESULT cases=5 passed=5 sql=7 readonly=True
