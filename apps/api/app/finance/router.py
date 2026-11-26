@@ -930,6 +930,7 @@ async def list_entries(
     start_date: date | None = QUERY_START_DATE, end_date: date | None = QUERY_END_DATE,
     date_basis: DateBasis = QUERY_DATE_BASIS,
     search: str | None = QUERY_SEARCH,
+    customer_name: str | None = None,
     page: int = QUERY_PAGE, page_size: int = QUERY_PAGE_SIZE,
     _: User = CURRENT_USER_DEP, db: AsyncSession = DB_DEP,
 ):
@@ -965,6 +966,9 @@ async def list_entries(
         end = date(year + 1, 1, 1) if not month or month == 12 else date(year, month + 1, 1)
         conditions.append(date_column < end)
 
+    if customer_name and customer_name.strip():
+        conditions.append(FinancialEntry.counterparty_name.icontains(customer_name.strip(), autoescape=True))
+
     if search:
         term = f"%{search.strip()}%"
         work_order_ids = select(LaboratoryWorkOrder.id).where(LaboratoryWorkOrder.number.ilike(term))
@@ -979,9 +983,20 @@ async def list_entries(
             FinancialEntry.id.in_(select(allocations.c.entry_id).where(allocations.c.work_order_id.in_(work_order_ids))),
         ))
 
-    total = int(await db.scalar(
-        select(func.count()).select_from(FinancialEntry).where(*conditions)
-    ) or 0)
+    aggregate = select(func.count().label("count")).select_from(FinancialEntry)
+    if entry_type == "income":
+        pending = FinancialEntry.status == "pending"
+        aggregate = aggregate.add_columns(
+            func.sum(FinancialEntry.amount).label("amount"),
+            func.sum(FinancialEntry.amount).filter(FinancialEntry.status == "received").label("settled"),
+            func.sum(FinancialEntry.amount).filter(pending).label("pending"),
+            func.sum(FinancialEntry.amount).filter(pending, FinancialEntry.due_date < date.today()).label("overdue"),
+        )
+    totals = (await db.execute(aggregate.where(*conditions))).mappings().one()
+    total = totals["count"]
+    income_totals = None
+    if entry_type == "income":
+        income_totals = {key: totals[key] or 0 for key in ("amount", "settled", "pending", "overdue")}
     pages = (total + page_size - 1) // page_size if total else 0
     resolved_page = min(page, max(pages, 1))
     offset = (resolved_page - 1) * page_size
@@ -994,7 +1009,8 @@ async def list_entries(
     )
     items = list((await db.scalars(ordered)).all())
     return FinancialEntryPage(
-        items=await entry_outputs(db, items), page=resolved_page, page_size=page_size, total=total, pages=pages
+        items=await entry_outputs(db, items), page=resolved_page, page_size=page_size, total=total, pages=pages,
+        income_totals=income_totals,
     )
 
 
